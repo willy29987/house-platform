@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { HeaderSearch } from "@/components/header-search";
 
 export function SiteHeader() {
@@ -17,7 +18,9 @@ export function SiteHeader() {
           </div>
         </Link>
 
-        <HeaderSearch />
+        <Suspense fallback={<div className="h-10 w-full max-w-md" />}>
+          <HeaderSearch />
+        </Suspense>
       </div>
     </header>
   );
