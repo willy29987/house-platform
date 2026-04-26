@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>稀有雙層收租公寓｜宣傳單</title>
+    <style>
+      :root {
+        --blue-900: #0b2a6f;
+        --blue-700: #1d4ed8;
+        --blue-500: #3b82f6;
+        --blue-200: #bfdbfe;
+        --blue-100: #dbeafe;
+        --deep: #0f172a;
+        --paper: #f8fbff;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: #eaf2ff;
+        font-family: "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+        color: var(--deep);
+      }
+
+      @page {
+        size: A4 portrait;
+        margin: 8mm;
+      }
+
+      .flyer {
+        width: 210mm;
+        min-height: 297mm;
+        margin: 10px auto 20px;
+        background: var(--paper);
+        border: 3px solid var(--blue-200);
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.16);
+      }
+
+      .hero {
+        padding: 14mm 12mm 10mm;
+        background: radial-gradient(circle at top right, #60a5fa 0%, #2563eb 38%, #0b2a6f 100%);
+        border-bottom: 4px solid #1e3a8a;
+      }
+
+      .tag {
+        display: inline-block;
+        background: rgba(255, 255, 255, 0.2);
+        color: #fff;
+        font-size: 15px;
+        font-weight: 800;
+        padding: 5px 12px;
+        border-radius: 999px;
+        letter-spacing: 1px;
+      }
+
+      .hero h1 {
+        margin: 10px 0 4px;
+        font-size: 50px;
+        line-height: 1.02;
+        color: #ffffff;
+        letter-spacing: 1px;
+      }
+
+      .hero h2 {
+        margin: 0;
+        font-size: 23px;
+        color: #dbeafe;
+      }
+
+      .price-strip {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0;
+      }
+
+      .price-box {
+        padding: 9mm 8mm;
+        text-align: center;
+        color: #fff;
+      }
+
+      .price-box.ask {
+        background: #1d4ed8;
+      }
+
+      .price-box.floor {
+        background: #0b2a6f;
+      }
+
+      .price-box .k {
+        display: block;
+        font-size: 20px;
+        margin-bottom: 3px;
+        letter-spacing: 1px;
+      }
+
+      .price-box .v {
+        font-size: 52px;
+        line-height: 1;
+        font-weight: 900;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 1.1fr 0.9fr;
+        gap: 10px;
+        padding: 9mm 10mm 0;
+      }
+
+      .card {
+        border: 2px solid var(--blue-200);
+        border-radius: 12px;
+        background: #fff;
+        padding: 8px 9px;
+      }
+
+      .card h3 {
+        margin: 0 0 6px;
+        font-size: 22px;
+        color: var(--blue-900);
+      }
+
+      .key-list {
+        margin: 0;
+        padding-left: 18px;
+        font-size: 16px;
+        line-height: 1.55;
+      }
+
+      .big-kpi {
+        display: grid;
+        gap: 8px;
+      }
+
+      .kpi-item {
+        border-radius: 10px;
+        padding: 10px;
+        text-align: center;
+        background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+        border: 1px solid var(--blue-200);
+      }
+
+      .kpi-item span {
+        display: block;
+        font-size: 14px;
+        font-weight: 700;
+        margin-bottom: 4px;
+      }
+
+      .kpi-item b {
+        font-size: 35px;
+        color: var(--blue-900);
+      }
+
+      .photos {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        padding: 8mm 10mm 0;
+      }
+
+      .slot {
+        height: 45mm;
+        border: 2px dashed #60a5fa;
+        border-radius: 10px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
+        background: #eff6ff;
+        color: #1e3a8a;
+        font-weight: 800;
+        font-size: 14px;
+      }
+
+      .bottom {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        padding: 8mm 10mm 8mm;
+      }
+
+      .brand {
+        border: 2px solid var(--blue-200);
+        border-radius: 10px;
+        background: #fff;
+        padding: 9px 10px;
+        font-size: 14px;
+        line-height: 1.55;
+      }
+
+      .brand h4 {
+        margin: 0 0 4px;
+        font-size: 24px;
+        color: var(--blue-900);
+      }
+
+      .agent {
+        border: 2px solid #93c5fd;
+        border-radius: 10px;
+        background: #eff6ff;
+        text-align: center;
+        padding: 9px 10px;
+      }
+
+      .agent .name {
+        font-size: 25px;
+        font-weight: 900;
+        margin: 3px 0 0;
+        color: var(--blue-900);
+      }
+
+      .agent .phone {
+        font-size: 46px;
+        line-height: 1;
+        color: #1d4ed8;
+        font-weight: 900;
+        margin-top: 3px;
+        letter-spacing: 1px;
+      }
+
+      .agent .cta {
+        margin-top: 4px;
+        font-size: 16px;
+        font-weight: 700;
+      }
+
+      .fine {
+        margin: 0;
+        text-align: right;
+        color: #6b7280;
+        font-size: 10px;
+        padding: 0 10mm 8mm;
+      }
+
+      @media print {
+        body {
+          background: #fff;
+        }
+        .flyer {
+          box-shadow: none;
+          margin: 0;
+          width: 194mm;
+          min-height: auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="flyer">
+      <section class="hero">
+        <span class="tag">稀有釋出・立即卡位</span>
+        <h1>雙層收租金雞母</h1>
+        <h2>現成租金收入｜五樓＋六樓頂加｜一戶多房型超好租</h2>
+      </section>
+
+      <section class="price-strip">
+        <div class="price-box ask">
+          <span class="k">開價</span>
+          <span class="v">1698萬</span>
+        </div>
+        <div class="price-box floor">
+          <span class="k">底價</span>
+          <span class="v">1450萬</span>
+        </div>
+      </section>
+
+      <section class="grid">
+        <article class="card">
+          <h3>物件亮點</h3>
+          <ul class="key-list">
+            <li>權狀 29.25 坪，收租型老公寓。</li>
+            <li>五樓：兩間一房一廳＋一間兩房。</li>
+            <li>六樓：一個大兩房＋一個露台。</li>
+            <li>月收租金合計 73,500 元，現金流明確。</li>
+          </ul>
+        </article>
+        <article class="big-kpi">
+          <div class="kpi-item">
+            <span>月租金合計</span>
+            <b>73,500</b>
+          </div>
+          <div class="kpi-item">
+            <span>樓層配置</span>
+            <b>5F + 6F</b>
+          </div>
+          <div class="kpi-item">
+            <span>權狀坪數</span>
+            <b>29.25 坪</b>
+          </div>
+        </article>
+      </section>
+
+      <section class="photos">
+        <div class="slot">圖片 1<br />外觀亮點照</div>
+        <div class="slot">圖片 2<br />五樓室內照</div>
+        <div class="slot">圖片 3<br />五樓兩房照</div>
+        <div class="slot">圖片 4<br />六樓大兩房照</div>
+        <div class="slot">圖片 5<br />露台空間照</div>
+        <div class="slot">圖片 6<br />生活圈／機能照</div>
+      </section>
+
+      <section class="bottom">
+        <article class="brand">
+          <h4>中信房屋</h4>
+          板橋新埔加盟店｜嘉政不動產經紀有限公司<br />
+          經紀業字號：(96)北縣字第001400號<br />
+          新北市板橋區華江九路21號
+        </article>
+        <article class="agent">
+          <div>專人帶看・立即洽詢</div>
+          <div class="name">業務 許哲銘</div>
+          <div class="phone">0968-500-656</div>
+          <div class="cta">想看現場，現在就打！</div>
+        </article>
+      </section>
+
+      <p class="fine">※ 以上資訊依現況及權狀登載為準，實際內容以現場與謄本資料為準。</p>
+    </main>
+  </body>
+</html>

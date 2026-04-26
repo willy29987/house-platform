@@ -1,36 +1,73 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# House Platform MVP
 
-## Getting Started
+這是一個類似 591 的網站 MVP，先支援「租屋 + 買賣」的網頁版流程：
 
-First, run the development server:
+- 房源列表（可篩選租屋/買賣、城市、價格、關鍵字）
+- 內部後台刊登/修改房源（不開放外部刊登）
+- 房源詳情（地圖、收藏、LINE 官方帳號聯絡）
+- 管理後台（`/admin`）：帳密登入、新增/修改房源、一鍵上架/下架、聯絡單處理與複製
+- Prisma + PostgreSQL 資料模型
+
+## Tech Stack
+
+- `Next.js (App Router) + TypeScript + Tailwind`
+- `Prisma + PostgreSQL`
+- `Zod`（API 欄位驗證）
+
+## Local Setup
+
+1. 安裝套件
+
+```bash
+npm install
+```
+
+2. 設定環境變數
+
+```bash
+cp .env.example .env
+```
+
+3. 啟動 PostgreSQL（本機或雲端）
+
+確保 `.env` 的以下內容已設定：
+
+- `DATABASE_URL`
+- `ADMIN_USERNAME`
+- `ADMIN_PASSWORD`
+- `ADMIN_SESSION_TOKEN`（請使用長隨機字串）
+- `NEXT_PUBLIC_LINE_OA_URL`（官方 LINE 連結，可選）
+- `NEXT_PUBLIC_LINE_OA_ADD_FRIEND_URL`（加入 LINE 好友連結，可選）
+
+4. 建立資料表
+
+```bash
+npx prisma migrate dev --name init
+```
+
+若你是從舊版本更新（新增聯絡表單資料表），再執行：
+
+```bash
+npx prisma migrate dev --name add_inquiry
+```
+
+若你是從舊版本更新（新增聯絡單處理狀態欄位），再執行：
+
+```bash
+npx prisma migrate dev --name add_inquiry_handled_status
+```
+
+5. 啟動開發環境
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+瀏覽 `http://localhost:3000`
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Notes
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- 如果沒有設定 `DATABASE_URL`，首頁仍會顯示 mock 測試資料。
+- 不提供公開刊登頁，僅內部登入後台進行新增/修改房源。
+- 收藏功能採瀏覽器 `localStorage`，免登入即可使用。
+- 後台登入入口：`/admin/login`，登入後可進入 `/admin`。

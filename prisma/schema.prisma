@@ -1,0 +1,144 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum ListingType {
+  RENT
+  SALE
+}
+
+enum PropertyType {
+  APARTMENT
+  HOUSE
+  STUDIO
+  OFFICE
+  SHOP
+}
+
+model Listing {
+  id                 String       @id @default(cuid())
+  title              String
+  description        String       @default("")
+  city               String
+  district           String
+  address            String
+  price              Int
+  areaPing           Float
+  areaMain           Float?
+  areaAncillary      Float?
+  areaParkingSpace   Float?
+  parkingSpaceInfo   String?
+  parkingRent        Int?
+  parkingType        String?
+  managementFee      Int?
+  petsAllowed        Boolean?
+  taxDeductible      Boolean?
+  rentSubsidy        Boolean?
+  canRegisterAddress Boolean?
+  viewingMethod      String?
+  community          String?
+  buildingAge        Float?
+  orientation        String?
+  decorLevel         String?
+  usageZoning        String?
+  hasElevator        Boolean?
+  legalUsage         String?
+  parkingIncluded    Boolean?
+  mrtLine            String?
+  mrtStation         String?
+  videoUrl           String?
+  features           String[]
+  rooms              Int
+  livingRooms        Int?
+  balconies          Int?
+  bathrooms          Int
+  floor              Int?
+  totalFloors        Int?
+  listingType        ListingType
+  propertyType       PropertyType
+  coverImage         String?
+  images             String[]
+  contactName        String
+  contactPhone       String
+  ownerIdCardUrl     String?
+  isPublished        Boolean      @default(true)
+  inquiries          Inquiry[]
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  OPERATOR
+}
+
+model AdminUser {
+  id        String    @id @default(cuid())
+  username  String    @unique
+  password  String
+  role      AdminRole @default(OPERATOR)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Inquiry {
+  id          String   @id @default(cuid())
+  listingId   String
+  name        String
+  phone       String
+  message     String?
+  contactTime String?
+  isHandled   Boolean  @default(false)
+  handledAt   DateTime?
+  createdAt   DateTime @default(now())
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+}
+
+enum ContentDraftStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  SCHEDULED
+}
+
+enum ContentChannel {
+  INSTAGRAM
+  FACEBOOK
+  THREADS
+  XIAOHONGSHU
+  YOUTUBE_SHORTS
+  LINE_OA
+}
+
+model ContentDraft {
+  id             String             @id @default(cuid())
+  title          String
+  hook           String             @default("")
+  script         String             @default("")
+  caption        String             @default("")
+  hashtags       String[]
+  algorithmNotes Json?
+  sourceType     String             @default("AI_TEAM")
+  sourceUrl      String?
+  targetChannels ContentChannel[]
+  status         ContentDraftStatus @default(PENDING_REVIEW)
+  reviewNote     String?
+  approvedAt     DateTime?
+  approvedBy     String?
+  scheduledAt    DateTime?
+  externalPostId String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+}
