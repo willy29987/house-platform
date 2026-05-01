@@ -45,6 +45,14 @@ export function createEmptyFormData(type: "RENT" | "SALE" = "RENT"): AdminListin
     contactName: "",
     contactPhone: "",
     ownerIdCardUrl: "",
+    furnitureProvided: "",
+    applianceProvided: "",
+    shortTermRent: "",
+    serviceFee: "",
+    registrationUse: "",
+    securityDeposit: "",
+    availableFrom: "",
+    householdsPerFloor: "",
     isPublished: true,
   };
 }

@@ -8,10 +8,18 @@ import { getCurrentAdmin } from "@/lib/admin-auth";
 async function getUsers() {
   if (!process.env.DATABASE_URL) return [];
   const { prisma } = await import("@/lib/prisma");
-  return prisma.adminUser.findMany({
-    select: { id: true, username: true, role: true, createdAt: true },
-    orderBy: { createdAt: "asc" },
-  });
+  try {
+    return await prisma.adminUser.findMany({
+      select: { id: true, username: true, displayName: true, role: true, createdAt: true },
+      orderBy: { createdAt: "asc" },
+    });
+  } catch {
+    const users = await prisma.adminUser.findMany({
+      select: { id: true, username: true, role: true, createdAt: true },
+      orderBy: { createdAt: "asc" },
+    });
+    return users.map((u) => ({ ...u, displayName: null }));
+  }
 }
 
 export default async function AdminSettingsPage() {

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 type AdminUser = {
   id: string;
   username: string;
+  displayName?: string | null;
   role: "SUPER_ADMIN" | "OPERATOR";
   createdAt: string;
 };
@@ -17,7 +18,7 @@ type AdminUsersManagerProps = {
 
 const roleLabel: Record<AdminUser["role"], string> = {
   SUPER_ADMIN: "最高管理員",
-  OPERATOR: "物件操作員",
+  OPERATOR: "業務",
 };
 
 const roleBadgeColor: Record<AdminUser["role"], string> = {
@@ -29,6 +30,7 @@ export function AdminUsersManager({ initialUsers, hasDatabase }: AdminUsersManag
   const [users, setUsers] = useState(initialUsers);
   const [newUsername, setNewUsername] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [newDisplayName, setNewDisplayName] = useState("");
   const [newRole, setNewRole] = useState<AdminUser["role"]>("OPERATOR");
   const [createStatus, setCreateStatus] = useState("");
   const [createLoading, setCreateLoading] = useState(false);
@@ -53,7 +55,7 @@ export function AdminUsersManager({ initialUsers, hasDatabase }: AdminUsersManag
     const res = await fetch("/api/admin/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: newUsername, password: newPassword, role: newRole }),
+      body: JSON.stringify({ username: newUsername, displayName: newDisplayName, password: newPassword, role: newRole }),
     });
     const data = (await res.json()) as { ok: boolean; message?: string; user?: AdminUser };
 
@@ -65,6 +67,7 @@ export function AdminUsersManager({ initialUsers, hasDatabase }: AdminUsersManag
 
     if (data.user) setUsers((prev) => [...prev, data.user!]);
     setNewUsername("");
+    setNewDisplayName("");
     setNewPassword("");
     setNewRole("OPERATOR");
     setCreateStatus("新增成功！");
@@ -135,7 +138,7 @@ export function AdminUsersManager({ initialUsers, hasDatabase }: AdminUsersManag
         <p className="font-medium">權限說明</p>
         <ul className="mt-2 list-inside list-disc space-y-0.5 text-xs">
           <li><strong>最高管理員 (SUPER_ADMIN)</strong>：可操作物件 + 管理人員帳號</li>
-          <li><strong>物件操作員 (OPERATOR)</strong>：僅可操作物件（新增/修改/上下架）</li>
+          <li><strong>業務 (OPERATOR)</strong>：可查看所有物件，僅能修改自己刊登的廣告</li>
         </ul>
       </div>
 
@@ -151,6 +154,7 @@ export function AdminUsersManager({ initialUsers, hasDatabase }: AdminUsersManag
                   <div className="flex items-center gap-3">
                     <div>
                       <p className="text-sm font-semibold text-zinc-900">{user.username}</p>
+                      <p className="text-xs text-zinc-600">{user.displayName || "未設定業務姓名"}</p>
                       <p className="text-xs text-zinc-500">
                         建立於 {new Intl.DateTimeFormat("zh-TW").format(new Date(user.createdAt))}
                       </p>
@@ -165,7 +169,7 @@ export function AdminUsersManager({ initialUsers, hasDatabase }: AdminUsersManag
                       onChange={(e) => onChangeRole(user.id, e.target.value as AdminUser["role"])}
                       className="rounded-lg border border-zinc-300 px-2 py-1.5 text-xs text-zinc-700"
                     >
-                      <option value="OPERATOR">物件操作員</option>
+                      <option value="OPERATOR">業務</option>
                       <option value="SUPER_ADMIN">最高管理員</option>
                     </select>
                     <button
@@ -225,6 +229,13 @@ export function AdminUsersManager({ initialUsers, hasDatabase }: AdminUsersManag
           />
           <input
             required
+            placeholder="業務姓名"
+            value={newDisplayName}
+            onChange={(e) => setNewDisplayName(e.target.value)}
+            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+          />
+          <input
+            required
             type="password"
             placeholder="密碼（至少 6 字）"
             value={newPassword}
@@ -236,7 +247,7 @@ export function AdminUsersManager({ initialUsers, hasDatabase }: AdminUsersManag
             onChange={(e) => setNewRole(e.target.value as AdminUser["role"])}
             className="rounded-lg border border-zinc-300 px-3 py-2 text-sm sm:col-span-2"
           >
-            <option value="OPERATOR">物件操作員（只能管理物件）</option>
+            <option value="OPERATOR">業務</option>
             <option value="SUPER_ADMIN">最高管理員（可管理人員）</option>
           </select>
           <button

@@ -5,6 +5,7 @@ import { requireSuperAdmin } from "@/lib/admin-auth";
 
 const createUserSchema = z.object({
   username: z.string().min(2, "帳號至少 2 個字"),
+  displayName: z.string().trim().min(1, "請填寫業務姓名").optional(),
   password: z.string().min(6, "密碼至少 6 個字"),
   role: z.enum(["SUPER_ADMIN", "OPERATOR"]).optional(),
 });
@@ -17,10 +18,19 @@ export async function GET() {
     return NextResponse.json({ ok: false, message: "未連接資料庫。" }, { status: 400 });
   }
 
-  const users = await prisma.adminUser.findMany({
-    select: { id: true, username: true, role: true, createdAt: true },
-    orderBy: { createdAt: "asc" },
-  });
+  let users: Array<{ id: string; username: string; displayName: string | null; role: "SUPER_ADMIN" | "OPERATOR"; createdAt: Date }>;
+  try {
+    users = await prisma.adminUser.findMany({
+      select: { id: true, username: true, displayName: true, role: true, createdAt: true },
+      orderBy: { createdAt: "asc" },
+    });
+  } catch {
+    const fallback = await prisma.adminUser.findMany({
+      select: { id: true, username: true, role: true, createdAt: true },
+      orderBy: { createdAt: "asc" },
+    });
+    users = fallback.map((u) => ({ ...u, displayName: null }));
+  }
 
   return NextResponse.json({ ok: true, users });
 }
@@ -47,14 +57,28 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, message: "此帳號名稱已被使用。" }, { status: 409 });
   }
 
-  const user = await prisma.adminUser.create({
-    data: {
-      username: parsed.data.username,
-      password: parsed.data.password,
-      role: parsed.data.role ?? "OPERATOR",
-    },
-    select: { id: true, username: true, role: true, createdAt: true },
-  });
+  let user: { id: string; username: string; displayName: string | null; role: "SUPER_ADMIN" | "OPERATOR"; createdAt: Date };
+  try {
+    user = await prisma.adminUser.create({
+      data: {
+        username: parsed.data.username,
+        displayName: parsed.data.displayName?.trim() || null,
+        password: parsed.data.password,
+        role: parsed.data.role ?? "OPERATOR",
+      },
+      select: { id: true, username: true, displayName: true, role: true, createdAt: true },
+    });
+  } catch {
+    const created = await prisma.adminUser.create({
+      data: {
+        username: parsed.data.username,
+        password: parsed.data.password,
+        role: parsed.data.role ?? "OPERATOR",
+      },
+      select: { id: true, username: true, role: true, createdAt: true },
+    });
+    user = { ...created, displayName: null };
+  }
 
   return NextResponse.json({ ok: true, user });
 }

@@ -14,7 +14,13 @@ function formatDateTime(d: Date) {
   }).format(d);
 }
 
-export default async function AdminPage() {
+type AdminPageProps = {
+  searchParams: Promise<{ type?: string }>;
+};
+
+export default async function AdminPage({ searchParams }: AdminPageProps) {
+  const { type } = await searchParams;
+  const activeType = type === "sale" ? "SALE" : "RENT";
   const [listings, current, stats, inquiries] = await Promise.all([
     getAdminListings(),
     getCurrentAdmin(),
@@ -34,30 +40,48 @@ export default async function AdminPage() {
             <p className="mt-1 text-xs text-zinc-500">
               登入：<span className="font-medium text-zinc-700">{current.username}</span>
               <span className={`ml-2 rounded-full px-2 py-0.5 text-white ${isSuperAdmin ? "bg-[#0b2545]" : "bg-zinc-500"}`}>
-                {isSuperAdmin ? "最高管理員" : "物件操作員"}
+                {isSuperAdmin ? "最高管理員" : "業務"}
               </span>
             </p>
           ) : null}
         </div>
         <div className="flex items-center gap-2">
+          <div className="inline-flex overflow-hidden rounded-lg border border-zinc-300">
+            <Link
+              href="/admin?type=rent"
+              className={`px-3 py-2 text-sm font-medium ${activeType === "RENT" ? "bg-[#0b2545] text-white" : "text-zinc-700 hover:bg-zinc-50"}`}
+            >
+              租賃
+            </Link>
+            <Link
+              href="/admin?type=sale"
+              className={`border-l border-zinc-300 px-3 py-2 text-sm font-medium ${activeType === "SALE" ? "bg-[#0b2545] text-white" : "text-zinc-700 hover:bg-zinc-50"}`}
+            >
+              買賣
+            </Link>
+          </div>
           <Link
             href="/admin/listings/new"
             className="rounded-lg bg-[#0b2545] px-3 py-2 text-sm font-medium text-white hover:bg-[#1e3a8a]"
           >
             新增廣告
           </Link>
-          <Link
-            href="/admin/listings/records"
-            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-          >
-            資料總紀錄
-          </Link>
-          <Link
-            href="/admin/team"
-            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-          >
-            AI 團隊
-          </Link>
+          {isSuperAdmin ? (
+            <Link
+              href="/admin/listings/records"
+              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+            >
+              資料總紀錄
+            </Link>
+          ) : null}
+          {isSuperAdmin ? (
+            <Link
+              href="/admin/team"
+              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+            >
+              AI 團隊
+            </Link>
+          ) : null}
           {isSuperAdmin ? (
             <Link
               href="/admin/settings"
@@ -72,7 +96,7 @@ export default async function AdminPage() {
       </div>
 
       {/* 營運小卡片 */}
-      <section className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="mb-6 grid gap-3 sm:grid-cols-2">
         <StatCard
           label="出租物件"
           value={stats.rentPublished}
@@ -85,23 +109,10 @@ export default async function AdminPage() {
           hint={`未刊登 ${stats.unpublished} 筆`}
           accent="bg-emerald-50 text-emerald-700"
         />
-        <StatCard
-          label="未處理詢問"
-          value={stats.unhandledInquiries}
-          hint={`累積 ${stats.totalInquiries} 筆`}
-          accent="bg-rose-50 text-rose-700"
-          highlight={stats.unhandledInquiries > 0}
-        />
-        <StatCard
-          label="本週新增"
-          value={stats.weekNewListings}
-          hint={`今日 ${stats.todayNewListings} 物件 · ${stats.todayInquiries} 詢問`}
-          accent="bg-amber-50 text-amber-700"
-        />
       </section>
 
       {/* 未處理詢問預覽 */}
-      {pendingInquiries.length > 0 ? (
+      {isSuperAdmin && pendingInquiries.length > 0 ? (
         <section className="mb-6 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-zinc-200">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="flex items-center gap-2 text-lg font-semibold text-zinc-900">
@@ -139,8 +150,13 @@ export default async function AdminPage() {
       ) : null}
 
       <section className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-zinc-200">
-        <h2 className="mb-4 text-lg font-semibold text-zinc-900">房源管理</h2>
-        <AdminListingTable listings={listings} />
+        <h2 className="mb-2 text-lg font-semibold text-zinc-900">{activeType === "RENT" ? "租賃物件管理" : "買賣物件管理"}</h2>
+        <AdminListingTable
+          listings={listings}
+          listingType={activeType}
+          currentUsername={current?.username ?? ""}
+          isSuperAdmin={Boolean(isSuperAdmin)}
+        />
       </section>
     </main>
   );

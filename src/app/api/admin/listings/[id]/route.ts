@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getCurrentAdmin, requireAdminSession } from "@/lib/admin-auth";
+import { parseListingInternalMeta, toListingDescription } from "@/lib/listing-internal-meta";
 import { prisma } from "@/lib/prisma";
 import { listingInputSchema } from "@/lib/listing-validation";
 
@@ -7,6 +9,11 @@ type RouteContext = {
 };
 
 export async function PATCH(request: NextRequest, { params }: RouteContext) {
+  const unauth = await requireAdminSession();
+  if (unauth) return unauth;
+  const current = await getCurrentAdmin();
+  if (!current) return NextResponse.json({ ok: false, message: "未授權" }, { status: 401 });
+
   if (!process.env.DATABASE_URL) {
     return NextResponse.json(
       { ok: false, message: "請先設定 DATABASE_URL 後再修改房源。" },
@@ -34,9 +41,13 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     );
   }
 
-  const exists = await prisma.listing.findUnique({ where: { id }, select: { id: true } });
+  const exists = await prisma.listing.findUnique({ where: { id }, select: { id: true, description: true } });
   if (!exists) {
     return NextResponse.json({ ok: false, message: "找不到房源。" }, { status: 404 });
+  }
+  const owner = parseListingInternalMeta(exists.description).createdByUsername;
+  if (current.role !== "SUPER_ADMIN" && owner && owner !== current.username) {
+    return NextResponse.json({ ok: false, message: "你只能修改自己刊登的廣告。" }, { status: 403 });
   }
 
   const data = parsed.data;
@@ -45,7 +56,17 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
       where: { id },
       data: {
         title: data.title,
-        description: data.description ?? "",
+        description: toListingDescription({
+          ...parseListingInternalMeta(exists.description),
+          furnitureProvided: data.furnitureProvided ?? null,
+          applianceProvided: data.applianceProvided ?? null,
+          shortTermRent: data.shortTermRent ?? null,
+          serviceFee: data.serviceFee ?? null,
+          registrationUse: data.registrationUse ?? null,
+          securityDeposit: data.securityDeposit ?? null,
+          availableFrom: data.availableFrom ?? null,
+          householdsPerFloor: data.householdsPerFloor ?? null,
+        }),
         features: data.features ?? [],
         city: data.city,
         district: data.district,
@@ -104,6 +125,11 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
 }
 
 export async function DELETE(_request: NextRequest, { params }: RouteContext) {
+  const unauth = await requireAdminSession();
+  if (unauth) return unauth;
+  const current = await getCurrentAdmin();
+  if (!current) return NextResponse.json({ ok: false, message: "未授權" }, { status: 401 });
+
   if (!process.env.DATABASE_URL) {
     return NextResponse.json(
       { ok: false, message: "請先設定 DATABASE_URL 後再刪除房源。" },
@@ -112,6 +138,12 @@ export async function DELETE(_request: NextRequest, { params }: RouteContext) {
   }
 
   const { id } = await params;
+  const exists = await prisma.listing.findUnique({ where: { id }, select: { description: true } });
+  if (!exists) return NextResponse.json({ ok: false, message: "找不到房源。" }, { status: 404 });
+  const owner = parseListingInternalMeta(exists.description).createdByUsername;
+  if (current.role !== "SUPER_ADMIN" && owner && owner !== current.username) {
+    return NextResponse.json({ ok: false, message: "你只能刪除自己刊登的廣告。" }, { status: 403 });
+  }
   await prisma.listing.delete({ where: { id } });
   return NextResponse.json({ ok: true });
 }

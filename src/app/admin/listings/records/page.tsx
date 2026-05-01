@@ -1,12 +1,16 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { getAdminListingRecords } from "@/lib/listings";
 import { AdminListingRecords } from "@/components/admin-listing-records";
 import { GoPublicSiteButton } from "@/components/go-public-site-button";
+import { getCurrentAdmin } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminRecordsPage() {
-  const records = await getAdminListingRecords();
+  const [records, current] = await Promise.all([getAdminListingRecords(), getCurrentAdmin()]);
+  if (!current) redirect("/admin/login");
+  if (current.role !== "SUPER_ADMIN") redirect("/admin");
 
   return (
     <main className="mx-auto w-full max-w-[1800px] px-6 py-10">

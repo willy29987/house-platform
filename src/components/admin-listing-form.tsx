@@ -49,6 +49,14 @@ export type AdminListingFormData = {
   contactName: string;
   contactPhone: string;
   ownerIdCardUrl: string;
+  furnitureProvided: "" | "yes" | "no";
+  applianceProvided: "" | "yes" | "no";
+  shortTermRent: string;
+  serviceFee: string;
+  registrationUse: string;
+  securityDeposit: string;
+  availableFrom: string;
+  householdsPerFloor: string;
   isPublished: boolean;
 };
 
@@ -223,6 +231,14 @@ export function AdminListingForm({ mode, submitUrl, initialData, lockedListingTy
       contactName: formData.contactName,
       contactPhone: formData.contactPhone,
       ownerIdCardUrl: formData.ownerIdCardUrl || null,
+      furnitureProvided: triState(formData.furnitureProvided),
+      applianceProvided: triState(formData.applianceProvided),
+      shortTermRent: formData.shortTermRent || null,
+      serviceFee: formData.serviceFee || null,
+      registrationUse: formData.registrationUse || null,
+      securityDeposit: formData.securityDeposit || null,
+      availableFrom: formData.availableFrom || null,
+      householdsPerFloor: formData.householdsPerFloor || null,
       isPublished: formData.isPublished,
     };
 
@@ -778,6 +794,30 @@ export function AdminListingForm({ mode, submitUrl, initialData, lockedListingTy
                 className={`w-full ${field}`} />
             </div>
           ))}
+        </div>
+      </section>
+
+      <section>
+        <h3 className={sectionTitle}>業務補充欄位（內部）</h3>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label className={labelCls}>家具提供</label>
+            <select value={formData.furnitureProvided} onChange={(e) => setFormData((p) => ({ ...p, furnitureProvided: e.target.value as "" | "yes" | "no" }))} className={`w-full ${field}`}>
+              <option value="">未填寫</option><option value="yes">有</option><option value="no">無</option>
+            </select>
+          </div>
+          <div>
+            <label className={labelCls}>家電提供</label>
+            <select value={formData.applianceProvided} onChange={(e) => setFormData((p) => ({ ...p, applianceProvided: e.target.value as "" | "yes" | "no" }))} className={`w-full ${field}`}>
+              <option value="">未填寫</option><option value="yes">有</option><option value="no">無</option>
+            </select>
+          </div>
+          <div><label className={labelCls}>一層幾戶</label><input value={formData.householdsPerFloor} onChange={(e) => setFormData((p) => ({ ...p, householdsPerFloor: e.target.value }))} className={`w-full ${field}`} /></div>
+          <div><label className={labelCls}>能否短租</label><input value={formData.shortTermRent} onChange={(e) => setFormData((p) => ({ ...p, shortTermRent: e.target.value }))} placeholder="例：可短租 3 個月" className={`w-full ${field}`} /></div>
+          <div><label className={labelCls}>服務費</label><input value={formData.serviceFee} onChange={(e) => setFormData((p) => ({ ...p, serviceFee: e.target.value }))} placeholder="例：半個月 / 無" className={`w-full ${field}`} /></div>
+          <div><label className={labelCls}>使照登記</label><input value={formData.registrationUse} onChange={(e) => setFormData((p) => ({ ...p, registrationUse: e.target.value }))} className={`w-full ${field}`} /></div>
+          <div><label className={labelCls}>押金</label><input value={formData.securityDeposit} onChange={(e) => setFormData((p) => ({ ...p, securityDeposit: e.target.value }))} className={`w-full ${field}`} /></div>
+          <div><label className={labelCls}>起租日</label><input value={formData.availableFrom} onChange={(e) => setFormData((p) => ({ ...p, availableFrom: e.target.value }))} placeholder="例：可立即起租" className={`w-full ${field}`} /></div>
         </div>
       </section>
 

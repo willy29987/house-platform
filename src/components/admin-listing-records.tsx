@@ -1,425 +1,140 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { AdminListingRecord } from "@/lib/listings";
 import { ToggleListingButton } from "@/components/toggle-listing-button";
 import { DownloadExcelButton } from "@/components/download-excel-button";
 
-type Props = {
-  records: AdminListingRecord[];
-};
+type Props = { records: AdminListingRecord[] };
 
-const propertyTypeLabel: Record<string, string> = {
-  APARTMENT: "大樓",
-  HOUSE: "透天",
-  STUDIO: "套房",
-  OFFICE: "辦公",
-  SHOP: "店面",
-};
-
-const parkingTypeLabel: Record<string, string> = {
-  FLAT_RAMP: "坡道平面",
-  MECHANICAL_LIFT: "機械升降",
-  MECHANICAL_FLAT: "機械平面",
-  RAMP_MECHANICAL: "坡道機械",
-  FRONT_DOOR: "門口可停車",
-  OTHER: "其他",
-};
-
-function formatRentPrice(price: number) {
-  return `NT$ ${price.toLocaleString("zh-TW")} / 月`;
-}
-
-function formatSalePrice(price: number) {
-  if (price >= 100_000_000) {
-    const y = price / 100_000_000;
-    return `${y.toFixed(y % 1 === 0 ? 0 : 2)} 億`;
-  }
+function formatPrice(price: number, type: "RENT" | "SALE") {
+  if (type === "RENT") return `NT$ ${price.toLocaleString("zh-TW")} / 月`;
+  if (price >= 100_000_000) return `${(price / 100_000_000).toFixed(1)} 億`;
   return `${(price / 10_000).toLocaleString("zh-TW", { maximumFractionDigits: 2 })} 萬`;
 }
 
-function triLabel(v: boolean | null) {
-  if (v === true) return "是";
-  if (v === false) return "否";
+function tri(v: boolean | null | undefined) {
+  if (v === true) return "有";
+  if (v === false) return "無";
   return "—";
 }
 
-function layoutText(r: AdminListingRecord) {
-  const parts = [
-    `${r.rooms}房`,
-    r.livingRooms != null ? `${r.livingRooms}廳` : null,
-    `${r.bathrooms}衛`,
-    r.balconies != null ? `${r.balconies}陽台` : null,
-  ].filter(Boolean);
-  return parts.join("");
+function DetailRow({ label, value }: { label: string; value: string | null | undefined }) {
+  return (
+    <p>
+      <span className="text-zinc-500">{label}：</span>
+      <span className="font-medium text-zinc-900">{value || "—"}</span>
+    </p>
+  );
 }
 
-function fullAddress(r: AdminListingRecord) {
-  const loc = `${r.city}${r.district}${r.address}`;
-  return r.community ? `${r.community}・${loc}` : loc;
-}
-
-function formatDate(d: Date) {
-  return new Intl.DateTimeFormat("zh-TW", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date(d));
+function InfoItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs text-zinc-500">{label}</p>
+      <p className="font-medium text-zinc-900">{value}</p>
+    </div>
+  );
 }
 
 export function AdminListingRecords({ records }: Props) {
-  const [tab, setTab] = useState<"RENT" | "SALE">("RENT");
-  const [statusFilter, setStatusFilter] = useState<"ALL" | "PUBLISHED" | "UNPUBLISHED">("ALL");
+  const [type, setType] = useState<"RENT" | "SALE">("RENT");
+  const [status, setStatus] = useState<"ALL" | "PUBLISHED" | "UNPUBLISHED">("ALL");
   const [keyword, setKeyword] = useState("");
-  const [preview, setPreview] = useState<AdminListingRecord | null>(null);
-
-  const rentCount = records.filter((r) => r.listingType === "RENT").length;
-  const saleCount = records.filter((r) => r.listingType === "SALE").length;
+  const [brokenImageSet, setBrokenImageSet] = useState<Record<string, boolean>>({});
 
   const filtered = useMemo(() => {
     const k = keyword.trim().toLowerCase();
-    return records.filter((r) => {
-      if (r.listingType !== tab) return false;
-      if (statusFilter === "PUBLISHED" && !r.isPublished) return false;
-      if (statusFilter === "UNPUBLISHED" && r.isPublished) return false;
-      if (k) {
-        const hay =
-          `${r.title}${r.city}${r.district}${r.address}${r.community ?? ""}${r.contactName}${r.contactPhone}`.toLowerCase();
-        if (!hay.includes(k)) return false;
-      }
-      return true;
-    });
-  }, [records, tab, statusFilter, keyword]);
+    return records
+      .filter((r) => r.listingType === type)
+      .filter((r) => (status === "ALL" ? true : status === "PUBLISHED" ? r.isPublished : !r.isPublished))
+      .filter((r) => {
+        if (!k) return true;
+        return `${r.title}${r.city}${r.district}${r.address}${r.community ?? ""}`.toLowerCase().includes(k);
+      });
+  }, [records, type, status, keyword]);
 
   return (
     <div>
-      {/* 租賃 / 買賣 分頁 */}
-      <div className="mb-4 flex items-center gap-2 border-b border-zinc-200">
-        {(
-          [
-            { key: "RENT", label: "租賃", count: rentCount, color: "text-blue-700 border-blue-600" },
-            { key: "SALE", label: "買賣", count: saleCount, color: "text-emerald-700 border-emerald-600" },
-          ] as const
-        ).map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => setTab(t.key)}
-            className={`border-b-2 px-5 py-2.5 text-sm font-semibold transition ${
-              tab === t.key ? t.color : "border-transparent text-zinc-500 hover:text-zinc-800"
-            }`}
-          >
-            {t.label}
-            <span className="ml-2 rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-700">
-              {t.count}
-            </span>
-          </button>
-        ))}
-      </div>
-
-      {/* 控制列 */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <div className="inline-flex rounded-lg bg-zinc-100 p-1 text-sm">
-          {(["ALL", "PUBLISHED", "UNPUBLISHED"] as const).map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setStatusFilter(s)}
-              className={`rounded-md px-3 py-1 font-medium transition ${
-                statusFilter === s
-                  ? "bg-white text-zinc-900 shadow-sm"
-                  : "text-zinc-600 hover:text-zinc-800"
-              }`}
-            >
-              {s === "ALL" ? "全部狀態" : s === "PUBLISHED" ? "上架中" : "已下架"}
-            </button>
-          ))}
-        </div>
-
-        <input
-          type="search"
-          placeholder="搜尋 社區 / 地址 / 屋主..."
-          value={keyword}
-          onChange={(e) => setKeyword(e.target.value)}
-          className="min-w-[240px] flex-1 rounded-lg border border-zinc-300 px-3 py-1.5 text-sm focus:border-zinc-500 focus:outline-none"
-        />
-
-        <span className="text-sm text-zinc-500">共 {filtered.length} 筆</span>
-
-        <div className="ml-auto">
-          <DownloadExcelButton />
-        </div>
+        <button type="button" onClick={() => setType("RENT")} className={`rounded-full px-3 py-1 text-xs ${type === "RENT" ? "bg-[#0b2545] text-white" : "bg-zinc-100 text-zinc-700"}`}>租賃</button>
+        <button type="button" onClick={() => setType("SALE")} className={`rounded-full px-3 py-1 text-xs ${type === "SALE" ? "bg-[#0b2545] text-white" : "bg-zinc-100 text-zinc-700"}`}>買賣</button>
+        <button type="button" onClick={() => setStatus("ALL")} className={`rounded-full px-3 py-1 text-xs ${status === "ALL" ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-700"}`}>全部</button>
+        <button type="button" onClick={() => setStatus("PUBLISHED")} className={`rounded-full px-3 py-1 text-xs ${status === "PUBLISHED" ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-700"}`}>上架中</button>
+        <button type="button" onClick={() => setStatus("UNPUBLISHED")} className={`rounded-full px-3 py-1 text-xs ${status === "UNPUBLISHED" ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-700"}`}>已下架</button>
+        <input type="search" value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="搜尋標題/地址/社區" className="ml-auto w-64 rounded-full border border-zinc-200 px-3 py-1.5 text-xs" />
+        <DownloadExcelButton />
       </div>
 
-      {/* 主表格 */}
-      <div className="overflow-x-auto rounded-xl ring-1 ring-zinc-200">
-        <table className="w-full min-w-[1500px] text-left text-xs">
-          <thead className="bg-zinc-50 text-zinc-600">
-            <tr>
-              <Th>物件類型</Th>
-              <Th>標題</Th>
-              <Th>社區 / 地址</Th>
-              <Th>{tab === "RENT" ? "月租" : "總價（萬）"}</Th>
-              <Th>坪數</Th>
-              <Th>格局</Th>
-              <Th>樓層</Th>
-              <Th>屋齡</Th>
-              <Th>管理費</Th>
-              <Th>車位</Th>
-              <Th>裝潢 / 朝向</Th>
-              <Th>電梯</Th>
-              <Th>屋主</Th>
-              <Th>身分證</Th>
-              <Th>圖片 / 影片</Th>
-              <Th>狀態</Th>
-              <Th>建立</Th>
-              <Th>操作</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((r) => (
-              <tr key={r.id} className="border-t border-zinc-100 hover:bg-zinc-50/50">
-                <Td>{propertyTypeLabel[r.propertyType] ?? r.propertyType}</Td>
-                <Td className="max-w-[220px]">
-                  <Link
-                    href={`/listings/${r.id}`}
-                    className="font-semibold text-zinc-900 hover:text-[#2563eb] hover:underline"
-                    target="_blank"
-                  >
-                    {r.title}
-                  </Link>
-                </Td>
-                <Td className="max-w-[300px]">
-                  {r.community ? (
-                    <div className="font-medium text-zinc-900">{r.community}</div>
-                  ) : null}
-                  <div className="text-zinc-600">
-                    {r.city}
-                    {r.district}
-                    {r.address}
-                  </div>
-                </Td>
-                <Td className="whitespace-nowrap font-semibold text-zinc-900">
-                  {tab === "RENT" ? formatRentPrice(r.price) : formatSalePrice(r.price)}
-                </Td>
-                <Td className="whitespace-nowrap">
-                  {r.areaPing} 坪
-                  {r.areaMain ? (
-                    <div className="text-[10px] text-zinc-500">主 {r.areaMain}</div>
-                  ) : null}
-                </Td>
-                <Td className="whitespace-nowrap">{layoutText(r)}</Td>
-                <Td className="whitespace-nowrap">
-                  {r.floor && r.totalFloors ? `${r.floor}/${r.totalFloors}F` : "—"}
-                </Td>
-                <Td>{r.buildingAge != null ? `${r.buildingAge} 年` : "—"}</Td>
-                <Td>{r.managementFee ? `NT$ ${r.managementFee.toLocaleString()}` : "免"}</Td>
-                <Td className="whitespace-nowrap">
-                  {r.parkingType ? parkingTypeLabel[r.parkingType] ?? r.parkingType : "無"}
-                  {tab === "RENT" && r.parkingRent ? (
-                    <div className="text-[10px] text-zinc-500">+{r.parkingRent}/月</div>
-                  ) : null}
-                  {tab === "SALE" && r.parkingIncluded !== null ? (
-                    <div className="text-[10px] text-zinc-500">
-                      {r.parkingIncluded ? "含總價" : "另計"}
-                    </div>
-                  ) : null}
-                </Td>
-                <Td className="whitespace-nowrap">
-                  {r.decorLevel ?? "—"}
-                  {r.orientation ? (
-                    <div className="text-[10px] text-zinc-500">{r.orientation}</div>
-                  ) : null}
-                </Td>
-                <Td>{triLabel(r.hasElevator)}</Td>
-                <Td className="whitespace-nowrap">
-                  <div>{r.contactName}</div>
-                  <a
-                    href={`tel:${r.contactPhone}`}
-                    className="text-[10px] text-[#2563eb] hover:underline"
-                  >
-                    {r.contactPhone}
-                  </a>
-                </Td>
-                <Td>
-                  {r.ownerIdCardUrl ? (
-                    <a
-                      href={r.ownerIdCardUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[#2563eb] hover:underline"
-                    >
-                      查看
-                    </a>
-                  ) : (
-                    <span className="text-zinc-400">—</span>
-                  )}
-                </Td>
-                <Td>
-                  {r.images.length > 0 || r.videoUrl ? (
-                    <button
-                      type="button"
-                      onClick={() => setPreview(r)}
-                      className="group relative inline-block overflow-hidden rounded-md ring-1 ring-zinc-200 transition hover:ring-[#2563eb]"
-                    >
-                      {r.coverImage ? (
-                        <Image
-                          src={r.coverImage}
-                          alt={r.title}
-                          width={64}
-                          height={48}
-                          className="h-12 w-16 object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-12 w-16 items-center justify-center bg-zinc-100 text-[10px] text-zinc-500">
-                          {r.videoUrl ? "▶ 影片" : "無圖"}
-                        </div>
-                      )}
-                      <div className="pointer-events-none absolute inset-0 flex items-end justify-end bg-gradient-to-t from-black/60 to-transparent p-0.5 text-[9px] font-medium text-white opacity-0 transition group-hover:opacity-100">
-                        {r.images.length}圖{r.videoUrl ? "・影片" : ""}
-                      </div>
-                    </button>
-                  ) : (
-                    <span className="text-zinc-400">—</span>
-                  )}
-                </Td>
-                <Td>
-                  <ToggleListingButton
-                    listingId={r.id}
-                    isPublished={r.isPublished}
-                  />
-                </Td>
-                <Td className="whitespace-nowrap text-zinc-500">{formatDate(r.createdAt)}</Td>
-                <Td>
-                  <Link
-                    href={`/admin/listings/${r.id}/edit`}
-                    className="text-[#2563eb] hover:underline"
-                  >
-                    編輯
-                  </Link>
-                </Td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        {filtered.length === 0 ? (
-          <div className="p-6 text-center text-sm text-zinc-500">
-            此分類目前沒有符合條件的物件
-          </div>
-        ) : null}
-      </div>
-
-      {/* 圖片 / 影片 預覽 Modal */}
-      {preview ? <MediaPreview listing={preview} onClose={() => setPreview(null)} /> : null}
-    </div>
-  );
-}
-
-function MediaPreview({
-  listing,
-  onClose,
-}: {
-  listing: AdminListingRecord;
-  onClose: () => void;
-}) {
-  return (
-    <div
-      onClick={onClose}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6"
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-2xl bg-white p-6 shadow-xl"
-      >
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-bold text-zinc-900">{listing.title}</h3>
-            <p className="text-xs text-zinc-500">
-              {listing.images.length} 張圖片
-              {listing.videoUrl ? "・含影片" : ""}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-          >
-            關閉
-          </button>
-        </div>
-
-        {listing.videoUrl ? (
-          <div className="mb-4">
-            <p className="mb-2 text-sm font-semibold text-zinc-800">影片</p>
-            {/^https?:\/\/(?:www\.)?(?:youtube\.com|youtu\.be)/.test(listing.videoUrl) ? (
-              <iframe
-                src={toYouTubeEmbed(listing.videoUrl)}
-                className="aspect-video w-full rounded-lg"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-              />
-            ) : (
-              <video
-                src={listing.videoUrl}
-                controls
-                className="aspect-video w-full rounded-lg bg-black"
-              />
-            )}
-          </div>
-        ) : null}
-
-        {listing.images.length > 0 ? (
-          <div>
-            <p className="mb-2 text-sm font-semibold text-zinc-800">圖片</p>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-              {listing.images.map((src, i) => (
-                <a
-                  key={src}
-                  href={src}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="group relative block aspect-[4/3] overflow-hidden rounded-lg ring-1 ring-zinc-200"
-                >
-                  <Image
-                    src={src}
-                    alt={`${listing.title}-${i + 1}`}
-                    fill
-                    className="object-cover transition group-hover:scale-105"
-                    sizes="(max-width: 640px) 50vw, 25vw"
-                  />
-                </a>
-              ))}
+      <div className="space-y-3">
+        {filtered.map((r) => (
+          <article key={r.id} className="rounded-xl border border-zinc-200 bg-white p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <Link href={`/listings/${r.id}`} className="text-base font-semibold text-zinc-900 hover:text-[#0b2545]">{r.title}</Link>
+              <span className={`rounded-full px-2 py-0.5 text-xs ${r.isPublished ? "bg-emerald-100 text-emerald-700" : "bg-zinc-200 text-zinc-700"}`}>{r.isPublished ? "上架中" : "已下架"}</span>
             </div>
-          </div>
-        ) : null}
-
-        {listing.images.length === 0 && !listing.videoUrl ? (
-          <p className="text-center text-sm text-zinc-500">此物件尚未上傳圖片或影片</p>
-        ) : null}
+            <div className="grid gap-3 md:grid-cols-[220px_1fr_190px]">
+              <div className="relative aspect-[4/3] overflow-hidden rounded-lg bg-zinc-100">
+                {(() => {
+                  const allImages = r.images.length > 0 ? r.images : r.coverImage ? [r.coverImage] : [];
+                  const raw = allImages[0] ?? null;
+                  const safe = raw
+                    ? raw.startsWith("http://") || raw.startsWith("https://") || raw.startsWith("/")
+                      ? raw
+                      : `https://${raw}`
+                    : null;
+                  const key = `${r.id}:${safe ?? ""}`;
+                  if (!safe || brokenImageSet[key]) {
+                    return <div className="flex h-full items-center justify-center text-xs text-zinc-500">無圖片</div>;
+                  }
+                  return (
+                    <img
+                      src={safe}
+                      alt={r.title}
+                      className="h-full w-full object-cover"
+                      loading="lazy"
+                      onError={() => setBrokenImageSet((prev) => ({ ...prev, [key]: true }))}
+                    />
+                  );
+                })()}
+              </div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                <InfoItem label="地區" value={`${r.city}${r.district}`} />
+                <InfoItem label="價格" value={formatPrice(r.price, r.listingType)} />
+                <InfoItem label="格局" value={`${r.rooms}房 ${r.bathrooms}衛`} />
+                <InfoItem label="坪數" value={`${r.areaPing}坪`} />
+                <InfoItem label="社區" value={r.community ?? "—"} />
+                <InfoItem label="帶看方式" value={r.viewingMethod ?? "—"} />
+                <InfoItem label="可報稅" value={tri(r.taxDeductible)} />
+                <InfoItem label="可租補" value={tri(r.rentSubsidy)} />
+              </div>
+              <div className="flex flex-col gap-2">
+                <ToggleListingButton listingId={r.id} isPublished={r.isPublished} listingType={r.listingType} />
+                <Link href={`/admin/listings/${r.id}/edit`} className="text-xs font-medium text-zinc-700 underline">修改內容</Link>
+                <details className="rounded-lg border border-zinc-200 bg-zinc-50 p-2 text-xs">
+                  <summary className="cursor-pointer font-medium">展開詳情</summary>
+                  <div className="mt-2 space-y-1">
+                    <DetailRow label="朝向" value={r.orientation} />
+                    <DetailRow label="一層幾戶" value={r.householdsPerFloor} />
+                    <DetailRow label="車位/租金" value={`${r.parkingType ?? "無"}${r.parkingRent ? ` / ${r.parkingRent}/月` : ""}`} />
+                    <DetailRow label="房屋類型" value={r.legalUsage ?? r.usageZoning ?? "—"} />
+                    <DetailRow label="能否短租" value={r.shortTermRent} />
+                    <DetailRow label="服務費" value={r.serviceFee} />
+                    <DetailRow label="使照登記" value={r.registrationUse} />
+                    <DetailRow label="押金" value={r.securityDeposit} />
+                    <DetailRow label="起租日" value={r.availableFrom} />
+                    <DetailRow label="家具/家電" value={`${tri(r.furnitureProvided)} / ${tri(r.applianceProvided)}`} />
+                    <DetailRow label="特色" value={r.features.filter(Boolean).join(" / ") || "—"} />
+                  </div>
+                </details>
+              </div>
+            </div>
+          </article>
+        ))}
+        {filtered.length === 0 ? <p className="rounded-xl bg-zinc-50 p-6 text-center text-sm text-zinc-500">沒有符合條件的物件</p> : null}
       </div>
     </div>
   );
 }
 
-function toYouTubeEmbed(url: string) {
-  const m = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/))([\w-]{11})/);
-  if (m) return `https://www.youtube.com/embed/${m[1]}`;
-  return url;
-}
-
-function Th({ children }: { children: React.ReactNode }) {
-  return <th className="whitespace-nowrap px-3 py-2 font-medium">{children}</th>;
-}
-
-function Td({
-  children,
-  className = "",
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return <td className={`px-3 py-2 align-top text-zinc-800 ${className}`}>{children}</td>;
-}

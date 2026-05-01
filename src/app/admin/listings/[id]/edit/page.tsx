@@ -71,6 +71,14 @@ export default async function AdminEditListingPage({ params }: AdminEditListingP
     contactName: listing.contactName,
     contactPhone: listing.contactPhone,
     ownerIdCardUrl: listing.ownerIdCardUrl ?? "",
+    furnitureProvided: boolToTri(listing.furnitureProvided),
+    applianceProvided: boolToTri(listing.applianceProvided),
+    shortTermRent: listing.shortTermRent ?? "",
+    serviceFee: listing.serviceFee ?? "",
+    registrationUse: listing.registrationUse ?? "",
+    securityDeposit: listing.securityDeposit ?? "",
+    availableFrom: listing.availableFrom ?? "",
+    householdsPerFloor: listing.householdsPerFloor ?? "",
     isPublished: listing.isPublished,
   };
 

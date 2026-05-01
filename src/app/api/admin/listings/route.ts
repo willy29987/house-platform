@@ -1,8 +1,15 @@
 import { NextResponse } from "next/server";
+import { getCurrentAdmin, requireAdminSession } from "@/lib/admin-auth";
+import { toListingDescription } from "@/lib/listing-internal-meta";
 import { prisma } from "@/lib/prisma";
 import { listingInputSchema } from "@/lib/listing-validation";
 
 export async function POST(request: Request) {
+  const unauth = await requireAdminSession();
+  if (unauth) return unauth;
+  const current = await getCurrentAdmin();
+  if (!current) return NextResponse.json({ ok: false, message: "未授權" }, { status: 401 });
+
   if (!process.env.DATABASE_URL) {
     return NextResponse.json(
       { ok: false, message: "請先設定 DATABASE_URL 後再建立房源。" },
@@ -34,7 +41,17 @@ export async function POST(request: Request) {
     const listing = await prisma.listing.create({
       data: {
         title: data.title,
-        description: data.description ?? "",
+        description: toListingDescription({
+          createdByUsername: current.username,
+          furnitureProvided: data.furnitureProvided ?? null,
+          applianceProvided: data.applianceProvided ?? null,
+          shortTermRent: data.shortTermRent ?? null,
+          serviceFee: data.serviceFee ?? null,
+          registrationUse: data.registrationUse ?? null,
+          securityDeposit: data.securityDeposit ?? null,
+          availableFrom: data.availableFrom ?? null,
+          householdsPerFloor: data.householdsPerFloor ?? null,
+        }),
         features: data.features ?? [],
         city: data.city,
         district: data.district,
@@ -77,7 +94,7 @@ export async function POST(request: Request) {
         contactName: data.contactName,
         contactPhone: data.contactPhone,
         ownerIdCardUrl: data.ownerIdCardUrl ?? null,
-        isPublished: data.isPublished ?? true,
+        isPublished: current.role === "SUPER_ADMIN" ? (data.isPublished ?? true) : false,
       },
       select: { id: true },
     });

@@ -69,6 +69,14 @@ export const listingInputSchema = z.object({
   contactName: z.string().min(1, "請填寫聯絡人"),
   contactPhone: z.string().min(8, "聯絡電話至少 8 碼"),
   ownerIdCardUrl: optionalString,
+  furnitureProvided: optionalBoolean,
+  applianceProvided: optionalBoolean,
+  shortTermRent: optionalString,
+  serviceFee: optionalString,
+  registrationUse: optionalString,
+  securityDeposit: optionalString,
+  availableFrom: optionalString,
+  householdsPerFloor: optionalString,
   isPublished: z.boolean().optional(),
 });
 

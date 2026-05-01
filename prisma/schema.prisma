@@ -86,6 +86,7 @@ enum AdminRole {
 model AdminUser {
   id        String    @id @default(cuid())
   username  String    @unique
+  displayName String?
   password  String
   role      AdminRole @default(OPERATOR)
   createdAt DateTime  @default(now())
