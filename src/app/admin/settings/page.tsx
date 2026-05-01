@@ -5,20 +5,32 @@ import { GoPublicSiteButton } from "@/components/go-public-site-button";
 import { AdminUsersManager } from "@/components/admin-users-manager";
 import { getCurrentAdmin } from "@/lib/admin-auth";
 
-async function getUsers() {
+type SettingsUser = {
+  id: string;
+  username: string;
+  displayName: string | null;
+  role: "SUPER_ADMIN" | "OPERATOR";
+  createdAt: Date;
+};
+
+async function getUsers(): Promise<SettingsUser[]> {
   if (!process.env.DATABASE_URL) return [];
   const { prisma } = await import("@/lib/prisma");
+  const adminUser = prisma.adminUser as any;
   try {
-    return await prisma.adminUser.findMany({
+    return await adminUser.findMany({
       select: { id: true, username: true, displayName: true, role: true, createdAt: true },
       orderBy: { createdAt: "asc" },
     });
   } catch {
-    const users = await prisma.adminUser.findMany({
+    const users = await adminUser.findMany({
       select: { id: true, username: true, role: true, createdAt: true },
       orderBy: { createdAt: "asc" },
     });
-    return users.map((u) => ({ ...u, displayName: null }));
+    return users.map((u: { id: string; username: string; role: "SUPER_ADMIN" | "OPERATOR"; createdAt: Date }) => ({
+      ...u,
+      displayName: null,
+    }));
   }
 }
 
@@ -31,9 +43,8 @@ export default async function AdminSettingsPage() {
   const users = await getUsers();
   const hasDatabase = Boolean(process.env.DATABASE_URL);
 
-  const serializedUsers = users.map((u) => ({
+  const serializedUsers = users.map((u: SettingsUser) => ({
     ...u,
-    role: u.role as "SUPER_ADMIN" | "OPERATOR",
     createdAt: u.createdAt.toISOString(),
   }));
 

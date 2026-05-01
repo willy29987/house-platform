@@ -3,6 +3,14 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireSuperAdmin } from "@/lib/admin-auth";
 
+type ApiAdminUser = {
+  id: string;
+  username: string;
+  displayName: string | null;
+  role: "SUPER_ADMIN" | "OPERATOR";
+  createdAt: Date;
+};
+
 const createUserSchema = z.object({
   username: z.string().min(2, "帳號至少 2 個字"),
   displayName: z.string().trim().min(1, "請填寫業務姓名").optional(),
@@ -18,18 +26,22 @@ export async function GET() {
     return NextResponse.json({ ok: false, message: "未連接資料庫。" }, { status: 400 });
   }
 
-  let users: Array<{ id: string; username: string; displayName: string | null; role: "SUPER_ADMIN" | "OPERATOR"; createdAt: Date }>;
+  const adminUser = prisma.adminUser as any;
+  let users: ApiAdminUser[];
   try {
-    users = await prisma.adminUser.findMany({
+    users = await adminUser.findMany({
       select: { id: true, username: true, displayName: true, role: true, createdAt: true },
       orderBy: { createdAt: "asc" },
     });
   } catch {
-    const fallback = await prisma.adminUser.findMany({
+    const fallback = await adminUser.findMany({
       select: { id: true, username: true, role: true, createdAt: true },
       orderBy: { createdAt: "asc" },
     });
-    users = fallback.map((u) => ({ ...u, displayName: null }));
+    users = fallback.map((u: { id: string; username: string; role: "SUPER_ADMIN" | "OPERATOR"; createdAt: Date }) => ({
+      ...u,
+      displayName: null,
+    }));
   }
 
   return NextResponse.json({ ok: true, users });
@@ -50,16 +62,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, message }, { status: 400 });
   }
 
-  const exists = await prisma.adminUser.findUnique({
+  const adminUser = prisma.adminUser as any;
+  const exists = await adminUser.findUnique({
     where: { username: parsed.data.username },
   });
   if (exists) {
     return NextResponse.json({ ok: false, message: "此帳號名稱已被使用。" }, { status: 409 });
   }
 
-  let user: { id: string; username: string; displayName: string | null; role: "SUPER_ADMIN" | "OPERATOR"; createdAt: Date };
+  let user: ApiAdminUser;
   try {
-    user = await prisma.adminUser.create({
+    user = await adminUser.create({
       data: {
         username: parsed.data.username,
         displayName: parsed.data.displayName?.trim() || null,
@@ -69,7 +82,7 @@ export async function POST(request: Request) {
       select: { id: true, username: true, displayName: true, role: true, createdAt: true },
     });
   } catch {
-    const created = await prisma.adminUser.create({
+    const created = await adminUser.create({
       data: {
         username: parsed.data.username,
         password: parsed.data.password,

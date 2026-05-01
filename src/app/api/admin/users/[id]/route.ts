@@ -27,7 +27,8 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     return NextResponse.json({ ok: false, message }, { status: 400 });
   }
 
-  const exists = await prisma.adminUser.findUnique({ where: { id }, select: { id: true } });
+  const adminUser = prisma.adminUser as any;
+  const exists = await adminUser.findUnique({ where: { id }, select: { id: true } });
   if (!exists) {
     return NextResponse.json({ ok: false, message: "找不到此帳號。" }, { status: 404 });
   }
@@ -42,7 +43,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
   }
 
   try {
-    await prisma.adminUser.update({ where: { id }, data: updateData });
+    await adminUser.update({ where: { id }, data: updateData });
   } catch {
     const fallbackData: { password?: string; role?: "SUPER_ADMIN" | "OPERATOR" } = {};
     if (parsed.data.password) fallbackData.password = parsed.data.password;
@@ -50,7 +51,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     if (Object.keys(fallbackData).length === 0) {
       return NextResponse.json({ ok: true });
     }
-    await prisma.adminUser.update({ where: { id }, data: fallbackData });
+    await adminUser.update({ where: { id }, data: fallbackData });
   }
   return NextResponse.json({ ok: true });
 }
@@ -63,12 +64,13 @@ export async function DELETE(_request: NextRequest, { params }: RouteContext) {
     return NextResponse.json({ ok: false, message: "未連接資料庫。" }, { status: 400 });
   }
 
+  const adminUser = prisma.adminUser as any;
   const { id } = await params;
-  const exists = await prisma.adminUser.findUnique({ where: { id }, select: { id: true } });
+  const exists = await adminUser.findUnique({ where: { id }, select: { id: true } });
   if (!exists) {
     return NextResponse.json({ ok: false, message: "找不到此帳號。" }, { status: 404 });
   }
 
-  await prisma.adminUser.delete({ where: { id } });
+  await adminUser.delete({ where: { id } });
   return NextResponse.json({ ok: true });
 }
