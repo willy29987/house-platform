@@ -4,6 +4,8 @@ import Link from "next/link";
 import { getListings } from "@/lib/listings";
 import { ListingCarousel } from "@/components/listing-carousel";
 
+export const dynamic = "force-dynamic";
+
 export default async function Home() {
   const [rentListings, saleListings] = await Promise.all([
     getListings({ listingType: ListingType.RENT }),
