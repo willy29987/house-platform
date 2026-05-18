@@ -1,8 +1,8 @@
-import { ListingType, Prisma } from "@prisma/client";
+import { ListingType, Prisma, type Listing } from "@prisma/client";
 import type { FurnitureApplianceValue } from "@/lib/furniture-appliance-value";
 import { normalizeFurnitureApplianceValue } from "@/lib/furniture-appliance-value";
 import { prisma } from "@/lib/prisma";
-import { parseListingInternalMeta } from "@/lib/listing-internal-meta";
+import { LISTING_META_PREFIX, parseListingInternalMeta } from "@/lib/listing-internal-meta";
 
 export type ListingCard = {
   id: string;
@@ -301,6 +301,8 @@ const mockListingDetails: Record<string, ListingDetail> = {
     videoUrl: null,
     listingType: ListingType.RENT,
     propertyType: "APARTMENT",
+    furnitureProvided: true,
+    applianceProvided: true,
     coverImage: null,
     contactName: "品牌顧問",
     contactPhone: "0912-345-678",
@@ -352,6 +354,8 @@ const mockListingDetails: Record<string, ListingDetail> = {
     videoUrl: null,
     listingType: ListingType.SALE,
     propertyType: "APARTMENT",
+    furnitureProvided: null,
+    applianceProvided: null,
     coverImage: null,
     contactName: "品牌顧問",
     contactPhone: "0912-345-678",
@@ -410,6 +414,66 @@ type ListingRow = {
   images: string[];
   createdAt: Date;
 };
+
+function mapListingRowToDetail(row: Listing): ListingDetail {
+  const meta = parseListingInternalMeta(row.description);
+  const images = collectLegacyImages(row.images, row.coverImage);
+  const publicDescription = row.description.startsWith(LISTING_META_PREFIX) ? "" : row.description;
+
+  return {
+    id: row.id,
+    title: row.title,
+    description: publicDescription,
+    features: row.features ?? [],
+    images: images.images,
+    city: row.city,
+    district: row.district,
+    address: row.address,
+    community: row.community,
+    price: row.price,
+    areaPing: row.areaPing,
+    rooms: row.rooms,
+    livingRooms: row.livingRooms,
+    balconies: row.balconies,
+    bathrooms: row.bathrooms,
+    floor: row.floor,
+    totalFloors: row.totalFloors,
+    areaParkingSpace: row.areaParkingSpace,
+    buildingAge: row.buildingAge,
+    hasElevator: row.hasElevator,
+    mrtLine: row.mrtLine,
+    mrtStation: row.mrtStation,
+    listingType: row.listingType,
+    propertyType: row.propertyType,
+    petsAllowed: row.petsAllowed,
+    canRegisterAddress: row.canRegisterAddress,
+    taxDeductible: row.taxDeductible,
+    rentSubsidy: row.rentSubsidy,
+    furnitureProvided: normalizeFurnitureApplianceValue(meta.furnitureProvided),
+    applianceProvided: normalizeFurnitureApplianceValue(meta.applianceProvided),
+    coverImage: images.coverImage,
+    createdAt: row.createdAt,
+    areaMain: row.areaMain,
+    areaAncillary: row.areaAncillary,
+    areaCommon: row.areaCommon,
+    areaLand: row.areaLand,
+    parkingSpaceInfo: row.parkingSpaceInfo,
+    parkingPrice: row.parkingPrice,
+    parkingRent: row.parkingRent,
+    parkingType: row.parkingType,
+    managementFee: row.managementFee,
+    viewingMethod: row.viewingMethod,
+    orientation: row.orientation,
+    decorLevel: row.decorLevel,
+    usageZoning: row.usageZoning,
+    legalUsage: row.legalUsage,
+    parkingIncluded: row.parkingIncluded,
+    videoUrl: normalizeImageUrl(row.videoUrl),
+    contactName: row.contactName,
+    contactPhone: row.contactPhone,
+    ownerIdCardUrl: normalizeImageUrl(row.ownerIdCardUrl),
+  };
+}
 
 export function mapListingRowToCard(row: ListingRow): ListingCard {
   const meta = parseListingInternalMeta(row.description);
@@ -496,7 +560,8 @@ export async function getListingById(id: string): Promise<ListingDetail | null> 
     where: { id, isPublished: true },
   });
 
-  return listing;
+  if (!listing) return null;
+  return mapListingRowToDetail(listing);
 }
 
 export async function getListingsByIds(ids: string[]): Promise<ListingCard[]> {
