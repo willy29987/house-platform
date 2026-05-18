@@ -7,7 +7,8 @@
     "dev:lan": "bash scripts/dev-lan.sh",
     "sync:lan-preview": "node scripts/sync-lan-preview-urls.mjs",
     "dev:fix": "P3000=$(lsof -ti:3000 -sTCP:LISTEN 2>/dev/null); if [ -n \"$P3000\" ]; then kill -9 $P3000; fi; P3001=$(lsof -ti:3001 -sTCP:LISTEN 2>/dev/null); if [ -n \"$P3001\" ]; then kill -9 $P3001; fi; npm run dev",
-    "build": "next build",
+    "postinstall": "prisma generate",
+    "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint"
   },
