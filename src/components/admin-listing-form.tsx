@@ -4,6 +4,7 @@ import Image from "next/image";
 import { FormEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CityDistrictSelector } from "@/components/city-district-selector";
+import { formTriToFurnitureAppliance } from "@/lib/furniture-appliance-value";
 
 export type AdminListingFormData = {
   title: string;
@@ -18,7 +19,10 @@ export type AdminListingFormData = {
   areaPing: string;
   areaMain: string;
   areaAncillary: string;
+  areaCommon: string;
+  areaLand: string;
   areaParkingSpace: string;
+  parkingPrice: string;
   parkingSpaceInfo: string;
   parkingRent: string;
   parkingType: string;
@@ -49,8 +53,8 @@ export type AdminListingFormData = {
   contactName: string;
   contactPhone: string;
   ownerIdCardUrl: string;
-  furnitureProvided: "" | "yes" | "no";
-  applianceProvided: "" | "yes" | "no";
+  furnitureProvided: "" | "yes" | "no" | "discuss";
+  applianceProvided: "" | "yes" | "no" | "discuss";
   shortTermRent: string;
   serviceFee: string;
   registrationUse: string;
@@ -105,17 +109,41 @@ function triState(value: "" | "yes" | "no"): boolean | null {
   return null;
 }
 
+type DepositUi = { kind: "" | "two" | "other"; other: string };
+
+function inferDeposit(securityDeposit: string): DepositUi {
+  const s = securityDeposit.trim();
+  if (!s) return { kind: "", other: "" };
+  if (s === "2個月") return { kind: "two", other: "" };
+  return { kind: "other", other: securityDeposit };
+}
+
+type AvailableUi = { mode: "" | "immediate" | "date"; date: string };
+
+function inferAvailable(availableFrom: string): AvailableUi {
+  const t = availableFrom.trim();
+  if (!t) return { mode: "", date: "" };
+  if (t === "立即起租" || t.includes("立即")) return { mode: "immediate", date: "" };
+  const m = t.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (m) return { mode: "date", date: m[1] };
+  return { mode: "", date: "" };
+}
+
+const SHORT_TERM_CHOICES = ["3個月", "半年"] as const;
+const SERVICE_FEE_CHOICES = ["正常", "半個月", "三分之一"] as const;
+
 export function AdminListingForm({ mode, submitUrl, initialData, lockedListingType }: AdminListingFormProps) {
   const [formData, setFormData] = useState(initialData);
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadingVideo, setUploadingVideo] = useState(false);
-  const [uploadingIdCard, setUploadingIdCard] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
-  const idCardInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
+
+  const [depositUi, setDepositUi] = useState<DepositUi>(() => inferDeposit(initialData.securityDeposit));
+  const [availableUi, setAvailableUi] = useState<AvailableUi>(() => inferAvailable(initialData.availableFrom));
 
   const isRent = formData.listingType === "RENT";
   const isSale = formData.listingType === "SALE";
@@ -123,11 +151,24 @@ export function AdminListingForm({ mode, submitUrl, initialData, lockedListingTy
   async function uploadFiles(files: FileList, kind: "image" | "video") {
     if (!files.length) return;
     if (kind === "image") setUploading(true); else setUploadingVideo(true);
-    const fd = new FormData();
-    for (const file of files) fd.append("files", file);
-    const res = await fetch("/api/admin/upload", { method: "POST", body: fd });
-    const result = (await res.json()) as { ok: boolean; urls?: string[]; message?: string };
-    if (result.ok && result.urls) {
+    setStatus("");
+    try {
+      const fd = new FormData();
+      for (const file of files) fd.append("files", file);
+      const res = await fetch("/api/admin/upload", { method: "POST", body: fd });
+      const contentType = res.headers.get("content-type") ?? "";
+      const result = contentType.includes("application/json")
+        ? ((await res.json()) as { ok: boolean; urls?: string[]; message?: string })
+        : ({ ok: false, message: await res.text() } as { ok: boolean; urls?: string[]; message?: string });
+
+      if (!res.ok || !result.ok || !result.urls) {
+        const fallback = kind === "video"
+          ? "影片上傳失敗。若在正式網站上傳影片，請確認檔案大小與 Supabase Storage 設定。"
+          : "圖片上傳失敗。請確認 Supabase Storage 設定或稍後再試。";
+        setStatus(result.message || fallback);
+        return;
+      }
+
       if (kind === "image") {
         setFormData((prev) => ({
           ...prev,
@@ -137,24 +178,18 @@ export function AdminListingForm({ mode, submitUrl, initialData, lockedListingTy
       } else {
         setFormData((prev) => ({ ...prev, videoUrl: result.urls![0] ?? prev.videoUrl }));
       }
-    } else {
-      setStatus(result.message ?? "上傳失敗");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "未知錯誤";
+      setStatus(`上傳失敗：${message}`);
+    } finally {
+      if (kind === "image") {
+        setUploading(false);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      } else {
+        setUploadingVideo(false);
+        if (videoInputRef.current) videoInputRef.current.value = "";
+      }
     }
-    if (kind === "image") setUploading(false); else setUploadingVideo(false);
-  }
-
-  async function uploadIdCard(file: File) {
-    setUploadingIdCard(true);
-    const fd = new FormData();
-    fd.append("files", file);
-    const res = await fetch("/api/admin/upload", { method: "POST", body: fd });
-    const result = (await res.json()) as { ok: boolean; urls?: string[]; message?: string };
-    if (result.ok && result.urls && result.urls[0]) {
-      setFormData((prev) => ({ ...prev, ownerIdCardUrl: result.urls![0] }));
-    } else {
-      setStatus(result.message ?? "身分證上傳失敗");
-    }
-    setUploadingIdCard(false);
   }
 
   function removeImage(url: string) {
@@ -200,7 +235,11 @@ export function AdminListingForm({ mode, submitUrl, initialData, lockedListingTy
       areaPing: Number(formData.areaPing),
       areaMain: formData.areaMain ? Number(formData.areaMain) : null,
       areaAncillary: formData.areaAncillary ? Number(formData.areaAncillary) : null,
+      areaCommon: formData.areaCommon ? Number(formData.areaCommon) : null,
+      areaLand: formData.areaLand ? Number(formData.areaLand) : null,
       areaParkingSpace: formData.areaParkingSpace ? Number(formData.areaParkingSpace) : null,
+      parkingPrice:
+        isSale && formData.parkingPrice ? Math.round(Number(formData.parkingPrice) * 10000) : null,
       parkingSpaceInfo: formData.parkingSpaceInfo || null,
       parkingRent: isRent && formData.parkingRent ? Number(formData.parkingRent) : null,
       parkingType: formData.parkingType || null,
@@ -230,14 +269,26 @@ export function AdminListingForm({ mode, submitUrl, initialData, lockedListingTy
       images: formData.images,
       contactName: formData.contactName,
       contactPhone: formData.contactPhone,
-      ownerIdCardUrl: formData.ownerIdCardUrl || null,
-      furnitureProvided: triState(formData.furnitureProvided),
-      applianceProvided: triState(formData.applianceProvided),
-      shortTermRent: formData.shortTermRent || null,
-      serviceFee: formData.serviceFee || null,
+      ownerIdCardUrl: formData.ownerIdCardUrl.trim() || null,
+      furnitureProvided: formTriToFurnitureAppliance(formData.furnitureProvided),
+      applianceProvided: formTriToFurnitureAppliance(formData.applianceProvided),
+      shortTermRent: isRent ? (formData.shortTermRent.trim() || null) : null,
+      serviceFee: isRent ? (formData.serviceFee.trim() || null) : null,
       registrationUse: formData.registrationUse || null,
-      securityDeposit: formData.securityDeposit || null,
-      availableFrom: formData.availableFrom || null,
+      securityDeposit: isRent
+        ? depositUi.kind === "two"
+          ? "2個月"
+          : depositUi.kind === "other" && depositUi.other.trim()
+            ? depositUi.other.trim()
+            : null
+        : null,
+      availableFrom: isRent
+        ? availableUi.mode === "immediate"
+          ? "立即起租"
+          : availableUi.mode === "date" && availableUi.date.trim()
+            ? availableUi.date.trim()
+            : null
+        : null,
       householdsPerFloor: formData.householdsPerFloor || null,
       isPublished: formData.isPublished,
     };
@@ -460,6 +511,18 @@ export function AdminListingForm({ mode, submitUrl, initialData, lockedListingTy
               className={`w-full ${field}`} />
           </div>
           <div>
+            <label className={labelCls}>公設坪數</label>
+            <input type="number" min="0" step="0.01" placeholder="選填" value={formData.areaCommon}
+              onChange={(e) => setFormData((p) => ({ ...p, areaCommon: e.target.value }))}
+              className={`w-full ${field}`} />
+          </div>
+          <div>
+            <label className={labelCls}>土地坪數</label>
+            <input type="number" min="0" step="0.01" placeholder="選填" value={formData.areaLand}
+              onChange={(e) => setFormData((p) => ({ ...p, areaLand: e.target.value }))}
+              className={`w-full ${field}`} />
+          </div>
+          <div>
             <label className={labelCls}>車位坪數</label>
             <input type="number" min="0" step="0.01" placeholder="選填" value={formData.areaParkingSpace}
               onChange={(e) => setFormData((p) => ({ ...p, areaParkingSpace: e.target.value }))}
@@ -489,16 +552,34 @@ export function AdminListingForm({ mode, submitUrl, initialData, lockedListingTy
               className={`w-full ${field}`} />
           </div>
           {isSale ? (
-            <div className="sm:col-span-2">
-              <label className={labelCls}>車位是否含於總價</label>
-              <select value={formData.parkingIncluded}
-                onChange={(e) => setFormData((p) => ({ ...p, parkingIncluded: e.target.value as "" | "yes" | "no" }))}
-                className={`w-full ${field}`}>
-                <option value="">未填寫</option>
-                <option value="yes">含車位</option>
-                <option value="no">不含（另計）</option>
-              </select>
-            </div>
+            <>
+              <div>
+                <label className={labelCls}>車位價格（萬元）</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="不含總價時填寫，例：150"
+                  value={formData.parkingPrice}
+                  onChange={(e) => setFormData((p) => ({ ...p, parkingPrice: e.target.value }))}
+                  className={`w-full ${field}`}
+                />
+              </div>
+              <div>
+                <label className={labelCls}>車位是否含於總價</label>
+                <select
+                  value={formData.parkingIncluded}
+                  onChange={(e) =>
+                    setFormData((p) => ({ ...p, parkingIncluded: e.target.value as "" | "yes" | "no" }))
+                  }
+                  className={`w-full ${field}`}
+                >
+                  <option value="">未填寫</option>
+                  <option value="yes">含於總價</option>
+                  <option value="no">不含（另計）</option>
+                </select>
+              </div>
+            </>
           ) : null}
         </div>
       </section>
@@ -626,12 +707,9 @@ export function AdminListingForm({ mode, submitUrl, initialData, lockedListingTy
         </section>
       ) : null}
 
-      {/* 屋主聯絡資訊（僅供內部使用，不會顯示在外網） */}
+      {/* 屋主聯絡資訊 */}
       <section>
-        <h3 className={sectionTitle}>屋主聯絡資訊（內部）</h3>
-        <p className="-mt-1 mb-3 text-xs text-zinc-500">
-          此區所有欄位僅供內部建檔使用，<span className="font-semibold text-rose-600">不會</span>顯示在對外網頁。
-        </p>
+        <h3 className={sectionTitle}>屋主聯絡資訊</h3>
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <label className={labelCls}>屋主姓名</label>
@@ -645,87 +723,33 @@ export function AdminListingForm({ mode, submitUrl, initialData, lockedListingTy
               onChange={(e) => setFormData((p) => ({ ...p, contactPhone: e.target.value }))}
               className={`w-full ${field}`} />
           </div>
-        </div>
-
-        {/* 身分證上傳（選填） */}
-        <div className="mt-4">
-          <label className={labelCls}>屋主身分證（選填）</label>
-          <p className="mb-2 text-xs text-zinc-500">
-            可上傳身分證正／反面照片或 PDF 掃描檔，檔案僅儲存在內部後台供建檔確認用。
-          </p>
-          {formData.ownerIdCardUrl ? (
-            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
-              {/\.(pdf)$/i.test(formData.ownerIdCardUrl) ? (
-                <a
-                  href={formData.ownerIdCardUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 rounded-md bg-white px-3 py-2 text-sm font-medium text-[#2563eb] ring-1 ring-zinc-200 hover:bg-zinc-100"
-                >
-                  📄 檢視 PDF
-                </a>
-              ) : (
-                <a
-                  href={formData.ownerIdCardUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block"
-                >
-                  <Image
-                    src={formData.ownerIdCardUrl}
-                    alt="屋主身分證"
-                    width={160}
-                    height={100}
-                    className="h-24 w-auto rounded-md border border-zinc-200 object-cover"
-                  />
-                </a>
-              )}
-              <button
-                type="button"
-                onClick={() => setFormData((p) => ({ ...p, ownerIdCardUrl: "" }))}
-                className="rounded-md border border-rose-200 bg-white px-3 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-50"
-              >
-                移除
-              </button>
-            </div>
-          ) : (
-            <div className="flex flex-wrap items-center gap-3">
-              <input
-                ref={idCardInputRef}
-                type="file"
-                accept="image/*,application/pdf"
-                hidden
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) uploadIdCard(f);
-                  if (idCardInputRef.current) idCardInputRef.current.value = "";
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => idCardInputRef.current?.click()}
-                disabled={uploadingIdCard}
-                className="rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-60"
-              >
-                {uploadingIdCard ? "上傳中..." : "選擇檔案"}
-              </button>
-              <span className="text-xs text-zinc-500">支援 JPG / PNG / PDF，大小建議 &lt; 10MB</span>
-            </div>
-          )}
+          <div className="sm:col-span-2">
+            <label className={labelCls}>屋主身分證字號（選填）</label>
+            <input
+              type="text"
+              inputMode="text"
+              autoComplete="off"
+              placeholder="例：A123456789 或末四碼"
+              maxLength={20}
+              value={formData.ownerIdCardUrl}
+              onChange={(e) => setFormData((p) => ({ ...p, ownerIdCardUrl: e.target.value }))}
+              className={`w-full ${field}`}
+            />
+          </div>
         </div>
       </section>
 
       {/* 圖片 + 影片 */}
       <section>
         <h3 className={sectionTitle}>圖片與影片</h3>
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4">
           {/* 圖片區 */}
-          <div className="rounded-xl border border-zinc-200 p-4">
-            <p className="mb-2 text-sm font-medium text-zinc-800">物件圖片（可多張）</p>
+          <div className="min-w-0 rounded-xl border border-zinc-200 p-3 sm:p-4">
+            <p className="mb-2 text-xs font-medium text-zinc-800 sm:text-sm">物件圖片（可多張）</p>
             {formData.images.length > 0 ? (
-              <div className="mb-3 flex flex-wrap gap-2">
+              <div className="mb-3 flex flex-wrap gap-1.5 sm:gap-2">
                 {formData.images.map((url) => (
-                  <div key={url} className="group relative h-20 w-28 overflow-hidden rounded-lg border border-zinc-200">
+                  <div key={url} className="group relative h-16 w-20 overflow-hidden rounded-lg border border-zinc-200 sm:h-20 sm:w-28">
                     <Image src={url} alt="物件圖片" fill className="object-cover" sizes="112px" />
                     <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
                       <button type="button" onClick={() => setCover(url)}
@@ -745,18 +769,18 @@ export function AdminListingForm({ mode, submitUrl, initialData, lockedListingTy
             <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden"
               onChange={(e) => { if (e.target.files) uploadFiles(e.target.files, "image"); }} />
             <button type="button" disabled={uploading} onClick={() => fileInputRef.current?.click()}
-              className="w-full rounded-lg border border-dashed border-zinc-400 bg-zinc-50 px-4 py-3 text-sm text-zinc-600 hover:bg-zinc-100 disabled:opacity-60">
-              {uploading ? "上傳中..." : "＋ 點此選擇圖片（可多張）"}
+              className="w-full rounded-lg border border-dashed border-zinc-400 bg-zinc-50 px-2 py-2.5 text-xs text-zinc-600 hover:bg-zinc-100 disabled:opacity-60 sm:px-4 sm:py-3 sm:text-sm">
+              {uploading ? "上傳中..." : "＋ 選擇圖片"}
             </button>
-            <p className="mt-1 text-xs text-zinc-400">支援 JPG、PNG、WEBP</p>
+            <p className="mt-1 text-[10px] text-zinc-400 sm:text-xs">JPG、PNG、WEBP</p>
           </div>
 
           {/* 影片區 */}
-          <div className="rounded-xl border border-zinc-200 p-4">
-            <p className="mb-2 text-sm font-medium text-zinc-800">物件影片（選填，僅一支）</p>
+          <div className="min-w-0 rounded-xl border border-zinc-200 p-3 sm:p-4">
+            <p className="mb-2 text-xs font-medium text-zinc-800 sm:text-sm">物件影片（選填）</p>
             {formData.videoUrl ? (
               <div className="relative mb-3 overflow-hidden rounded-lg bg-zinc-900">
-                <video src={formData.videoUrl} controls className="h-40 w-full object-cover" />
+                <video src={formData.videoUrl} controls className="h-28 w-full object-cover sm:h-40" />
                 <button type="button" onClick={() => setFormData((p) => ({ ...p, videoUrl: "" }))}
                   className="absolute right-2 top-2 rounded bg-red-600 px-2 py-0.5 text-xs font-medium text-white">
                   移除
@@ -766,15 +790,15 @@ export function AdminListingForm({ mode, submitUrl, initialData, lockedListingTy
             <input ref={videoInputRef} type="file" accept="video/*" className="hidden"
               onChange={(e) => { if (e.target.files) uploadFiles(e.target.files, "video"); }} />
             <button type="button" disabled={uploadingVideo} onClick={() => videoInputRef.current?.click()}
-              className="w-full rounded-lg border border-dashed border-zinc-400 bg-zinc-50 px-4 py-3 text-sm text-zinc-600 hover:bg-zinc-100 disabled:opacity-60">
-              {uploadingVideo ? "上傳中..." : formData.videoUrl ? "＋ 更換影片" : "＋ 點此選擇影片"}
+              className="w-full rounded-lg border border-dashed border-zinc-400 bg-zinc-50 px-2 py-2.5 text-xs text-zinc-600 hover:bg-zinc-100 disabled:opacity-60 sm:px-4 sm:py-3 sm:text-sm">
+              {uploadingVideo ? "上傳中..." : formData.videoUrl ? "＋ 更換影片" : "＋ 選擇影片"}
             </button>
-            <p className="mt-1 text-xs text-zinc-400">支援 MP4、WEBM，單檔 100MB 以內</p>
-            <div className="mt-3">
-              <label className={labelCls}>或貼上影片連結（YouTube / 既有 URL）</label>
+            <p className="mt-1 text-[10px] text-zinc-400 sm:text-xs">MP4、WEBM，100MB 內</p>
+            <div className="mt-2 sm:mt-3">
+              <label className="mb-1 block text-[10px] font-medium text-zinc-600 sm:text-xs">或貼影片連結</label>
               <input type="text" placeholder="https://..." value={formData.videoUrl}
                 onChange={(e) => setFormData((p) => ({ ...p, videoUrl: e.target.value }))}
-                className={`w-full ${field}`} />
+                className={`w-full ${field} text-xs sm:text-sm`} />
             </div>
           </div>
         </div>
@@ -802,22 +826,178 @@ export function AdminListingForm({ mode, submitUrl, initialData, lockedListingTy
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <label className={labelCls}>家具提供</label>
-            <select value={formData.furnitureProvided} onChange={(e) => setFormData((p) => ({ ...p, furnitureProvided: e.target.value as "" | "yes" | "no" }))} className={`w-full ${field}`}>
-              <option value="">未填寫</option><option value="yes">有</option><option value="no">無</option>
+            <select
+              value={formData.furnitureProvided}
+              onChange={(e) =>
+                setFormData((p) => ({ ...p, furnitureProvided: e.target.value as AdminListingFormData["furnitureProvided"] }))
+              }
+              className={`w-full ${field}`}
+            >
+              <option value="">未填寫</option>
+              <option value="yes">有</option>
+              <option value="no">無</option>
+              <option value="discuss">可討論</option>
             </select>
           </div>
           <div>
             <label className={labelCls}>家電提供</label>
-            <select value={formData.applianceProvided} onChange={(e) => setFormData((p) => ({ ...p, applianceProvided: e.target.value as "" | "yes" | "no" }))} className={`w-full ${field}`}>
-              <option value="">未填寫</option><option value="yes">有</option><option value="no">無</option>
+            <select
+              value={formData.applianceProvided}
+              onChange={(e) =>
+                setFormData((p) => ({ ...p, applianceProvided: e.target.value as AdminListingFormData["applianceProvided"] }))
+              }
+              className={`w-full ${field}`}
+            >
+              <option value="">未填寫</option>
+              <option value="yes">有</option>
+              <option value="no">無</option>
+              <option value="discuss">可討論</option>
             </select>
           </div>
-          <div><label className={labelCls}>一層幾戶</label><input value={formData.householdsPerFloor} onChange={(e) => setFormData((p) => ({ ...p, householdsPerFloor: e.target.value }))} className={`w-full ${field}`} /></div>
-          <div><label className={labelCls}>能否短租</label><input value={formData.shortTermRent} onChange={(e) => setFormData((p) => ({ ...p, shortTermRent: e.target.value }))} placeholder="例：可短租 3 個月" className={`w-full ${field}`} /></div>
-          <div><label className={labelCls}>服務費</label><input value={formData.serviceFee} onChange={(e) => setFormData((p) => ({ ...p, serviceFee: e.target.value }))} placeholder="例：半個月 / 無" className={`w-full ${field}`} /></div>
-          <div><label className={labelCls}>使照登記</label><input value={formData.registrationUse} onChange={(e) => setFormData((p) => ({ ...p, registrationUse: e.target.value }))} className={`w-full ${field}`} /></div>
-          <div><label className={labelCls}>押金</label><input value={formData.securityDeposit} onChange={(e) => setFormData((p) => ({ ...p, securityDeposit: e.target.value }))} className={`w-full ${field}`} /></div>
-          <div><label className={labelCls}>起租日</label><input value={formData.availableFrom} onChange={(e) => setFormData((p) => ({ ...p, availableFrom: e.target.value }))} placeholder="例：可立即起租" className={`w-full ${field}`} /></div>
+          <div>
+            <label className={labelCls}>一層幾戶</label>
+            <input
+              value={formData.householdsPerFloor}
+              onChange={(e) => setFormData((p) => ({ ...p, householdsPerFloor: e.target.value }))}
+              className={`w-full ${field}`}
+            />
+          </div>
+          <div>
+            <label className={labelCls}>使照登記</label>
+            <input
+              value={formData.registrationUse}
+              onChange={(e) => setFormData((p) => ({ ...p, registrationUse: e.target.value }))}
+              className={`w-full ${field}`}
+            />
+          </div>
+
+          {isRent ? (
+            <>
+              <div>
+                <label className={labelCls}>能否短租</label>
+                <select
+                  value={formData.shortTermRent}
+                  onChange={(e) => setFormData((p) => ({ ...p, shortTermRent: e.target.value }))}
+                  className={`w-full ${field}`}
+                >
+                  <option value="">未填寫</option>
+                  {SHORT_TERM_CHOICES.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                  {formData.shortTermRent && !SHORT_TERM_CHOICES.some((c) => c === formData.shortTermRent) ? (
+                    <option value={formData.shortTermRent}>{formData.shortTermRent}（舊資料）</option>
+                  ) : null}
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>服務費</label>
+                <select
+                  value={formData.serviceFee}
+                  onChange={(e) => setFormData((p) => ({ ...p, serviceFee: e.target.value }))}
+                  className={`w-full ${field}`}
+                >
+                  <option value="">未填寫</option>
+                  {SERVICE_FEE_CHOICES.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                  {formData.serviceFee && !SERVICE_FEE_CHOICES.some((c) => c === formData.serviceFee) ? (
+                    <option value={formData.serviceFee}>{formData.serviceFee}（舊資料）</option>
+                  ) : null}
+                </select>
+              </div>
+
+              <div className="sm:col-span-2">
+                <span className={labelCls}>押金</span>
+                <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-zinc-800">
+                  <label className="inline-flex cursor-pointer items-center gap-2">
+                    <input
+                      type="radio"
+                      name="depositKind"
+                      checked={depositUi.kind === ""}
+                      onChange={() => setDepositUi({ kind: "", other: "" })}
+                      className="h-4 w-4"
+                    />
+                    未填寫
+                  </label>
+                  <label className="inline-flex cursor-pointer items-center gap-2">
+                    <input
+                      type="radio"
+                      name="depositKind"
+                      checked={depositUi.kind === "two"}
+                      onChange={() => setDepositUi({ kind: "two", other: "" })}
+                      className="h-4 w-4"
+                    />
+                    2 個月
+                  </label>
+                  <label className="inline-flex cursor-pointer items-center gap-2">
+                    <input
+                      type="radio"
+                      name="depositKind"
+                      checked={depositUi.kind === "other"}
+                      onChange={() => setDepositUi((prev) => ({ kind: "other", other: prev.other }))}
+                      className="h-4 w-4"
+                    />
+                    其他
+                    <input
+                      type="text"
+                      disabled={depositUi.kind !== "other"}
+                      placeholder="例：1.5 個月、面議"
+                      value={depositUi.other}
+                      onChange={(e) => setDepositUi((prev) => ({ ...prev, kind: "other", other: e.target.value }))}
+                      className={`min-w-[10rem] max-w-full flex-1 ${field} disabled:bg-zinc-100`}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div className="sm:col-span-2">
+                <span className={labelCls}>起租日</span>
+                <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-zinc-800">
+                  <label className="inline-flex cursor-pointer items-center gap-2">
+                    <input
+                      type="radio"
+                      name="availableMode"
+                      checked={availableUi.mode === ""}
+                      onChange={() => setAvailableUi({ mode: "", date: "" })}
+                      className="h-4 w-4"
+                    />
+                    未填寫
+                  </label>
+                  <label className="inline-flex cursor-pointer items-center gap-2">
+                    <input
+                      type="radio"
+                      name="availableMode"
+                      checked={availableUi.mode === "immediate"}
+                      onChange={() => setAvailableUi({ mode: "immediate", date: "" })}
+                      className="h-4 w-4"
+                    />
+                    立即起租
+                  </label>
+                  <label className="inline-flex flex-wrap items-center gap-2">
+                    <input
+                      type="radio"
+                      name="availableMode"
+                      checked={availableUi.mode === "date"}
+                      onChange={() => setAvailableUi((prev) => ({ mode: "date", date: prev.date }))}
+                      className="h-4 w-4"
+                    />
+                    <span>指定日起租</span>
+                    <input
+                      type="date"
+                      disabled={availableUi.mode !== "date"}
+                      value={availableUi.date}
+                      onChange={(e) => setAvailableUi({ mode: "date", date: e.target.value })}
+                      className={`${field} w-auto min-w-[11rem] disabled:bg-zinc-100`}
+                    />
+                  </label>
+                </div>
+              </div>
+            </>
+          ) : null}
         </div>
       </section>
 

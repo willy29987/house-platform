@@ -24,6 +24,12 @@ const optionalBoolean = z.preprocess((val) => {
   return val;
 }, z.boolean().optional());
 
+const optionalBooleanOrDiscuss = z.preprocess((val) => {
+  if (val === null || val === undefined || val === "") return undefined;
+  if (val === "DISCUSS") return "DISCUSS" as const;
+  return val;
+}, z.union([z.boolean(), z.literal("DISCUSS")]).optional());
+
 export const listingInputSchema = z.object({
   title: z.string().min(2, "標題至少需要 2 個字"),
   description: z.string().optional().default(""),
@@ -35,7 +41,10 @@ export const listingInputSchema = z.object({
   areaPing: z.coerce.number().positive("權狀坪數必須大於 0"),
   areaMain: optionalNonNegative,
   areaAncillary: optionalNonNegative,
+  areaCommon: optionalNonNegative,
+  areaLand: optionalNonNegative,
   areaParkingSpace: optionalNonNegative,
+  parkingPrice: optionalNonNegative,
   parkingSpaceInfo: optionalString,
   parkingRent: optionalNonNegative,
   parkingType: optionalString,
@@ -69,8 +78,8 @@ export const listingInputSchema = z.object({
   contactName: z.string().min(1, "請填寫聯絡人"),
   contactPhone: z.string().min(8, "聯絡電話至少 8 碼"),
   ownerIdCardUrl: optionalString,
-  furnitureProvided: optionalBoolean,
-  applianceProvided: optionalBoolean,
+  furnitureProvided: optionalBooleanOrDiscuss,
+  applianceProvided: optionalBooleanOrDiscuss,
   shortTermRent: optionalString,
   serviceFee: optionalString,
   registrationUse: optionalString,

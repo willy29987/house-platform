@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { AdminListingForm, type AdminListingFormData } from "@/components/admin-listing-form";
 import { GoPublicSiteButton } from "@/components/go-public-site-button";
 import { getAdminListingById } from "@/lib/listings";
+import { furnitureApplianceToFormTri } from "@/lib/furniture-appliance-value";
 
 type AdminEditListingPageProps = {
   params: Promise<{ id: string }>;
@@ -40,7 +41,10 @@ export default async function AdminEditListingPage({ params }: AdminEditListingP
     areaPing: String(listing.areaPing),
     areaMain: listing.areaMain ? String(listing.areaMain) : "",
     areaAncillary: listing.areaAncillary ? String(listing.areaAncillary) : "",
+    areaCommon: listing.areaCommon ? String(listing.areaCommon) : "",
+    areaLand: listing.areaLand ? String(listing.areaLand) : "",
     areaParkingSpace: listing.areaParkingSpace ? String(listing.areaParkingSpace) : "",
+    parkingPrice: listing.parkingPrice ? String(listing.parkingPrice / 10000) : "",
     parkingSpaceInfo: listing.parkingSpaceInfo ?? "",
     parkingRent: listing.parkingRent ? String(listing.parkingRent) : "",
     parkingType: listing.parkingType ?? "",
@@ -71,8 +75,8 @@ export default async function AdminEditListingPage({ params }: AdminEditListingP
     contactName: listing.contactName,
     contactPhone: listing.contactPhone,
     ownerIdCardUrl: listing.ownerIdCardUrl ?? "",
-    furnitureProvided: boolToTri(listing.furnitureProvided),
-    applianceProvided: boolToTri(listing.applianceProvided),
+    furnitureProvided: furnitureApplianceToFormTri(listing.furnitureProvided),
+    applianceProvided: furnitureApplianceToFormTri(listing.applianceProvided),
     shortTermRent: listing.shortTermRent ?? "",
     serviceFee: listing.serviceFee ?? "",
     registrationUse: listing.registrationUse ?? "",
@@ -94,7 +98,10 @@ export default async function AdminEditListingPage({ params }: AdminEditListingP
           </div>
           <div className="flex items-center gap-2">
             <GoPublicSiteButton />
-            <Link href="/admin" className="text-sm font-medium text-zinc-600 hover:text-zinc-900">
+            <Link
+              href="/admin"
+              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+            >
               回管理後台
             </Link>
           </div>

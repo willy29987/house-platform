@@ -1,9 +1,11 @@
+import type { FurnitureApplianceValue } from "@/lib/furniture-appliance-value";
+
 export const LISTING_META_PREFIX = "__listing_meta__:";
 
 export type ListingInternalMeta = {
   createdByUsername?: string;
-  furnitureProvided?: boolean | null;
-  applianceProvided?: boolean | null;
+  furnitureProvided?: FurnitureApplianceValue;
+  applianceProvided?: FurnitureApplianceValue;
   shortTermRent?: string | null;
   serviceFee?: string | null;
   registrationUse?: string | null;

@@ -3,24 +3,37 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ToggleListingButton } from "@/components/toggle-listing-button";
+import { formatParkingTypeLabel } from "@/lib/parking-type-label";
+import type { FurnitureApplianceValue } from "@/lib/furniture-appliance-value";
+import { formatFurnitureApplianceZh } from "@/lib/furniture-appliance-value";
 
 type AdminListing = {
   id: string;
   title: string;
   listingType: "RENT" | "SALE";
+  propertyType?: string;
   city: string;
   district: string;
   address?: string;
   community?: string | null;
   price: number;
   areaPing: number;
+  areaMain?: number | null;
+  areaAncillary?: number | null;
+  areaParkingSpace?: number | null;
+  parkingSpaceInfo?: string | null;
   rooms: number;
+  livingRooms?: number | null;
+  balconies?: number | null;
   bathrooms: number;
   floor?: number | null;
   totalFloors?: number | null;
+  buildingAge?: number | null;
+  managementFee?: number | null;
   hasElevator?: boolean | null;
   parkingType?: string | null;
   parkingRent?: number | null;
+  parkingIncluded?: boolean | null;
   petsAllowed?: boolean | null;
   taxDeductible?: boolean | null;
   rentSubsidy?: boolean | null;
@@ -29,11 +42,12 @@ type AdminListing = {
   legalUsage?: string | null;
   usageZoning?: string | null;
   coverImage?: string | null;
+  videoUrl?: string | null;
   images?: string[];
   features?: string[];
   createdByUsername?: string | null;
-  furnitureProvided?: boolean | null;
-  applianceProvided?: boolean | null;
+  furnitureProvided?: FurnitureApplianceValue;
+  applianceProvided?: FurnitureApplianceValue;
   shortTermRent?: string | null;
   serviceFee?: string | null;
   registrationUse?: string | null;
@@ -99,6 +113,8 @@ export function AdminListingTable({ listings, listingType, currentUsername, isSu
     const maxA = maxPing ? Number(maxPing) : null;
     const passTri = (value: boolean | null | undefined, filter: TriFilter) =>
       filter === "ALL" ? true : filter === "YES" ? value === true : value === false;
+    const furnitureForTriFilter = (v: FurnitureApplianceValue | undefined): boolean | null =>
+      v === true ? true : v === false ? false : null;
 
     return listings
       .filter((l) => l.listingType === listingType)
@@ -117,8 +133,8 @@ export function AdminListingTable({ listings, listingType, currentUsername, isSu
       .filter((l) => (listingType === "RENT" ? passTri(l.rentSubsidy, subsidyFilter) : true))
       .filter((l) => (listingType === "RENT" ? passTri(l.petsAllowed, petsFilter) : true))
       .filter((l) => passTri(l.hasElevator, elevatorFilter))
-      .filter((l) => passTri(l.furnitureProvided, furnitureFilter))
-      .filter((l) => passTri(l.applianceProvided, applianceFilter))
+      .filter((l) => (listingType === "RENT" ? passTri(furnitureForTriFilter(l.furnitureProvided), furnitureFilter) : true))
+      .filter((l) => (listingType === "RENT" ? passTri(furnitureForTriFilter(l.applianceProvided), applianceFilter) : true))
       .filter((l) => (parkingFilter === "ALL" ? true : parkingFilter === "YES" ? Boolean(l.parkingType) : !l.parkingType))
       .filter((l) => {
         if (!text) return true;
@@ -142,11 +158,9 @@ export function AdminListingTable({ listings, listingType, currentUsername, isSu
           <input type="number" value={minPing} onChange={(e) => setMinPing(e.target.value)} placeholder="最小坪數" className="w-24 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs" />
           <input type="number" value={maxPing} onChange={(e) => setMaxPing(e.target.value)} placeholder="最大坪數" className="w-24 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs" />
           <select value={layoutFilter} onChange={(e) => setLayoutFilter(e.target.value as "ALL" | "WHOLE" | "STUDIO")} className="rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs"><option value="ALL">房型不限</option><option value="WHOLE">整層住家</option><option value="STUDIO">獨立套房</option></select>
-          {listingType === "RENT" ? (<><select value={taxFilter} onChange={(e) => setTaxFilter(e.target.value as TriFilter)} className="rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs"><option value="ALL">報稅不限</option><option value="YES">可報稅</option><option value="NO">不可報稅</option></select><select value={subsidyFilter} onChange={(e) => setSubsidyFilter(e.target.value as TriFilter)} className="rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs"><option value="ALL">租補不限</option><option value="YES">可租補</option><option value="NO">不可租補</option></select><select value={petsFilter} onChange={(e) => setPetsFilter(e.target.value as TriFilter)} className="rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs"><option value="ALL">寵物不限</option><option value="YES">可養寵物</option><option value="NO">不可養寵物</option></select></>) : null}
+          {listingType === "RENT" ? (<><select value={taxFilter} onChange={(e) => setTaxFilter(e.target.value as TriFilter)} className="rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs"><option value="ALL">報稅不限</option><option value="YES">可報稅</option><option value="NO">不可報稅</option></select><select value={subsidyFilter} onChange={(e) => setSubsidyFilter(e.target.value as TriFilter)} className="rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs"><option value="ALL">租補不限</option><option value="YES">可租補</option><option value="NO">不可租補</option></select><select value={petsFilter} onChange={(e) => setPetsFilter(e.target.value as TriFilter)} className="rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs"><option value="ALL">寵物不限</option><option value="YES">可養寵物</option><option value="NO">不可養寵物</option></select><select value={furnitureFilter} onChange={(e) => setFurnitureFilter(e.target.value as TriFilter)} className="rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs"><option value="ALL">家具不限</option><option value="YES">有家具</option><option value="NO">無家具</option></select><select value={applianceFilter} onChange={(e) => setApplianceFilter(e.target.value as TriFilter)} className="rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs"><option value="ALL">家電不限</option><option value="YES">有家電</option><option value="NO">無家電</option></select></>) : null}
           <select value={elevatorFilter} onChange={(e) => setElevatorFilter(e.target.value as TriFilter)} className="rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs"><option value="ALL">電梯不限</option><option value="YES">有電梯</option><option value="NO">無電梯</option></select>
           <select value={parkingFilter} onChange={(e) => setParkingFilter(e.target.value as TriFilter)} className="rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs"><option value="ALL">車位不限</option><option value="YES">有車位</option><option value="NO">無車位</option></select>
-          <select value={furnitureFilter} onChange={(e) => setFurnitureFilter(e.target.value as TriFilter)} className="rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs"><option value="ALL">家具不限</option><option value="YES">有家具</option><option value="NO">無家具</option></select>
-          <select value={applianceFilter} onChange={(e) => setApplianceFilter(e.target.value as TriFilter)} className="rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs"><option value="ALL">家電不限</option><option value="YES">有家電</option><option value="NO">無家電</option></select>
           <input type="search" value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="搜尋 標題 / 社區 / 地址" className="ml-auto w-64 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs" />
         </div>
       </div>
@@ -209,22 +223,14 @@ export function AdminListingTable({ listings, listingType, currentUsername, isSu
               return `https://${src}`;
             };
             const currentImageUrl = safeImage(currentImage);
+            const currentVideoUrl = safeImage(l.videoUrl ?? null);
             const imageKey = `${l.id}:${currentImageUrl ?? ""}`;
             const canShowImage = Boolean(currentImageUrl && !brokenImageSet[imageKey]);
+            const visibleAddressDetail = formatVisibleAddressDetail(l, isSuperAdmin || l.createdByUsername === currentUsername);
             return (
-              <article key={l.id} className="rounded-xl border border-zinc-200 bg-white p-3">
-                <div className="mb-2 flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <Link href={`/listings/${l.id}`} className="line-clamp-1 text-base font-semibold text-zinc-900 hover:text-[#0b2545]">{l.title}</Link>
-                  </div>
-                  <div className="flex items-center gap-3 text-xs text-zinc-500">
-                    <span>{new Intl.DateTimeFormat("zh-TW").format(l.createdAt)}</span>
-                    <span>{l.createdByUsername ?? "—"}</span>
-                    {canEdit ? <Link href={`/admin/listings/${l.id}/edit`} className="font-medium text-zinc-700 underline">修改內容</Link> : null}
-                  </div>
-                </div>
-                <div className="grid gap-3 md:grid-cols-[220px_1fr_190px]">
-                  <div className="relative aspect-[4/3] overflow-hidden rounded-lg bg-zinc-100">
+              <article key={l.id} className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
+                <div className="grid grid-cols-[168px_1fr] gap-0 sm:grid-cols-[210px_1fr] lg:grid-cols-[225px_1fr]">
+                  <div className="relative h-[132px] overflow-hidden bg-zinc-100 sm:h-[146px] lg:h-[150px]">
                     {canShowImage ? (
                       <>
                         <img
@@ -242,40 +248,88 @@ export function AdminListingTable({ listings, listingType, currentUsername, isSu
                           </>
                         ) : null}
                       </>
+                    ) : currentVideoUrl ? (
+                      <video
+                        src={currentVideoUrl}
+                        className="h-full w-full object-cover"
+                        muted
+                        playsInline
+                        controls
+                      />
                     ) : (
                       <div className="flex h-full items-center justify-center text-xs text-zinc-500">無圖片</div>
                     )}
                   </div>
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-                    <InfoItem label="地區" value={`${l.city}${l.district}`} />
-                    <InfoItem label="價格" value={formatAdminPrice(l.price, l.listingType)} />
-                    <InfoItem label="格局" value={`${l.rooms}房 ${l.bathrooms}衛`} />
-                    <InfoItem label="坪數" value={`${l.areaPing}坪`} />
-                    <InfoItem label="社區" value={l.community ?? "—"} />
-                    <InfoItem label="帶看方式" value={l.viewingMethod ?? "—"} />
-                    <InfoItem label="刊登業務" value={l.createdByUsername ?? "—"} />
-                    <InfoItem label="寵物" value={triText(l.petsAllowed)} />
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    {canEdit ? <ToggleListingButton listingId={l.id} isPublished={l.isPublished} listingType={l.listingType} /> : null}
-                    <details className="rounded-lg border border-zinc-200 bg-zinc-50 p-2 text-xs">
-                      <summary className="cursor-pointer font-medium">展開詳情</summary>
-                      <div className="mt-2 space-y-1">
-                        <DetailRow label="朝向" value={l.orientation} />
-                        <DetailRow label="一層幾戶" value={l.householdsPerFloor} />
-                        <DetailRow label="車位/租金" value={`${l.parkingType ?? "無"}${l.parkingRent ? ` / ${l.parkingRent}/月` : ""}`} />
-                        <DetailRow label="房屋類型" value={l.legalUsage ?? l.usageZoning ?? "—"} />
-                        <DetailRow label="能否短租" value={l.shortTermRent} />
-                        <DetailRow label="服務費" value={l.serviceFee} />
-                        <DetailRow label="使照登記" value={l.registrationUse} />
-                        <DetailRow label="押金" value={l.securityDeposit} />
-                        <DetailRow label="起租日" value={l.availableFrom} />
-                        <DetailRow label="家具/家電" value={`${triText(l.furnitureProvided)} / ${triText(l.applianceProvided)}`} />
-                        <DetailRow label="特色" value={l.features?.filter(Boolean).join(" / ") || "—"} />
+
+                  <div className="flex h-[132px] flex-col justify-between overflow-hidden p-2.5 sm:h-[146px] sm:p-3 lg:h-[150px]">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <Link href={`/listings/${l.id}`} className="line-clamp-1 text-sm font-bold leading-snug text-zinc-950 hover:text-[#0b2545] sm:text-base">
+                          {l.title}
+                        </Link>
+                        <p className="mt-1 truncate text-xs font-medium text-zinc-600">
+                          {l.city}{l.district}{visibleAddressDetail || ""}
+                        </p>
                       </div>
-                    </details>
+                      <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+                        <span className="max-w-[7rem] truncate text-xs text-zinc-600" title={l.createdByUsername ?? undefined}>
+                          業務 {l.createdByUsername ?? "—"}
+                        </span>
+                        <span className="whitespace-nowrap text-xs text-zinc-600">
+                          上架 {new Intl.DateTimeFormat("zh-TW").format(l.createdAt)}
+                        </span>
+                        {canEdit ? <ToggleListingButton listingId={l.id} isPublished={l.isPublished} listingType={l.listingType} /> : null}
+                        {canEdit ? (
+                          <Link href={`/admin/listings/${l.id}/edit`} className="rounded-lg border border-zinc-300 px-2.5 py-1 text-xs font-semibold text-zinc-700 hover:bg-zinc-50">
+                            修改內容
+                          </Link>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <div className="mt-2 grid gap-x-5 gap-y-1 md:grid-cols-[minmax(140px,1fr)_minmax(180px,1.35fr)_minmax(110px,0.8fr)_minmax(120px,0.9fr)]">
+                      <InfoStat label="價格" value={formatAdminPrice(l.price, l.listingType)} />
+                      <InfoStat label="格局" value={formatLayout(l)} />
+                      <InfoStat label="權狀坪數" value={formatPing(l.areaPing)} />
+                      <InfoStat label="樓層" value={formatFloor(l.floor, l.totalFloors)} />
+                    </div>
+
                   </div>
                 </div>
+
+                <details className="border-t border-zinc-100 bg-zinc-50 px-4 py-1 text-xs">
+                  <summary className="flex cursor-pointer list-none justify-center text-base font-bold leading-none text-zinc-600 [&::-webkit-details-marker]:hidden">⌄</summary>
+                  <div className="mt-1 grid gap-x-6 gap-y-1.5 sm:grid-cols-2 lg:grid-cols-3">
+                    <DetailRow label="朝向" value={l.orientation} />
+                    <DetailRow label="一層幾戶" value={l.householdsPerFloor} />
+                    <DetailRow label="主建物" value={formatPing(l.areaMain)} />
+                    <DetailRow label="附屬建物" value={formatPing(l.areaAncillary)} />
+                    <DetailRow label="車位坪數" value={formatPing(l.areaParkingSpace)} />
+                    <DetailRow label="車位樓層/號碼" value={l.parkingSpaceInfo} />
+                    <DetailRow
+                      label="車位/租金"
+                      value={`${formatParkingTypeLabel(l.parkingType)}${l.parkingRent ? ` / ${l.parkingRent}/月` : ""}`}
+                    />
+                    <DetailRow label="電梯" value={triText(l.hasElevator)} />
+                    <DetailRow label="屋齡" value={l.buildingAge != null ? `${l.buildingAge}年` : "—"} />
+                    <DetailRow label="管理費" value={l.managementFee ? `NT$ ${l.managementFee.toLocaleString("zh-TW")}` : "—"} />
+                    <DetailRow label="房屋類型" value={l.legalUsage ?? l.usageZoning ?? "—"} />
+                    <DetailRow label="使照登記" value={l.registrationUse} />
+                    {l.listingType === "RENT" ? (
+                      <>
+                        <DetailRow label="寵物" value={triText(l.petsAllowed)} />
+                        <DetailRow label="報稅" value={triText(l.taxDeductible)} />
+                        <DetailRow label="租補" value={triText(l.rentSubsidy)} />
+                        <DetailRow label="起租日" value={l.availableFrom} />
+                        <DetailRow label="能否短租" value={l.shortTermRent} />
+                        <DetailRow label="服務費" value={l.serviceFee} />
+                        <DetailRow label="押金" value={l.securityDeposit} />
+                        <DetailRow label="家具/家電" value={`${formatFurnitureApplianceZh(l.furnitureProvided)} / ${formatFurnitureApplianceZh(l.applianceProvided)}`} />
+                      </>
+                    ) : null}
+                    <DetailRow label="特色" value={l.features?.filter(Boolean).join(" / ") || "—"} />
+                  </div>
+                </details>
               </article>
             );
           })}
@@ -291,5 +345,40 @@ export function AdminListingTable({ listings, listingType, currentUsername, isSu
 }
 
 function triText(v: boolean | null | undefined) { return v === true ? "有" : v === false ? "無" : "—"; }
-function InfoItem({ label, value }: { label: string; value: string }) { return <div><p className="text-xs text-zinc-500">{label}</p><p className="font-medium text-zinc-900">{value}</p></div>; }
+function formatPing(v: number | null | undefined) {
+  return v == null ? "—" : `${v.toLocaleString("zh-TW", { maximumFractionDigits: 2 })}坪`;
+}
+function formatLayout(l: Pick<AdminListing, "rooms" | "livingRooms" | "bathrooms" | "balconies">) {
+  return `${l.rooms}房 ${l.livingRooms ?? 0}廳 ${l.bathrooms}衛 ${l.balconies ?? 0}陽台`;
+}
+function formatFloor(floor: number | null | undefined, totalFloors: number | null | undefined) {
+  if (floor == null && totalFloors == null) return "—";
+  if (floor == null) return `共 ${totalFloors} 樓`;
+  if (totalFloors == null) return `${floor} 樓`;
+  return `${floor} 樓 / 共 ${totalFloors} 樓`;
+}
+function maskAddress(address: string | null | undefined) {
+  const value = (address ?? "").trim();
+  if (!value) return "";
+  return value.replace(/\s*\d+\s*號.*$/, "").trim() || value;
+}
+function stripKnownRegion(address: string | null | undefined, city: string, district: string) {
+  let value = (address ?? "").trim();
+  for (const prefix of [`${city}${district}`, city, district]) {
+    if (prefix && value.startsWith(prefix)) value = value.slice(prefix.length).trim();
+  }
+  return value;
+}
+function formatVisibleAddressDetail(l: Pick<AdminListing, "city" | "district" | "address">, canViewFullAddress: boolean) {
+  const detail = stripKnownRegion(l.address, l.city, l.district);
+  return canViewFullAddress ? detail : maskAddress(detail);
+}
+function InfoStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-xs text-zinc-500">{label}</p>
+      <p className="mt-0.5 whitespace-nowrap text-sm font-bold text-zinc-950">{value}</p>
+    </div>
+  );
+}
 function DetailRow({ label, value }: { label: string; value: string | null | undefined }) { return <p><span className="text-zinc-500">{label}：</span><span className="font-medium text-zinc-900">{value || "—"}</span></p>; }

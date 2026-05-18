@@ -23,16 +23,22 @@ export async function POST(request: Request) {
   const { username, password } = parsed.data;
   let valid = false;
 
-  if (process.env.DATABASE_URL) {
-    const { prisma } = await import("@/lib/prisma");
-    const user = await prisma.adminUser.findUnique({ where: { username } });
-    if (user && user.password === password) {
-      valid = true;
+  // .env 設定的最高管理員帳密優先（避免 DB 內舊密碼與 .env 不一致導致無法登入）
+  if (hasAdminCredentials() && isValidEnvAdminLogin(username, password)) {
+    valid = true;
+  } else if (process.env.DATABASE_URL) {
+    try {
+      const { prisma } = await import("@/lib/prisma");
+      const user = await prisma.adminUser.findUnique({ where: { username } });
+      if (user && user.password === password) {
+        valid = true;
+      }
+    } catch {
+      return NextResponse.json(
+        { ok: false, message: "資料庫連線失敗，請稍後再試。" },
+        { status: 503 },
+      );
     }
-  }
-
-  if (!valid && hasAdminCredentials()) {
-    valid = isValidEnvAdminLogin(username, password);
   }
 
   if (!valid) {

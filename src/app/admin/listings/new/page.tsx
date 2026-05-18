@@ -17,7 +17,10 @@ export default async function AdminNewListingPage({ searchParams }: NewListingPa
           <h1 className="text-2xl font-bold text-zinc-900">新增廣告房源</h1>
           <div className="flex items-center gap-2">
             <GoPublicSiteButton />
-            <Link href="/admin" className="text-sm font-medium text-zinc-600 hover:text-zinc-900">
+            <Link
+              href="/admin"
+              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+            >
               回管理後台
             </Link>
           </div>
@@ -71,10 +74,16 @@ export default async function AdminNewListingPage({ searchParams }: NewListingPa
           </div>
           <div className="flex gap-2">
             <GoPublicSiteButton />
-            <Link href="/admin/listings/new" className="text-sm font-medium text-zinc-600 hover:text-zinc-900">
+            <Link
+              href="/admin/listings/new"
+              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+            >
               改選類型
             </Link>
-            <Link href="/admin" className="text-sm font-medium text-zinc-600 hover:text-zinc-900">
+            <Link
+              href="/admin"
+              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+            >
               回後台
             </Link>
           </div>

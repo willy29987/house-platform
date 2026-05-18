@@ -27,7 +27,7 @@ export function ListingGallery({ title, coverImage, images }: ListingGalleryProp
   if (allImages.length === 0) {
     return (
       <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
-        <div className="flex h-72 w-full items-center justify-center rounded-xl bg-zinc-100 text-sm text-zinc-400 sm:h-96">
+        <div className="flex h-48 w-full items-center justify-center rounded-xl bg-zinc-100 text-sm text-zinc-400 sm:h-64">
           尚未上傳圖片
         </div>
       </section>
@@ -48,7 +48,7 @@ export function ListingGallery({ title, coverImage, images }: ListingGalleryProp
   return (
     <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
       <div className="relative overflow-hidden rounded-xl">
-        <div className="relative h-72 w-full sm:h-[28rem]">
+        <div className="relative h-48 w-full sm:h-[calc(28rem*2/3)]">
           <Image src={currentImage} alt={title} fill className="object-cover" sizes="100vw" priority />
         </div>
         {canNavigate ? (

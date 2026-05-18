@@ -37,7 +37,10 @@ model Listing {
   areaPing           Float
   areaMain           Float?
   areaAncillary      Float?
+  areaCommon         Float?
+  areaLand           Float?
   areaParkingSpace   Float?
+  parkingPrice       Int?
   parkingSpaceInfo   String?
   parkingRent        Int?
   parkingType        String?

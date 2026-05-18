@@ -1,4 +1,6 @@
 import { ListingType, Prisma } from "@prisma/client";
+import type { FurnitureApplianceValue } from "@/lib/furniture-appliance-value";
+import { normalizeFurnitureApplianceValue } from "@/lib/furniture-appliance-value";
 import { prisma } from "@/lib/prisma";
 import { parseListingInternalMeta } from "@/lib/listing-internal-meta";
 
@@ -24,6 +26,12 @@ export type ListingCard = {
   mrtStation: string | null;
   listingType: ListingType;
   propertyType: string;
+  petsAllowed: boolean | null;
+  canRegisterAddress: boolean | null;
+  taxDeductible: boolean | null;
+  rentSubsidy: boolean | null;
+  furnitureProvided: FurnitureApplianceValue;
+  applianceProvided: FurnitureApplianceValue;
   coverImage: string | null;
   images: string[];
   createdAt: Date;
@@ -37,7 +45,10 @@ export type ListingDetail = ListingCard & {
   balconies: number | null;
   areaMain: number | null;
   areaAncillary: number | null;
+  areaCommon: number | null;
+  areaLand: number | null;
   parkingSpaceInfo: string | null;
+  parkingPrice: number | null;
   parkingRent: number | null;
   parkingType: string | null;
   managementFee: number | null;
@@ -102,8 +113,8 @@ export type AdminListingDetail = ListingDetail & {
   securityDeposit?: string | null;
   availableFrom?: string | null;
   householdsPerFloor?: string | null;
-  furnitureProvided?: boolean | null;
-  applianceProvided?: boolean | null;
+  furnitureProvided?: FurnitureApplianceValue;
+  applianceProvided?: FurnitureApplianceValue;
 };
 
 export type ListingFilters = {
@@ -131,19 +142,29 @@ export type AdminListing = {
   id: string;
   title: string;
   listingType: ListingType;
+  propertyType: string;
   city: string;
   district: string;
   address: string;
   community: string | null;
   price: number;
   areaPing: number;
+  areaMain: number | null;
+  areaAncillary: number | null;
+  areaParkingSpace: number | null;
+  parkingSpaceInfo: string | null;
   rooms: number;
+  livingRooms: number | null;
+  balconies: number | null;
   bathrooms: number;
   floor: number | null;
   totalFloors: number | null;
+  buildingAge: number | null;
+  managementFee: number | null;
   hasElevator: boolean | null;
   parkingType: string | null;
   parkingRent: number | null;
+  parkingIncluded: boolean | null;
   petsAllowed: boolean | null;
   taxDeductible: boolean | null;
   rentSubsidy: boolean | null;
@@ -153,9 +174,10 @@ export type AdminListing = {
   usageZoning: string | null;
   features: string[];
   coverImage: string | null;
+  videoUrl: string | null;
   createdByUsername: string | null;
-  furnitureProvided: boolean | null;
-  applianceProvided: boolean | null;
+  furnitureProvided: FurnitureApplianceValue;
+  applianceProvided: FurnitureApplianceValue;
   shortTermRent: string | null;
   serviceFee: string | null;
   registrationUse: string | null;
@@ -189,6 +211,12 @@ const mockListings: ListingCard[] = [
     mrtStation: "中山站",
     listingType: ListingType.RENT,
     propertyType: "APARTMENT",
+    petsAllowed: true,
+    canRegisterAddress: true,
+    taxDeductible: true,
+    rentSubsidy: true,
+    furnitureProvided: true,
+    applianceProvided: true,
     coverImage: null,
     images: [],
     createdAt: new Date("2026-04-01"),
@@ -215,6 +243,12 @@ const mockListings: ListingCard[] = [
     mrtStation: null,
     listingType: ListingType.SALE,
     propertyType: "APARTMENT",
+    petsAllowed: null,
+    canRegisterAddress: null,
+    taxDeductible: null,
+    rentSubsidy: null,
+    furnitureProvided: null,
+    applianceProvided: null,
     coverImage: null,
     images: [],
     createdAt: new Date("2026-04-08"),
@@ -235,6 +269,9 @@ const mockListingDetails: Record<string, ListingDetail> = {
     areaPing: 22,
     areaMain: 16,
     areaAncillary: 3,
+    areaCommon: null,
+    areaLand: null,
+    parkingPrice: null,
     rooms: 2,
     livingRooms: 1,
     balconies: 1,
@@ -283,6 +320,9 @@ const mockListingDetails: Record<string, ListingDetail> = {
     areaPing: 45,
     areaMain: 32,
     areaAncillary: 4.5,
+    areaCommon: 8.5,
+    areaLand: 12,
+    parkingPrice: null,
     rooms: 3,
     livingRooms: 2,
     balconies: 2,
@@ -339,6 +379,75 @@ function hasDatabaseUrl() {
   return Boolean(process.env.DATABASE_URL);
 }
 
+type ListingRow = {
+  id: string;
+  title: string;
+  city: string;
+  district: string;
+  address: string;
+  community: string | null;
+  price: number;
+  areaPing: number;
+  rooms: number;
+  livingRooms: number | null;
+  balconies: number | null;
+  bathrooms: number;
+  floor: number | null;
+  totalFloors: number | null;
+  areaParkingSpace: number | null;
+  buildingAge: number | null;
+  hasElevator: boolean | null;
+  mrtLine: string | null;
+  mrtStation: string | null;
+  listingType: ListingType;
+  propertyType: string;
+  petsAllowed: boolean | null;
+  canRegisterAddress: boolean | null;
+  taxDeductible: boolean | null;
+  rentSubsidy: boolean | null;
+  description: string;
+  coverImage: string | null;
+  images: string[];
+  createdAt: Date;
+};
+
+export function mapListingRowToCard(row: ListingRow): ListingCard {
+  const meta = parseListingInternalMeta(row.description);
+  const images = collectLegacyImages(row.images, row.coverImage);
+  return {
+    id: row.id,
+    title: row.title,
+    city: row.city,
+    district: row.district,
+    address: row.address,
+    community: row.community,
+    price: row.price,
+    areaPing: row.areaPing,
+    rooms: row.rooms,
+    livingRooms: row.livingRooms,
+    balconies: row.balconies,
+    bathrooms: row.bathrooms,
+    floor: row.floor,
+    totalFloors: row.totalFloors,
+    areaParkingSpace: row.areaParkingSpace,
+    buildingAge: row.buildingAge,
+    hasElevator: row.hasElevator,
+    mrtLine: row.mrtLine,
+    mrtStation: row.mrtStation,
+    listingType: row.listingType,
+    propertyType: row.propertyType,
+    petsAllowed: row.petsAllowed,
+    canRegisterAddress: row.canRegisterAddress,
+    taxDeductible: row.taxDeductible,
+    rentSubsidy: row.rentSubsidy,
+    furnitureProvided: normalizeFurnitureApplianceValue(meta.furnitureProvided),
+    applianceProvided: normalizeFurnitureApplianceValue(meta.applianceProvided),
+    coverImage: images.coverImage,
+    images: images.images,
+    createdAt: row.createdAt,
+  };
+}
+
 export async function getListings(filters: ListingFilters): Promise<ListingCard[]> {
   if (!hasDatabaseUrl()) {
     return filterMockListings(filters);
@@ -370,11 +479,12 @@ export async function getListings(filters: ListingFilters): Promise<ListingCard[
       : {}),
   };
 
-  return prisma.listing.findMany({
+  const rows = await prisma.listing.findMany({
     where,
     orderBy: { createdAt: "desc" },
     take: 60,
   });
+  return rows.map((row) => mapListingRowToCard(row));
 }
 
 export async function getListingById(id: string): Promise<ListingDetail | null> {
@@ -387,6 +497,24 @@ export async function getListingById(id: string): Promise<ListingDetail | null> 
   });
 
   return listing;
+}
+
+export async function getListingsByIds(ids: string[]): Promise<ListingCard[]> {
+  const uniqueIds = [...new Set(ids.filter(Boolean))].slice(0, 60);
+  if (uniqueIds.length === 0) {
+    return [];
+  }
+
+  if (!hasDatabaseUrl()) {
+    const map = new Map(mockListings.map((listing) => [listing.id, listing]));
+    return uniqueIds.map((id) => map.get(id)).filter((listing): listing is ListingCard => Boolean(listing));
+  }
+
+  const rows = await prisma.listing.findMany({
+    where: { id: { in: uniqueIds }, isPublished: true },
+  });
+  const map = new Map(rows.map((row) => [row.id, mapListingRowToCard(row)]));
+  return uniqueIds.map((id) => map.get(id)).filter((listing): listing is ListingCard => Boolean(listing));
 }
 
 export async function getAdminListingById(id: string): Promise<AdminListingDetail | null> {
@@ -412,8 +540,8 @@ export async function getAdminListingById(id: string): Promise<AdminListingDetai
       securityDeposit: meta.securityDeposit ?? null,
       availableFrom: meta.availableFrom ?? null,
       householdsPerFloor: meta.householdsPerFloor ?? null,
-      furnitureProvided: meta.furnitureProvided ?? null,
-      applianceProvided: meta.applianceProvided ?? null,
+      furnitureProvided: normalizeFurnitureApplianceValue(meta.furnitureProvided),
+      applianceProvided: normalizeFurnitureApplianceValue(meta.applianceProvided),
     };
   });
 }
@@ -424,19 +552,29 @@ export async function getAdminListings(): Promise<AdminListing[]> {
       id: listing.id,
       title: listing.title,
       listingType: listing.listingType,
+      propertyType: listing.propertyType,
       city: listing.city,
       district: listing.district,
       address: listing.address,
       community: listing.community,
       price: listing.price,
       areaPing: listing.areaPing,
+      areaMain: null,
+      areaAncillary: null,
+      areaParkingSpace: listing.areaParkingSpace ?? null,
+      parkingSpaceInfo: null,
       rooms: listing.rooms,
+      livingRooms: listing.livingRooms,
+      balconies: listing.balconies,
       bathrooms: listing.bathrooms,
       floor: listing.floor ?? null,
       totalFloors: listing.totalFloors ?? null,
+      buildingAge: listing.buildingAge ?? null,
+      managementFee: null,
       hasElevator: listing.hasElevator ?? null,
       parkingType: null,
       parkingRent: null,
+      parkingIncluded: null,
       petsAllowed: null,
       taxDeductible: null,
       rentSubsidy: null,
@@ -446,6 +584,7 @@ export async function getAdminListings(): Promise<AdminListing[]> {
       usageZoning: null,
       features: [],
       ...collectLegacyImages(listing.images, listing.coverImage),
+      videoUrl: null,
       createdByUsername: null,
       furnitureProvided: null,
       applianceProvided: null,
@@ -465,19 +604,29 @@ export async function getAdminListings(): Promise<AdminListing[]> {
       id: true,
       title: true,
       listingType: true,
+      propertyType: true,
       city: true,
       district: true,
       address: true,
       community: true,
       price: true,
       areaPing: true,
+      areaMain: true,
+      areaAncillary: true,
+      areaParkingSpace: true,
+      parkingSpaceInfo: true,
       rooms: true,
+      livingRooms: true,
+      balconies: true,
       bathrooms: true,
       floor: true,
       totalFloors: true,
+      buildingAge: true,
+      managementFee: true,
       hasElevator: true,
       parkingType: true,
       parkingRent: true,
+      parkingIncluded: true,
       petsAllowed: true,
       taxDeductible: true,
       rentSubsidy: true,
@@ -488,6 +637,7 @@ export async function getAdminListings(): Promise<AdminListing[]> {
       features: true,
       coverImage: true,
       images: true,
+      videoUrl: true,
       description: true,
       isPublished: true,
       createdAt: true,
@@ -500,8 +650,8 @@ export async function getAdminListings(): Promise<AdminListing[]> {
       return {
         ...row,
         createdByUsername: meta.createdByUsername ?? null,
-        furnitureProvided: meta.furnitureProvided ?? null,
-        applianceProvided: meta.applianceProvided ?? null,
+        furnitureProvided: normalizeFurnitureApplianceValue(meta.furnitureProvided),
+        applianceProvided: normalizeFurnitureApplianceValue(meta.applianceProvided),
         shortTermRent: meta.shortTermRent ?? null,
         serviceFee: meta.serviceFee ?? null,
         registrationUse: meta.registrationUse ?? null,
@@ -528,6 +678,7 @@ export type AdminListingRecord = {
   areaMain: number | null;
   areaAncillary: number | null;
   areaParkingSpace: number | null;
+  parkingSpaceInfo: string | null;
   rooms: number;
   livingRooms: number | null;
   balconies: number | null;
@@ -549,8 +700,8 @@ export type AdminListingRecord = {
   viewingMethod: string | null;
   features: string[];
   createdByUsername: string | null;
-  furnitureProvided: boolean | null;
-  applianceProvided: boolean | null;
+  furnitureProvided: FurnitureApplianceValue;
+  applianceProvided: FurnitureApplianceValue;
   shortTermRent: string | null;
   serviceFee: string | null;
   registrationUse: string | null;
@@ -590,6 +741,7 @@ export async function getAdminListingRecords(): Promise<AdminListingRecord[]> {
       areaMain: r.areaMain,
       areaAncillary: r.areaAncillary,
       areaParkingSpace: r.areaParkingSpace,
+      parkingSpaceInfo: r.parkingSpaceInfo,
       rooms: r.rooms,
       livingRooms: r.livingRooms,
       balconies: r.balconies,
@@ -611,8 +763,8 @@ export async function getAdminListingRecords(): Promise<AdminListingRecord[]> {
       viewingMethod: r.viewingMethod,
       features: r.features ?? [],
       createdByUsername: meta.createdByUsername ?? null,
-      furnitureProvided: meta.furnitureProvided ?? null,
-      applianceProvided: meta.applianceProvided ?? null,
+      furnitureProvided: normalizeFurnitureApplianceValue(meta.furnitureProvided),
+      applianceProvided: normalizeFurnitureApplianceValue(meta.applianceProvided),
       shortTermRent: meta.shortTermRent ?? null,
       serviceFee: meta.serviceFee ?? null,
       registrationUse: meta.registrationUse ?? null,

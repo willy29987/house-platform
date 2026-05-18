@@ -1,0 +1,61 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Cursor: 後台・手機（本機・內嵌）",
+      "command": "runCommands",
+      "args": {
+        "commands": [
+          {
+            "command": "simpleBrowser.api.open",
+            "args": [
+              "http://127.0.0.1:3000/mobile-preview?scope=admin&path=/admin/login"
+            ]
+          }
+        ]
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Cursor: 後台・電腦（本機・內嵌）",
+      "command": "runCommands",
+      "args": {
+        "commands": [
+          {
+            "command": "simpleBrowser.api.open",
+            "args": ["http://127.0.0.1:3000/admin/login"]
+          }
+        ]
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Cursor: 後台・手機（內網・內嵌）",
+      "command": "runCommands",
+      "args": {
+        "commands": [
+          {
+            "command": "simpleBrowser.api.open",
+            "args": [
+              "http://192.168.10.115:3000/mobile-preview?scope=admin&path=/admin/login&lan=1"
+            ]
+          }
+        ]
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Cursor: 後台・電腦（內網・內嵌）",
+      "command": "runCommands",
+      "args": {
+        "commands": [
+          {
+            "command": "simpleBrowser.api.open",
+            "args": ["http://192.168.10.115:3000/admin/login"]
+          }
+        ]
+      },
+      "problemMatcher": []
+    }
+  ]
+}

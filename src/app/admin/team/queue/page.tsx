@@ -38,10 +38,10 @@ export default async function AdminTeamQueuePage() {
         </div>
         <div className="flex items-center gap-2">
           <GoPublicSiteButton />
-          <Link href="/admin/team" className="rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-700">
+          <Link href="/admin/team" className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50">
             回 AI 團隊
           </Link>
-          <Link href="/admin" className="rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-700">
+          <Link href="/admin" className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50">
             回後台
           </Link>
         </div>

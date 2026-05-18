@@ -63,7 +63,7 @@ export function ListingCarousel({ title, badge, listings }: ListingCarouselProps
       ) : (
         <div
           ref={scrollRef}
-          className="flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth pb-2"
+          className="flex snap-x snap-mandatory items-start gap-4 overflow-x-auto scroll-smooth pb-2"
           style={{ scrollbarWidth: "none" }}
         >
           {listings.map((listing) => (

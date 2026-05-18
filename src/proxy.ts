@@ -42,6 +42,7 @@ export function proxy(request: NextRequest) {
   const isPublicAdminPath =
     pathname === "/admin/login" ||
     pathname === "/api/admin/login" ||
+    pathname === "/api/admin/login-form" ||
     pathname === "/api/admin/logout";
 
   if (!isProtectedPath(pathname) || isPublicAdminPath) {
