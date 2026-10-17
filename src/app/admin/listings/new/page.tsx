@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { AdminNewListingClient } from "@/components/admin-new-listing-client";
 import { GoPublicSiteButton } from "@/components/go-public-site-button";
+import { getCurrentAdmin } from "@/lib/admin-auth";
 
 type NewListingPageProps = {
   searchParams: Promise<{ type?: string; fromOwnerCase?: string }>;
@@ -29,6 +31,8 @@ export default async function AdminNewListingPage({ searchParams }: NewListingPa
   }
 
   const listingType = type === "rent" ? "RENT" : "SALE";
+  const current = await getCurrentAdmin();
+  if (!current) redirect("/admin/login");
 
   return (
     <section className="mx-auto w-full max-w-3xl rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200 sm:p-6">
@@ -41,7 +45,12 @@ export default async function AdminNewListingPage({ searchParams }: NewListingPa
           改選類型
         </Link>
       </div>
-      <AdminNewListingClient listingType={listingType} fromOwnerCaseId={fromOwnerCase} />
+      <AdminNewListingClient
+        listingType={listingType}
+        fromOwnerCaseId={fromOwnerCase}
+        currentUsername={current.username}
+        isSuperAdmin={current.role === "SUPER_ADMIN"}
+      />
     </section>
   );
 }

@@ -225,6 +225,15 @@ export function saveOwnerTrackingStore(store: OwnerTrackingStore) {
   });
 }
 
+/** 業務只能看 assignee 為自己的案件；最高管理員看全部 */
+export function canViewOwnerTrackingCase(
+  ownerCase: Pick<OwnerCasePreview, "assignee">,
+  opts: { currentUsername: string; isSuperAdmin: boolean },
+): boolean {
+  if (opts.isSuperAdmin) return true;
+  return ownerCase.assignee.trim() === opts.currentUsername.trim();
+}
+
 export function lastFollowUp(
   store: OwnerTrackingStore,
   caseId: string,

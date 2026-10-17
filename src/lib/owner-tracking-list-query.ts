@@ -1,4 +1,5 @@
 import {
+  canViewOwnerTrackingCase,
   formatOwnerCaseAddress,
   lastFollowUp,
   ownerCaseContactCount,
@@ -33,9 +34,15 @@ export function buildOwnerTrackingListRows(
     statusFilter: string;
     propertyTypeFilter: string;
     assigneeFilter: string;
+    currentUsername?: string;
+    isSuperAdmin?: boolean;
   },
 ): OwnerTrackingListRow[] {
   const q = filters.keyword.trim().toLowerCase();
+  const visibility =
+    filters.isSuperAdmin === false && filters.currentUsername
+      ? { currentUsername: filters.currentUsername, isSuperAdmin: false as const }
+      : null;
   return store.cases
     .map((c) => ({
       case: c,
@@ -43,6 +50,7 @@ export function buildOwnerTrackingListRows(
       contactCount: ownerCaseContactCount(store, c.id),
     }))
     .filter(({ case: c, last }) => {
+      if (visibility && !canViewOwnerTrackingCase(c, visibility)) return false;
       if (filters.assigneeFilter !== "ALL" && c.assignee !== filters.assigneeFilter) return false;
       if (filters.statusFilter !== "ALL" && last?.status !== filters.statusFilter) return false;
       if (filters.propertyTypeFilter !== "ALL" && c.propertyType !== filters.propertyTypeFilter) {

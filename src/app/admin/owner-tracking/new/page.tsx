@@ -19,7 +19,10 @@ export default async function AdminOwnerTrackingNewPage() {
         <h1 className="mt-2 text-2xl font-bold text-zinc-900">新增追蹤案件</h1>
         <p className="mt-1 text-xs text-zinc-500">建立後可進入案件頁，持續追加追蹤紀錄。</p>
       </div>
-      <OwnerTrackingNewForm currentUsername={current.username} />
+      <OwnerTrackingNewForm
+        currentUsername={current.username}
+        isSuperAdmin={current.role === "SUPER_ADMIN"}
+      />
     </main>
   );
 }

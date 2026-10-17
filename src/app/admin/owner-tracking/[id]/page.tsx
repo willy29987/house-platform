@@ -23,7 +23,11 @@ export default async function AdminOwnerTrackingDetailPage({ params }: PageProps
           ← 回屋主追蹤列表
         </Link>
       </div>
-      <OwnerTrackingDetail caseId={id} currentUsername={current.username} />
+      <OwnerTrackingDetail
+        caseId={id}
+        currentUsername={current.username}
+        isSuperAdmin={current.role === "SUPER_ADMIN"}
+      />
     </main>
   );
 }

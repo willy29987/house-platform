@@ -11,6 +11,7 @@ import {
   persistOwnerTrackingStoreLocal,
   newId,
   OWNER_TRACKING_STATUS_OPTIONS,
+  canViewOwnerTrackingCase,
   deleteOwnerFollowUp,
   saveOwnerTrackingStore,
   statusBadgeClass,
@@ -27,9 +28,10 @@ import { hydrateOwnerTrackingStoreOnce } from "@/lib/admin-cloud-sync-client";
 type Props = {
   caseId: string;
   currentUsername: string;
+  isSuperAdmin?: boolean;
 };
 
-export function OwnerTrackingDetail({ caseId, currentUsername }: Props) {
+export function OwnerTrackingDetail({ caseId, currentUsername, isSuperAdmin = false }: Props) {
   const router = useRouter();
   const [store, setStore] = useState<OwnerTrackingStore>(emptyOwnerTrackingStore);
   const [hydrated, setHydrated] = useState(false);
@@ -110,6 +112,17 @@ export function OwnerTrackingDetail({ caseId, currentUsername }: Props) {
         <p className="text-zinc-600">找不到此案件</p>
         <Link href="/admin/owner-tracking" className="mt-4 inline-block text-sm font-medium text-[#1e3a8a]">
           ← 回列表
+        </Link>
+      </div>
+    );
+  }
+
+  if (!canViewOwnerTrackingCase(ownerCase, { currentUsername, isSuperAdmin })) {
+    return (
+      <div className="rounded-xl border border-amber-200 bg-amber-50 p-8 text-center">
+        <p className="font-medium text-amber-950">此案件由其他業務負責，您無法查看。</p>
+        <Link href="/admin/owner-tracking" className="mt-4 inline-block text-sm font-medium text-[#1e3a8a]">
+          ← 回我的列表
         </Link>
       </div>
     );

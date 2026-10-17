@@ -92,9 +92,11 @@ export function OwnerTrackingList({ currentUsername, isSuperAdmin = false }: Pro
         keyword,
         statusFilter,
         propertyTypeFilter,
-        assigneeFilter,
+        assigneeFilter: isSuperAdmin ? assigneeFilter : currentUsername,
+        currentUsername,
+        isSuperAdmin,
       }),
-    [store, keyword, statusFilter, propertyTypeFilter, assigneeFilter],
+    [store, keyword, statusFilter, propertyTypeFilter, assigneeFilter, currentUsername, isSuperAdmin],
   );
 
   async function onExportExcel() {
@@ -185,21 +187,27 @@ export function OwnerTrackingList({ currentUsername, isSuperAdmin = false }: Pro
             ))}
           </select>
         </label>
-        <label className="block min-w-[10rem]">
-          <span className="mb-1 block text-xs font-medium text-zinc-600">負責人</span>
-          <select
-            value={assigneeFilter}
-            onChange={(e) => setAssigneeFilter(e.target.value)}
-            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
-          >
-            <option value="ALL">全部</option>
-            {assigneeOptions.map((name) => (
-              <option key={name} value={name}>
-                {name === currentUsername ? `${name}（我）` : name}
-              </option>
-            ))}
-          </select>
-        </label>
+        {isSuperAdmin ? (
+          <label className="block min-w-[10rem]">
+            <span className="mb-1 block text-xs font-medium text-zinc-600">負責人</span>
+            <select
+              value={assigneeFilter}
+              onChange={(e) => setAssigneeFilter(e.target.value)}
+              className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+            >
+              <option value="ALL">全部</option>
+              {assigneeOptions.map((name) => (
+                <option key={name} value={name}>
+                  {name === currentUsername ? `${name}（我）` : name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          <p className="min-w-[10rem] rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-600">
+            負責人：<span className="font-semibold text-zinc-900">{currentUsername}</span>
+          </p>
+        )}
         <Link
           href="/admin/owner-tracking/new"
           className="inline-flex h-[42px] w-full items-center justify-center rounded-lg bg-[#0b2545] px-4 text-sm font-semibold text-white hover:bg-[#1e3a8a] sm:w-auto"

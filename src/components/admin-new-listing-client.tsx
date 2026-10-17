@@ -6,6 +6,7 @@ import { AdminListingForm, type AdminListingFormData } from "@/components/admin-
 import { createEmptyFormData } from "@/lib/listing-form-defaults";
 import { ownerCaseToListingDraft } from "@/lib/owner-case-to-listing-draft";
 import {
+  canViewOwnerTrackingCase,
   loadOwnerTrackingStoreLocal,
   persistOwnerTrackingStoreLocal,
 } from "@/lib/owner-tracking-preview";
@@ -14,9 +15,16 @@ import { hydrateOwnerTrackingStoreOnce } from "@/lib/admin-cloud-sync-client";
 type Props = {
   listingType: "RENT" | "SALE";
   fromOwnerCaseId?: string;
+  currentUsername: string;
+  isSuperAdmin: boolean;
 };
 
-export function AdminNewListingClient({ listingType, fromOwnerCaseId }: Props) {
+export function AdminNewListingClient({
+  listingType,
+  fromOwnerCaseId,
+  currentUsername,
+  isSuperAdmin,
+}: Props) {
   const [initialData, setInitialData] = useState<AdminListingFormData | null>(null);
   const [ownerCaseFound, setOwnerCaseFound] = useState<boolean | null>(null);
   const [sourceLabel, setSourceLabel] = useState<string | null>(null);
@@ -36,7 +44,9 @@ export function AdminNewListingClient({ listingType, fromOwnerCaseId }: Props) {
 
       if (fromOwnerCaseId?.trim()) {
       const ownerCase = store.cases.find((c) => c.id === fromOwnerCaseId.trim());
-      if (ownerCase) {
+      if (ownerCase && !canViewOwnerTrackingCase(ownerCase, { currentUsername, isSuperAdmin })) {
+        found = false;
+      } else if (ownerCase) {
         data = ownerCaseToListingDraft(ownerCase, listingType);
         found = true;
         label = ownerCase.address.trim() || ownerCase.ownerName.trim() || fromOwnerCaseId;
@@ -52,7 +62,7 @@ export function AdminNewListingClient({ listingType, fromOwnerCaseId }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [fromOwnerCaseId, listingType]);
+  }, [fromOwnerCaseId, listingType, currentUsername, isSuperAdmin]);
 
   if (!initialData) {
     return <p className="text-sm text-zinc-500">載入表單…</p>;

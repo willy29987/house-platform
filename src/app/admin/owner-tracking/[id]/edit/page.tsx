@@ -25,7 +25,12 @@ export default async function AdminOwnerTrackingEditPage({ params }: PageProps) 
         <h1 className="mt-2 text-2xl font-bold text-zinc-900">修改案件</h1>
         <p className="mt-1 text-xs text-zinc-500">更新物件與屋主資料；追蹤紀錄不會被刪除。</p>
       </div>
-      <OwnerTrackingNewForm currentUsername={current.username} mode="edit" caseId={id} />
+      <OwnerTrackingNewForm
+        currentUsername={current.username}
+        isSuperAdmin={current.role === "SUPER_ADMIN"}
+        mode="edit"
+        caseId={id}
+      />
     </main>
   );
 }
