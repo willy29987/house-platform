@@ -17,7 +17,7 @@ export type OwnerTrackingListRow = {
 
 /** 列表「社區」欄：有社區名優先；否則非社區型物件顯示類別。 */
 export function listCommunityCell(item: OwnerCasePreview): string {
-  const community = item.community.trim();
+  const community = (item.community ?? "").trim();
   if (community) return community;
   if ((COMMUNITY_PROPERTY_TYPES as readonly string[]).includes(item.propertyType)) {
     return "—";

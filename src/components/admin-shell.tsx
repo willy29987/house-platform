@@ -103,6 +103,12 @@ export function AdminShell({ current, children }: AdminShellProps) {
             >
               屋主追蹤
             </Link>
+            <Link
+              href="/admin/commissions"
+              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+            >
+              服務費統計
+            </Link>
             {isSuperAdmin ? (
               <>
                 <Link
@@ -116,12 +122,6 @@ export function AdminShell({ current, children }: AdminShellProps) {
                   className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
                 >
                   房客管理
-                </Link>
-                <Link
-                  href="/admin/commissions"
-                  className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-                >
-                  服務費統計
                 </Link>
                 <Link
                   href="/admin/team"
@@ -200,6 +200,12 @@ export function AdminShell({ current, children }: AdminShellProps) {
                 <Link href="/admin?type=sale" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
                   買賣物件
                 </Link>
+                <Link href="/admin/owner-tracking" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
+                  屋主追蹤
+                </Link>
+                <Link href="/admin/commissions" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
+                  服務費統計
+                </Link>
                 {isSuperAdmin ? (
                   <>
                     <Link
@@ -211,9 +217,6 @@ export function AdminShell({ current, children }: AdminShellProps) {
                     </Link>
                     <Link href="/admin/tenants" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
                       房客管理
-                    </Link>
-                    <Link href="/admin/commissions" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
-                      服務費統計
                     </Link>
                     <Link href="/admin/team" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
                       AI 團隊

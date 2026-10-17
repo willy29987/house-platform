@@ -6,6 +6,7 @@ export { ADMIN_CLOUD_DATA_KEYS } from "@/lib/admin-cloud-data-keys";
 import type { CommissionRecord } from "@/lib/commission-stats";
 import {
   emptyOwnerTrackingStore,
+  normalizeOwnerTrackingStore,
   type OwnerTrackingStore,
 } from "@/lib/owner-tracking-preview";
 import type { TenantManagerStore } from "@/lib/tenant-manager-storage";
@@ -62,17 +63,24 @@ export function hydrateOwnerTrackingStoreOnce(
 ): Promise<OwnerTrackingStore> {
   if (!ownerTrackingHydrate) {
     ownerTrackingHydrate = (async () => {
-      const local = readLocal();
-      const cloud = (await fetchCloudPayload(ADMIN_CLOUD_DATA_KEYS.ownerTracking)) as OwnerTrackingStore | null;
-      if (cloud && hasOwnerTrackingData(cloud)) {
-        writeLocal(cloud);
-        return cloud;
+      try {
+        const local = normalizeOwnerTrackingStore(readLocal());
+        const rawCloud = (await fetchCloudPayload(ADMIN_CLOUD_DATA_KEYS.ownerTracking)) as OwnerTrackingStore | null;
+        const cloud = rawCloud ? normalizeOwnerTrackingStore(rawCloud) : null;
+        if (cloud && hasOwnerTrackingData(cloud)) {
+          writeLocal(cloud);
+          return cloud;
+        }
+        if (hasOwnerTrackingData(local)) {
+          await pushCloudPayload(ADMIN_CLOUD_DATA_KEYS.ownerTracking, local);
+          return local;
+        }
+        return emptyOwnerTrackingStore;
+      } catch (e) {
+        console.error("[owner-tracking] cloud hydrate failed", e);
+        const local = normalizeOwnerTrackingStore(readLocal());
+        return hasOwnerTrackingData(local) ? local : emptyOwnerTrackingStore;
       }
-      if (hasOwnerTrackingData(local)) {
-        await pushCloudPayload(ADMIN_CLOUD_DATA_KEYS.ownerTracking, local);
-        return local;
-      }
-      return emptyOwnerTrackingStore;
     })();
   }
   return ownerTrackingHydrate;
@@ -86,17 +94,23 @@ export function hydrateCommissionRecordsOnce(
 ): Promise<CommissionRecord[]> {
   if (!commissionHydrate) {
     commissionHydrate = (async () => {
-      const local = readLocal();
-      const cloud = (await fetchCloudPayload(ADMIN_CLOUD_DATA_KEYS.commissionRecords)) as CommissionRecord[] | null;
-      if (Array.isArray(cloud) && cloud.length > 0) {
-        writeLocal(cloud);
-        return cloud;
+      try {
+        const local = readLocal();
+        const cloud = (await fetchCloudPayload(ADMIN_CLOUD_DATA_KEYS.commissionRecords)) as CommissionRecord[] | null;
+        if (Array.isArray(cloud) && cloud.length > 0) {
+          writeLocal(cloud);
+          return cloud;
+        }
+        if (hasCommissionData(local)) {
+          await pushCloudPayload(ADMIN_CLOUD_DATA_KEYS.commissionRecords, local);
+          return local;
+        }
+        return [];
+      } catch (e) {
+        console.error("[commission] cloud hydrate failed", e);
+        const local = readLocal();
+        return hasCommissionData(local) ? local : [];
       }
-      if (hasCommissionData(local)) {
-        await pushCloudPayload(ADMIN_CLOUD_DATA_KEYS.commissionRecords, local);
-        return local;
-      }
-      return [];
     })();
   }
   return commissionHydrate;

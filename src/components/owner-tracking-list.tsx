@@ -18,10 +18,6 @@ import {
   listCommunityCell,
 } from "@/lib/owner-tracking-list-query";
 import { PROPERTY_TYPE_OPTIONS, propertyTypeLabel } from "@/lib/property-type-label";
-import {
-  buildOwnerTrackingWorkbook,
-  downloadOwnerTrackingExcel,
-} from "@/lib/owner-tracking-excel-export";
 import { hydrateOwnerTrackingStoreOnce } from "@/lib/admin-cloud-sync-client";
 
 type Props = {
@@ -47,7 +43,10 @@ export function OwnerTrackingList({ currentUsername, isSuperAdmin = false }: Pro
   const [keyword, setKeyword] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [propertyTypeFilter, setPropertyTypeFilter] = useState<string>("ALL");
-  const [assigneeFilter, setAssigneeFilter] = useState<string>("ALL");
+  const [assigneeFilter, setAssigneeFilter] = useState<string>(
+    isSuperAdmin ? "ALL" : currentUsername,
+  );
+  const [syncError, setSyncError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
 
@@ -59,12 +58,17 @@ export function OwnerTrackingList({ currentUsername, isSuperAdmin = false }: Pro
   }, [store.cases]);
 
   useEffect(() => {
-    void hydrateOwnerTrackingStoreOnce(loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreLocal).then(
-      (next) => {
+    void hydrateOwnerTrackingStoreOnce(loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreLocal)
+      .then((next) => {
         setStore(next);
+        setSyncError(null);
         setHydrated(true);
-      },
-    );
+      })
+      .catch((e) => {
+        setSyncError(e instanceof Error ? e.message : "雲端同步失敗");
+        setStore(loadOwnerTrackingStoreLocal());
+        setHydrated(true);
+      });
   }, []);
 
   useEffect(() => {
@@ -97,6 +101,9 @@ export function OwnerTrackingList({ currentUsername, isSuperAdmin = false }: Pro
     setExporting(true);
     setExportError(null);
     try {
+      const { buildOwnerTrackingWorkbook, downloadOwnerTrackingExcel } = await import(
+        "@/lib/owner-tracking-excel-export"
+      );
       const buffer = await buildOwnerTrackingWorkbook(store, rows);
       downloadOwnerTrackingExcel(buffer);
     } catch (e) {
@@ -112,6 +119,11 @@ export function OwnerTrackingList({ currentUsername, isSuperAdmin = false }: Pro
 
   return (
     <div className="space-y-4">
+      {syncError ? (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+          雲端同步失敗（{syncError}），目前顯示本機快取。請重新整理或稍後再試。
+        </p>
+      ) : null}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className="text-sm text-zinc-600">屋主開發／委託追蹤</p>
@@ -233,14 +245,14 @@ export function OwnerTrackingList({ currentUsername, isSuperAdmin = false }: Pro
   );
 }
 
-function normalizeListingUrl(url: string): string | null {
-  const t = url.trim();
+function normalizeListingUrl(url: string | null | undefined): string | null {
+  const t = (url ?? "").trim();
   if (!t) return null;
   return t.startsWith("http") ? t : `https://${t}`;
 }
 
-function formatListUrl(url: string): string {
-  const t = url.trim();
+function formatListUrl(url: string | null | undefined): string {
+  const t = (url ?? "").trim();
   if (!t) return "—";
   try {
     const href = normalizeListingUrl(t)!;
@@ -294,7 +306,7 @@ function CaseRow({
               href={urlHref}
               target="_blank"
               rel="noopener noreferrer"
-              title={item.listingUrl.trim()}
+              title={(item.listingUrl ?? "").trim()}
               className="pointer-events-auto relative z-20 block truncate text-xs text-[#1e3a8a] hover:underline"
               onClick={(e) => e.stopPropagation()}
             >

@@ -95,7 +95,7 @@ export const emptyOwnerTrackingStore: OwnerTrackingStore = { cases: [], followUp
 export const OWNER_TRACKING_STORAGE_KEY = "house-platform:owner-tracking-preview:v4";
 
 /** 舊版 localStorage 欄位相容 */
-function normalizeCase(raw: Record<string, unknown>, fallbackAssignee = "—"): OwnerCasePreview {
+export function normalizeCase(raw: Record<string, unknown>, fallbackAssignee = "—"): OwnerCasePreview {
   const id = String(raw.id ?? newId("case"));
   let city = String(raw.city ?? "");
   let district = String(raw.district ?? "");
@@ -135,6 +135,21 @@ function normalizeCase(raw: Record<string, unknown>, fallbackAssignee = "—"): 
     serviceFee: String(raw.serviceFee ?? ""),
     specialMatters: String(raw.specialMatters ?? ""),
     caseNote: String(raw.caseNote ?? ""),
+  };
+}
+
+/** 雲端／合併資料進列表前一律正規化，避免 null 欄位導致 .trim() 崩潰 */
+export function normalizeOwnerTrackingStore(store: OwnerTrackingStore): OwnerTrackingStore {
+  return {
+    cases: (store.cases ?? []).map((c) => normalizeCase(c as unknown as Record<string, unknown>)),
+    followUps: (store.followUps ?? []).map((f) => ({
+      id: String(f.id ?? newId("fu")),
+      caseId: String(f.caseId ?? ""),
+      status: normalizeFollowUpStatus(String(f.status ?? "")),
+      note: String(f.note ?? ""),
+      createdBy: String(f.createdBy ?? ""),
+      createdAt: String(f.createdAt ?? new Date().toISOString()),
+    })),
   };
 }
 

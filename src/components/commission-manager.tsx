@@ -18,7 +18,15 @@ function currentYear(): number {
   return new Date().getFullYear();
 }
 
-export function CommissionManager() {
+type CommissionManagerProps = {
+  currentUsername: string;
+  isSuperAdmin?: boolean;
+};
+
+export function CommissionManager({
+  currentUsername,
+  isSuperAdmin = false,
+}: CommissionManagerProps) {
   const [records, setRecords] = useState<CommissionRecord[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const [cloudSynced, setCloudSynced] = useState(false);
@@ -26,14 +34,23 @@ export function CommissionManager() {
   const [editing, setEditing] = useState<CommissionRecord | null>(null);
 
   useEffect(() => {
-    void hydrateCommissionRecordsOnce(loadCommissionRecordsLocal, persistCommissionRecordsLocal).then(
-      (next) => {
+    void hydrateCommissionRecordsOnce(loadCommissionRecordsLocal, persistCommissionRecordsLocal)
+      .then((next) => {
         setRecords(next);
         setCloudSynced(true);
         setHydrated(true);
-      },
-    );
+      })
+      .catch(() => {
+        setRecords(loadCommissionRecordsLocal());
+        setCloudSynced(true);
+        setHydrated(true);
+      });
   }, []);
+
+  const visibleRecords = useMemo(() => {
+    if (isSuperAdmin) return records;
+    return records.filter((r) => (r.operator?.trim() || "") === currentUsername);
+  }, [records, isSuperAdmin, currentUsername]);
 
   useEffect(() => {
     if (!hydrated || !cloudSynced) return;
@@ -42,19 +59,19 @@ export function CommissionManager() {
 
   const years = useMemo(() => {
     const set = new Set<number>([currentYear()]);
-    for (const r of records) {
+    for (const r of visibleRecords) {
       const y = Number(r.date.slice(0, 4));
       if (Number.isFinite(y)) set.add(y);
     }
     return [...set].sort((a, b) => b - a);
-  }, [records]);
+  }, [visibleRecords]);
 
   const yearRecords = useMemo(
     () =>
-      records
+      visibleRecords
         .filter((r) => Number(r.date.slice(0, 4)) === year)
         .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)),
-    [records, year],
+    [visibleRecords, year],
   );
 
   const summary = useMemo(() => {
@@ -109,6 +126,11 @@ export function CommissionManager() {
 
   return (
     <div className="space-y-4">
+      {!isSuperAdmin ? (
+        <p className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600">
+          目前僅顯示承辦業務為「{currentUsername}」的紀錄。
+        </p>
+      ) : null}
       {/* 年度切換 + 新增 */}
       <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -144,7 +166,12 @@ export function CommissionManager() {
           </div>
           <button
             type="button"
-            onClick={() => setEditing(emptyCommissionRecord())}
+            onClick={() =>
+              setEditing({
+                ...emptyCommissionRecord(),
+                operator: isSuperAdmin ? "" : currentUsername,
+              })
+            }
             className="rounded-lg bg-[#0b2545] px-3 py-2 text-sm font-semibold text-white hover:bg-[#1e3a8a]"
           >
             ＋ 新增服務費紀錄

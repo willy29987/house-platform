@@ -29,7 +29,10 @@ export default async function AdminCommissionsPage() {
         服務費紀錄已同步至雲端（Supabase），本機、Vercel 正式站與同事後台會共用同一份資料。首次使用時，若本機瀏覽器裡已有舊資料，請在本機登入後台開啟此頁，系統會自動上傳一次。
       </div>
 
-      <CommissionManager />
+      <CommissionManager
+        currentUsername={current.username}
+        isSuperAdmin={current.role === "SUPER_ADMIN"}
+      />
     </main>
   );
 }
