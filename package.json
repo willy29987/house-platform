@@ -7,6 +7,7 @@
     "dev:lan": "bash scripts/dev-lan.sh",
     "sync:lan-preview": "node scripts/sync-lan-preview-urls.mjs",
     "verify:production": "node scripts/verify-production.mjs",
+    "push:local-admin-data": "node scripts/push-local-admin-data-to-cloud.mjs",
     "dev:fix": "P3000=$(lsof -ti:3000 -sTCP:LISTEN 2>/dev/null); if [ -n \"$P3000\" ]; then kill -9 $P3000; fi; P3001=$(lsof -ti:3001 -sTCP:LISTEN 2>/dev/null); if [ -n \"$P3001\" ]; then kill -9 $P3001; fi; npm run dev",
     "postinstall": "prisma generate",
     "build": "prisma generate && next build",
@@ -30,6 +31,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.3",
+    "level": "^9.0.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

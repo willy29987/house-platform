@@ -150,7 +150,8 @@ https://house-platform-xxx.vercel.app
 2. 在 `/admin/settings` 為每位同事建立 **業務（OPERATOR）** 帳號
 3. 可執行 `PRODUCTION_SITE_URL=https://xxx.vercel.app npm run verify:production` 確認公網可連
 4. 完整說明與可複製給同事的文案：[docs/colleague-admin-guide.md](docs/colleague-admin-guide.md)  
-5. 管理員勾選清單：[docs/colleague-onboarding-checklist.md](docs/colleague-onboarding-checklist.md)
+5. 管理員勾選清單：[docs/colleague-onboarding-checklist.md](docs/colleague-onboarding-checklist.md)  
+6. 若屋主追蹤等資料是在本機 Cursor／內嵌瀏覽器建的：`npm run push:local-admin-data`（寫入 Supabase，Vercel 共用）
 
 ---
 
