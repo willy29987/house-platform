@@ -203,11 +203,7 @@ export function OwnerTrackingList({ currentUsername, isSuperAdmin = false }: Pro
               ))}
             </select>
           </label>
-        ) : (
-          <p className="min-w-[10rem] rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-600">
-            負責人：<span className="font-semibold text-zinc-900">{currentUsername}</span>
-          </p>
-        )}
+        ) : null}
         <Link
           href="/admin/owner-tracking/new"
           className="inline-flex h-[42px] w-full items-center justify-center rounded-lg bg-[#0b2545] px-4 text-sm font-semibold text-white hover:bg-[#1e3a8a] sm:w-auto"

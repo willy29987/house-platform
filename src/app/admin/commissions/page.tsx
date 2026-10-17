@@ -6,6 +6,7 @@ import { getCurrentAdmin } from "@/lib/admin-auth";
 export default async function AdminCommissionsPage() {
   const current = await getCurrentAdmin();
   if (!current) redirect("/admin/login");
+  if (current.role !== "SUPER_ADMIN") redirect("/admin");
 
   return (
     <main className="mx-auto w-full max-w-6xl">
