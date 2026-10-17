@@ -1,10 +1,18 @@
 "use client";
 
 import Image from "next/image";
-import { FormEvent, useRef, useState } from "react";
+import { FormEvent, ReactNode, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CityDistrictSelector } from "@/components/city-district-selector";
-import { formTriToFurnitureAppliance } from "@/lib/furniture-appliance-value";
+import { EQUIPMENT_ITEMS, FURNITURE_ITEMS } from "@/lib/furniture-appliance-value";
+import {
+  inferParkingPrice,
+  LAYOUT_OPEN_LABEL,
+  type ParkingPriceUi,
+} from "@/lib/owner-tracking-form-ui";
+import { TAIWAN_REGIONS } from "@/lib/taiwan-regions";
+import { PROPERTY_TYPE_LABEL, PROPERTY_TYPE_OPTIONS, type PropertyTypeOption } from "@/lib/property-type-label";
+import { getMrtStationOptions, getMrtStationsForLine, MRT_LINE_OPTIONS } from "@/lib/mrt-stations";
+import { LEGACY_PARKING_TYPES, PARKING_TYPE_LABELS, PARKING_TYPE_OPTIONS } from "@/lib/parking-type-label";
 
 export type AdminListingFormData = {
   title: string;
@@ -14,7 +22,7 @@ export type AdminListingFormData = {
   address: string;
   community: string;
   listingType: "RENT" | "SALE";
-  propertyType: "APARTMENT" | "HOUSE" | "STUDIO" | "OFFICE" | "SHOP";
+  propertyType: PropertyTypeOption;
   price: string;
   areaPing: string;
   areaMain: string;
@@ -53,15 +61,20 @@ export type AdminListingFormData = {
   contactName: string;
   contactPhone: string;
   ownerIdCardUrl: string;
-  furnitureProvided: "" | "yes" | "no" | "discuss";
-  applianceProvided: "" | "yes" | "no" | "discuss";
+  furnitureItems: string[];
+  equipmentItems: string[];
   shortTermRent: string;
   serviceFee: string;
   registrationUse: string;
+  specialMatters: string;
+  otherFees: string;
   securityDeposit: string;
   availableFrom: string;
   householdsPerFloor: string;
+  roomNumber: string;
   isPublished: boolean;
+  /** 由屋主案件帶入時初始化「開放式格局」勾選；不送 API */
+  layoutOpenLayoutInitial?: boolean;
 };
 
 type AdminListingFormProps = {
@@ -71,37 +84,23 @@ type AdminListingFormProps = {
   lockedListingType?: "RENT" | "SALE";
 };
 
-const PARKING_TYPES = [
-  { value: "", label: "無" },
-  { value: "FLAT_RAMP", label: "坡道平面" },
-  { value: "MECHANICAL_LIFT", label: "機械升降" },
-  { value: "MECHANICAL_FLAT", label: "機械平面" },
-  { value: "RAMP_MECHANICAL", label: "坡道機械" },
-  { value: "FRONT_DOOR", label: "門口可停車" },
-  { value: "OTHER", label: "其他" },
-];
+const PARKING_CUSTOM = "__CUSTOM__";
+
+type ParkingUi = { select: string; custom: string };
+
+/** 由資料庫裡存的車位型式，推回下拉選單的選項與自訂文字。 */
+function inferParking(parkingType: string): ParkingUi {
+  const t = parkingType.trim();
+  if (!t) return { select: "", custom: "" };
+  if ((PARKING_TYPE_OPTIONS as readonly string[]).includes(t)) return { select: t, custom: "" };
+  if ((LEGACY_PARKING_TYPES as readonly string[]).includes(t)) return { select: t, custom: "" };
+  if (t === "OTHER") return { select: PARKING_CUSTOM, custom: PARKING_TYPE_LABELS.OTHER };
+  return { select: PARKING_CUSTOM, custom: t };
+}
 
 const ORIENTATIONS = ["", "東", "西", "南", "北", "東南", "東北", "西南", "西北"];
 const DECOR_LEVELS = ["", "毛胚", "簡裝", "中等裝潢", "精裝", "豪華裝潢"];
 const USAGE_ZONINGS = ["", "住宅區", "商業區", "住商混合", "工業區", "其他"];
-
-const MRT_LINES = [
-  "",
-  "台北捷運 文湖線",
-  "台北捷運 淡水信義線",
-  "台北捷運 松山新店線",
-  "台北捷運 中和新蘆線",
-  "台北捷運 板南線",
-  "台北捷運 環狀線",
-  "淡海輕軌",
-  "安坑輕軌",
-  "桃園捷運 機場線",
-  "台中捷運 綠線",
-  "高雄捷運 紅線",
-  "高雄捷運 橘線",
-  "高雄輕軌 環狀輕軌",
-  "其他",
-];
 
 function triState(value: "" | "yes" | "no"): boolean | null {
   if (value === "yes") return true;
@@ -123,18 +122,71 @@ type AvailableUi = { mode: "" | "immediate" | "date"; date: string };
 function inferAvailable(availableFrom: string): AvailableUi {
   const t = availableFrom.trim();
   if (!t) return { mode: "", date: "" };
-  if (t === "立即起租" || t.includes("立即")) return { mode: "immediate", date: "" };
+  // 舊資料存的是「立即起租」，新資料存「隨時可遷入」，兩者都視為同一種
+  if (t.includes("立即") || t.includes("隨時")) return { mode: "immediate", date: "" };
   const m = t.match(/^(\d{4}-\d{2}-\d{2})/);
   if (m) return { mode: "date", date: m[1] };
   return { mode: "", date: "" };
 }
 
-const SHORT_TERM_CHOICES = ["3個月", "半年"] as const;
-const SERVICE_FEE_CHOICES = ["正常", "半個月", "三分之一"] as const;
+/** 橫排列：左側粗體標題，右側選項（用於起租日、押金、家具、家電）。 */
+function FormRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-6">
+      <span className="w-24 shrink-0 text-sm font-semibold text-zinc-900">{label}</span>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-zinc-800">{children}</div>
+    </div>
+  );
+}
+
+/** 方框勾選項。 */
+function CheckOption({
+  checked,
+  onChange,
+  children,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  children: ReactNode;
+}) {
+  return (
+    <label className="inline-flex cursor-pointer items-center gap-2">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="h-4 w-4 rounded border-zinc-300 accent-[#0b2545]"
+      />
+      {children}
+    </label>
+  );
+}
+
+const SHORT_TERM_CHOICES = ["一個月", "3個月", "半年"] as const;
+const SERVICE_FEE_CHOICES = ["正常", "半個月", "無"] as const;
+
+const CHOICE_OTHER = "__OTHER__";
+
+/** 下拉選單 + 「其他」自行輸入。select 為空字串代表未填寫。 */
+type ChoiceUi = { select: string; other: string };
+
+function inferChoice(value: string, choices: readonly string[]): ChoiceUi {
+  const t = value.trim();
+  if (!t) return { select: "", other: "" };
+  if (choices.includes(t)) return { select: t, other: "" };
+  return { select: CHOICE_OTHER, other: t };
+}
+
+function choiceToValue(ui: ChoiceUi): string | null {
+  if (!ui.select) return null;
+  if (ui.select === CHOICE_OTHER) return ui.other.trim() || null;
+  return ui.select;
+}
 
 export function AdminListingForm({ mode, submitUrl, initialData, lockedListingType }: AdminListingFormProps) {
   const [formData, setFormData] = useState(initialData);
   const [status, setStatus] = useState("");
+  const [mediaStatus, setMediaStatus] = useState("");
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadingVideo, setUploadingVideo] = useState(false);
@@ -144,18 +196,61 @@ export function AdminListingForm({ mode, submitUrl, initialData, lockedListingTy
 
   const [depositUi, setDepositUi] = useState<DepositUi>(() => inferDeposit(initialData.securityDeposit));
   const [availableUi, setAvailableUi] = useState<AvailableUi>(() => inferAvailable(initialData.availableFrom));
+  const [parkingUi, setParkingUi] = useState<ParkingUi>(() => inferParking(initialData.parkingType));
+  const [parkingPriceUi, setParkingPriceUi] = useState<ParkingPriceUi>(() =>
+    inferParkingPrice(
+      initialData.parkingRent
+        ? String(initialData.parkingRent)
+        : initialData.parkingType
+          ? "含在租金內"
+          : "",
+    ),
+  );
+  const [layoutOpenLayout, setLayoutOpenLayout] = useState(
+    () =>
+      initialData.layoutOpenLayoutInitial ??
+      initialData.features.some((f) => f.includes(LAYOUT_OPEN_LABEL)),
+  );
+  const [serviceFeeUi, setServiceFeeUi] = useState<ChoiceUi>(() =>
+    inferChoice(initialData.serviceFee, SERVICE_FEE_CHOICES),
+  );
+  const [shortTermUi, setShortTermUi] = useState<ChoiceUi>(() =>
+    inferChoice(initialData.shortTermRent, SHORT_TERM_CHOICES),
+  );
 
   const isRent = formData.listingType === "RENT";
   const isSale = formData.listingType === "SALE";
+  const hasParking = parkingUi.select !== "";
+  const parkingExtraDisabled = !hasParking;
+  const selectedRegion = TAIWAN_REGIONS.find((r) => r.city === formData.city);
+
+  /** 實際要存進資料庫的車位型式：無 → null；自訂 → 使用者輸入的文字；其餘 → 代碼。 */
+  const parkingTypeValue =
+    parkingUi.select === ""
+      ? null
+      : parkingUi.select === PARKING_CUSTOM
+        ? parkingUi.custom.trim() || null
+        : parkingUi.select;
+
+  const mrtStationOptions = useMemo(
+    () => getMrtStationOptions(formData.mrtLine, formData.mrtStation),
+    [formData.mrtLine, formData.mrtStation],
+  );
+  const mrtStationSelectDisabled =
+    !formData.mrtLine || formData.mrtLine === "其他" || getMrtStationsForLine(formData.mrtLine).length === 0;
 
   async function uploadFiles(files: FileList, kind: "image" | "video") {
     if (!files.length) return;
     if (kind === "image") setUploading(true); else setUploadingVideo(true);
-    setStatus("");
+    setMediaStatus("");
     try {
       const fd = new FormData();
       for (const file of files) fd.append("files", file);
-      const res = await fetch("/api/admin/upload", { method: "POST", body: fd });
+      const res = await fetch("/api/admin/upload", {
+        method: "POST",
+        body: fd,
+        credentials: "include",
+      });
       const contentType = res.headers.get("content-type") ?? "";
       const result = contentType.includes("application/json")
         ? ((await res.json()) as { ok: boolean; urls?: string[]; message?: string })
@@ -163,9 +258,13 @@ export function AdminListingForm({ mode, submitUrl, initialData, lockedListingTy
 
       if (!res.ok || !result.ok || !result.urls) {
         const fallback = kind === "video"
-          ? "影片上傳失敗。若在正式網站上傳影片，請確認檔案大小與 Supabase Storage 設定。"
-          : "圖片上傳失敗。請確認 Supabase Storage 設定或稍後再試。";
-        setStatus(result.message || fallback);
+          ? "影片上傳失敗。正式網站需設定 Supabase Storage；單檔也請勿超過平台限制（約 4MB）。"
+          : "圖片上傳失敗。正式網站請在 Vercel 設定 SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY；本機請確認已登入後台。";
+        const message = result.message || fallback;
+        setMediaStatus(message);
+        if (res.status === 401) {
+          setMediaStatus(`${message}（登入可能已過期，請重新登入後台）`);
+        }
         return;
       }
 
@@ -175,12 +274,14 @@ export function AdminListingForm({ mode, submitUrl, initialData, lockedListingTy
           images: [...prev.images, ...result.urls!],
           coverImage: prev.coverImage || result.urls![0] || "",
         }));
+        setMediaStatus(`已上傳 ${result.urls.length} 張圖片`);
       } else {
         setFormData((prev) => ({ ...prev, videoUrl: result.urls![0] ?? prev.videoUrl }));
+        setMediaStatus("影片已上傳");
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "未知錯誤";
-      setStatus(`上傳失敗：${message}`);
+      setMediaStatus(`上傳失敗：${message}`);
     } finally {
       if (kind === "image") {
         setUploading(false);
@@ -217,7 +318,11 @@ export function AdminListingForm({ mode, submitUrl, initialData, lockedListingTy
     setLoading(true);
     setStatus("");
 
-    const cleanFeatures = formData.features.map((f) => f.trim()).filter(Boolean);
+    let cleanFeatures = formData.features.map((f) => f.trim()).filter(Boolean);
+    cleanFeatures = cleanFeatures.filter((f) => !f.includes(LAYOUT_OPEN_LABEL));
+    if (layoutOpenLayout) {
+      cleanFeatures.push(LAYOUT_OPEN_LABEL);
+    }
 
     const payload = {
       title: formData.title,
@@ -241,8 +346,11 @@ export function AdminListingForm({ mode, submitUrl, initialData, lockedListingTy
       parkingPrice:
         isSale && formData.parkingPrice ? Math.round(Number(formData.parkingPrice) * 10000) : null,
       parkingSpaceInfo: formData.parkingSpaceInfo || null,
-      parkingRent: isRent && formData.parkingRent ? Number(formData.parkingRent) : null,
-      parkingType: formData.parkingType || null,
+      parkingRent:
+        isRent && hasParking && parkingPriceUi.mode === "separate" && parkingPriceUi.amount.trim()
+          ? Number(parkingPriceUi.amount)
+          : null,
+      parkingType: parkingTypeValue,
       parkingIncluded: isSale ? triState(formData.parkingIncluded) : null,
       managementFee: formData.managementFee ? Number(formData.managementFee) : null,
       petsAllowed: isRent ? triState(formData.petsAllowed) : null,
@@ -270,11 +378,16 @@ export function AdminListingForm({ mode, submitUrl, initialData, lockedListingTy
       contactName: formData.contactName,
       contactPhone: formData.contactPhone,
       ownerIdCardUrl: formData.ownerIdCardUrl.trim() || null,
-      furnitureProvided: formTriToFurnitureAppliance(formData.furnitureProvided),
-      applianceProvided: formTriToFurnitureAppliance(formData.applianceProvided),
-      shortTermRent: isRent ? (formData.shortTermRent.trim() || null) : null,
-      serviceFee: isRent ? (formData.serviceFee.trim() || null) : null,
+      // 有勾選任何項目就視為「有」，供列表篩選使用
+      furnitureProvided: formData.furnitureItems.length > 0 ? true : null,
+      applianceProvided: formData.equipmentItems.length > 0 ? true : null,
+      furnitureItems: formData.furnitureItems,
+      equipmentItems: formData.equipmentItems,
+      shortTermRent: isRent ? choiceToValue(shortTermUi) : null,
+      serviceFee: isRent ? choiceToValue(serviceFeeUi) : null,
       registrationUse: formData.registrationUse || null,
+      specialMatters: formData.specialMatters.trim() || null,
+      otherFees: formData.otherFees.trim() || null,
       securityDeposit: isRent
         ? depositUi.kind === "two"
           ? "2個月"
@@ -284,12 +397,13 @@ export function AdminListingForm({ mode, submitUrl, initialData, lockedListingTy
         : null,
       availableFrom: isRent
         ? availableUi.mode === "immediate"
-          ? "立即起租"
+          ? "隨時可遷入"
           : availableUi.mode === "date" && availableUi.date.trim()
             ? availableUi.date.trim()
             : null
         : null,
       householdsPerFloor: formData.householdsPerFloor || null,
+      roomNumber: formData.propertyType === "SUITE" ? formData.roomNumber.trim() || null : null,
       isPublished: formData.isPublished,
     };
 
@@ -312,14 +426,21 @@ export function AdminListingForm({ mode, submitUrl, initialData, lockedListingTy
     setStatus(mode === "create" ? "建立成功！" : "更新成功！");
     setLoading(false);
     router.refresh();
-    if (mode === "create") {
-      setTimeout(() => { router.push("/admin"); }, 500);
-    }
+    setTimeout(() => {
+      const typeParam = isRent ? "rent" : "sale";
+      router.push(`/admin?type=${typeParam}&mine=1`);
+    }, 500);
   }
 
-  const field = "rounded-lg border border-zinc-300 px-3 py-2 text-sm";
-  const labelCls = "mb-1 block text-xs font-medium text-zinc-600";
-  const sectionTitle = "mb-3 text-sm font-semibold text-zinc-900 border-l-4 border-zinc-900 pl-2";
+  const field =
+    "w-full rounded-xl border border-zinc-300 px-3.5 py-3 text-base outline-none focus:border-[#0b2545] focus:ring-2 focus:ring-[#0b2545]/15 sm:py-2 sm:text-sm";
+  const fieldCompact = "w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-[#0b2545] focus:ring-2 focus:ring-[#0b2545]/15";
+  const selectCompact =
+    "w-full min-w-0 rounded-lg border border-zinc-300 bg-white py-2 pl-1.5 pr-5 text-xs leading-snug outline-none focus:border-[#0b2545] focus:ring-2 focus:ring-[#0b2545]/15";
+  const labelCls = "mb-1.5 block text-sm font-medium text-zinc-700 sm:text-xs sm:text-zinc-600";
+  const labelCompact = "mb-1 block text-xs font-medium text-zinc-600";
+  const sectionTitle =
+    "mb-4 border-l-4 border-[#0b2545] pl-3 text-base font-bold text-zinc-900 sm:mb-3 sm:text-sm sm:font-semibold";
   const typeBadgeCls = isRent
     ? "inline-block rounded-full bg-blue-600 px-2.5 py-0.5 text-xs font-medium text-white"
     : "inline-block rounded-full bg-emerald-600 px-2.5 py-0.5 text-xs font-medium text-white";
@@ -329,9 +450,6 @@ export function AdminListingForm({ mode, submitUrl, initialData, lockedListingTy
       {/* 類型提示 */}
       <div className="flex items-center gap-2">
         <span className={typeBadgeCls}>{isRent ? "租賃" : "買賣"}</span>
-        <span className="text-xs text-zinc-500">
-          {isRent ? "租賃物件上架表單（591 租屋格式）" : "買賣物件上架表單（591 售屋格式）"}
-        </span>
       </div>
 
       {/* 基本資訊 */}
@@ -340,7 +458,7 @@ export function AdminListingForm({ mode, submitUrl, initialData, lockedListingTy
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <label className={labelCls}>標題</label>
-            <input required placeholder="物件標題" value={formData.title}
+            <input required value={formData.title}
               onChange={(e) => setFormData((p) => ({ ...p, title: e.target.value }))}
               className={`w-full ${field}`} />
           </div>
@@ -355,41 +473,197 @@ export function AdminListingForm({ mode, submitUrl, initialData, lockedListingTy
               </select>
             </div>
           ) : null}
-          <div>
-            <label className={labelCls}>物件類別</label>
-            <select value={formData.propertyType}
-              onChange={(e) => setFormData((p) => ({
-                ...p,
-                propertyType: e.target.value as AdminListingFormData["propertyType"],
-              }))}
-              className={`w-full ${field}`}>
-              <option value="APARTMENT">大樓</option>
-              <option value="HOUSE">透天</option>
-              <option value="STUDIO">套房</option>
-              <option value="OFFICE">辦公</option>
-              <option value="SHOP">店面</option>
-            </select>
+          <div className="sm:col-span-2 space-y-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:gap-3">
+              <label className="block w-full min-w-0 sm:w-[5.75rem] sm:shrink-0">
+                <span className={labelCompact}>縣市</span>
+                <select
+                  value={formData.city}
+                  onChange={(e) => {
+                    setFormData((p) => ({ ...p, city: e.target.value, district: "" }));
+                  }}
+                  className={`${selectCompact} h-[42px] py-0`}
+                >
+                  <option value="">選擇縣市</option>
+                  {TAIWAN_REGIONS.map((r) => (
+                    <option key={r.city} value={r.city}>
+                      {r.city}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block w-full min-w-0 sm:w-[5.75rem] sm:shrink-0">
+                <span className={labelCompact}>行政區</span>
+                <select
+                  value={formData.district}
+                  onChange={(e) => setFormData((p) => ({ ...p, district: e.target.value }))}
+                  disabled={!selectedRegion}
+                  className={`${selectCompact} h-[42px] py-0 disabled:bg-zinc-100 disabled:text-zinc-400`}
+                >
+                  <option value="">選擇行政區</option>
+                  {selectedRegion?.districts.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block min-w-0 flex-1">
+                <span className={labelCompact}>地址</span>
+                <input
+                  required
+                  value={formData.address}
+                  onChange={(e) => setFormData((p) => ({ ...p, address: e.target.value }))}
+                  className={`${fieldCompact} h-[42px] py-0`}
+                />
+              </label>
+            </div>
+
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:gap-3">
+              <label className="block w-full min-w-0 sm:w-[7.25rem] sm:shrink-0">
+                <span className={labelCompact}>物件類別</span>
+                <select
+                  value={formData.propertyType}
+                  onChange={(e) =>
+                    setFormData((p) => ({
+                      ...p,
+                      propertyType: e.target.value as AdminListingFormData["propertyType"],
+                    }))
+                  }
+                  className={`${selectCompact} h-[42px] px-2 text-xs`}
+                >
+                  {PROPERTY_TYPE_OPTIONS.map((type) => (
+                    <option key={type} value={type}>
+                      {PROPERTY_TYPE_LABEL[type]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block w-full min-w-0 sm:w-[10.5rem] sm:shrink-0">
+                <span className={labelCompact}>社區 / 大樓名稱</span>
+                <input
+                  value={formData.community}
+                  onChange={(e) => setFormData((p) => ({ ...p, community: e.target.value }))}
+                  className={`${fieldCompact} h-[42px] py-0`}
+                />
+              </label>
+              <div className="hidden min-w-[1.25rem] flex-1 sm:block" aria-hidden />
+              <label className="block w-[calc(50%-0.375rem)] min-w-0 sm:w-[3.25rem] sm:shrink-0">
+                <span className={labelCompact}>樓層</span>
+                <input
+                  type="number"
+                  value={formData.floor}
+                  onChange={(e) => setFormData((p) => ({ ...p, floor: e.target.value }))}
+                  className={`${fieldCompact} h-[42px] px-1.5 py-0 text-center`}
+                />
+              </label>
+              <label className="block w-[calc(50%-0.375rem)] min-w-0 sm:w-[3.25rem] sm:shrink-0">
+                <span className={labelCompact}>總樓層</span>
+                <input
+                  type="number"
+                  value={formData.totalFloors}
+                  onChange={(e) => setFormData((p) => ({ ...p, totalFloors: e.target.value }))}
+                  className={`${fieldCompact} h-[42px] px-1.5 py-0 text-center`}
+                />
+              </label>
+            </div>
           </div>
-          <div className="sm:col-span-2">
-            <label className={labelCls}>縣市 / 行政區</label>
-            <CityDistrictSelector
-              cityValue={formData.city}
-              districtValue={formData.district}
-              onCityChange={(city) => setFormData((p) => ({ ...p, city }))}
-              onDistrictChange={(district) => setFormData((p) => ({ ...p, district }))} />
+          {formData.propertyType === "SUITE" ? (
+            <div className="sm:col-span-2">
+              <label className={labelCls}>房間號碼</label>
+              <input
+                required
+                value={formData.roomNumber}
+                onChange={(e) => setFormData((p) => ({ ...p, roomNumber: e.target.value }))}
+                className={`w-full ${field}`}
+              />
+            </div>
+          ) : null}
+        </div>
+      </section>
+
+      {/* 坪數與格局 */}
+      <section className="space-y-3">
+        <h3 className={sectionTitle}>坪數與格局</h3>
+        <div className="grid grid-cols-3 items-end gap-2 sm:grid-cols-5 sm:gap-3">
+          <div className="min-w-0">
+            <label className={labelCompact}>權狀</label>
+            <input
+              required
+              type="number"
+              min="0.1"
+              step="0.01"
+              value={formData.areaPing}
+              onChange={(e) => setFormData((p) => ({ ...p, areaPing: e.target.value }))}
+              className={`${fieldCompact} mt-1 min-w-0 px-2 py-2`}
+            />
           </div>
-          <div>
-            <label className={labelCls}>地址（內部用，前台會遮蔽門牌）</label>
-            <input required placeholder="詳細地址" value={formData.address}
-              onChange={(e) => setFormData((p) => ({ ...p, address: e.target.value }))}
-              className={`w-full ${field}`} />
+          <div className="min-w-0 max-sm:hidden" aria-hidden />
+          <div className="col-span-3 min-w-0 max-sm:col-span-3">
+            <span className={labelCompact}>格局</span>
+            <div className="mt-1 flex h-[42px] min-w-0 items-center gap-1.5 sm:gap-2">
+              {(
+                [
+                  ["rooms", "房", true],
+                  ["livingRooms", "廳", false],
+                  ["bathrooms", "衛", true],
+                  ["balconies", "陽台", false],
+                ] as const
+              ).map(([key, suffix, required]) => (
+                <div
+                  key={key}
+                  className={`relative min-w-0 ${key === "balconies" ? "flex-[1.15]" : "flex-1"}`}
+                >
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    required={required}
+                    value={formData[key]}
+                    onChange={(e) => setFormData((p) => ({ ...p, [key]: e.target.value }))}
+                    className={`h-[42px] w-full min-w-0 rounded-lg border bg-white py-2 pl-2 text-sm ${
+                      key === "balconies" ? "pr-10" : "pr-7"
+                    } ${key === "rooms" ? "border-orange-400" : "border-zinc-300"}`}
+                    aria-label={`格局${suffix}`}
+                  />
+                  <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-sm font-medium text-zinc-800">
+                    {suffix}
+                  </span>
+                </div>
+              ))}
+              <label className="flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap pl-0.5 text-sm text-zinc-800">
+                <input
+                  type="checkbox"
+                  checked={layoutOpenLayout}
+                  onChange={(e) => setLayoutOpenLayout(e.target.checked)}
+                  className="size-4 shrink-0 rounded border-zinc-300 text-[#1e3a8a] focus:ring-[#1e3a8a]"
+                />
+                開放式格局
+              </label>
+            </div>
           </div>
-          <div>
-            <label className={labelCls}>社區 / 大樓名稱（選填）</label>
-            <input placeholder="例：信義 A25" value={formData.community}
-              onChange={(e) => setFormData((p) => ({ ...p, community: e.target.value }))}
-              className={`w-full ${field}`} />
-          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 sm:gap-3">
+          {(
+            [
+              ["areaMain", "主建物"],
+              ["areaAncillary", "附屬建物"],
+              ["areaCommon", "公設"],
+              ["areaLand", "土地"],
+              ["areaParkingSpace", "車位"],
+            ] as const
+          ).map(([key, label]) => (
+            <div key={key} className="min-w-0">
+              <label className={labelCompact}>{label}</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={formData[key]}
+                onChange={(e) => setFormData((p) => ({ ...p, [key]: e.target.value }))}
+                className={`${fieldCompact} mt-1 min-w-0 px-2 py-2`}
+              />
+            </div>
+          ))}
         </div>
       </section>
 
@@ -398,13 +672,13 @@ export function AdminListingForm({ mode, submitUrl, initialData, lockedListingTy
         <h3 className={sectionTitle}>{isRent ? "租金與費用" : "售價與費用"}</h3>
         <div className="grid gap-3 sm:grid-cols-3">
           <div>
-            <label className={labelCls}>{isRent ? "月租（元）" : "總售價（萬元）"}</label>
+            <label className={labelCls}>{isRent ? "月租" : "總售價"}</label>
             <input
               required
               type="number"
               min={isRent ? "1" : "0"}
               step={isRent ? "1" : "0.01"}
-              placeholder={isRent ? "例：28000" : "例：1800 表示 1,800 萬"}
+              placeholder={isRent ? "單位：元" : "單位：萬元"}
               value={formData.price}
               onChange={(e) => setFormData((p) => ({ ...p, price: e.target.value }))}
               className={`w-full ${field}`}
@@ -416,21 +690,26 @@ export function AdminListingForm({ mode, submitUrl, initialData, lockedListingTy
             ) : null}
           </div>
           <div>
-            <label className={labelCls}>管理費 / 月（元）</label>
-            <input type="number" min="0" placeholder="選填" value={formData.managementFee}
+            <label className={labelCls}>管理費 / 月</label>
+            <input type="number" min="0" placeholder="單位：元" value={formData.managementFee}
               onChange={(e) => setFormData((p) => ({ ...p, managementFee: e.target.value }))}
               className={`w-full ${field}`} />
           </div>
           {isRent ? (
             <div>
-              <label className={labelCls}>車位租金 / 月（元）</label>
-              <input type="number" min="0" placeholder="選填" value={formData.parkingRent}
-                onChange={(e) => setFormData((p) => ({ ...p, parkingRent: e.target.value }))}
-                className={`w-full ${field}`} />
+              <label className={labelCls}>其他費用</label>
+              <input
+                type="text"
+                value={formData.otherFees}
+                onChange={(e) => setFormData((p) => ({ ...p, otherFees: e.target.value }))}
+                placeholder="自行填寫"
+                className={`w-full ${field}`}
+              />
             </div>
-          ) : (
+          ) : null}
+          {isRent ? null : (
             <div>
-              <label className={labelCls}>單價 / 坪（萬元，系統自動計算）</label>
+              <label className={labelCls}>單價 / 坪</label>
               <input
                 readOnly
                 value={
@@ -445,126 +724,115 @@ export function AdminListingForm({ mode, submitUrl, initialData, lockedListingTy
         </div>
       </section>
 
-      {/* 格局與空間 */}
-      <section>
-        <h3 className={sectionTitle}>格局與空間</h3>
-        <div className="grid gap-3 sm:grid-cols-4">
-          <div>
-            <label className={labelCls}>房</label>
-            <input required type="number" min="0" value={formData.rooms}
-              onChange={(e) => setFormData((p) => ({ ...p, rooms: e.target.value }))}
-              className={`w-full ${field}`} />
-          </div>
-          <div>
-            <label className={labelCls}>廳</label>
-            <input type="number" min="0" placeholder="選填" value={formData.livingRooms}
-              onChange={(e) => setFormData((p) => ({ ...p, livingRooms: e.target.value }))}
-              className={`w-full ${field}`} />
-          </div>
-          <div>
-            <label className={labelCls}>衛</label>
-            <input required type="number" min="0" value={formData.bathrooms}
-              onChange={(e) => setFormData((p) => ({ ...p, bathrooms: e.target.value }))}
-              className={`w-full ${field}`} />
-          </div>
-          <div>
-            <label className={labelCls}>陽台</label>
-            <input type="number" min="0" placeholder="選填" value={formData.balconies}
-              onChange={(e) => setFormData((p) => ({ ...p, balconies: e.target.value }))}
-              className={`w-full ${field}`} />
-          </div>
-          <div>
-            <label className={labelCls}>樓層</label>
-            <input type="number" placeholder="選填" value={formData.floor}
-              onChange={(e) => setFormData((p) => ({ ...p, floor: e.target.value }))}
-              className={`w-full ${field}`} />
-          </div>
-          <div>
-            <label className={labelCls}>總樓層</label>
-            <input type="number" placeholder="選填" value={formData.totalFloors}
-              onChange={(e) => setFormData((p) => ({ ...p, totalFloors: e.target.value }))}
-              className={`w-full ${field}`} />
-          </div>
-        </div>
-      </section>
-
-      {/* 坪數明細 */}
-      <section>
-        <h3 className={sectionTitle}>坪數明細</h3>
-        <div className="grid gap-3 sm:grid-cols-4">
-          <div>
-            <label className={labelCls}>權狀坪數</label>
-            <input required type="number" min="0.1" step="0.01" value={formData.areaPing}
-              onChange={(e) => setFormData((p) => ({ ...p, areaPing: e.target.value }))}
-              className={`w-full ${field}`} />
-          </div>
-          <div>
-            <label className={labelCls}>主建物</label>
-            <input type="number" min="0" step="0.01" placeholder="選填" value={formData.areaMain}
-              onChange={(e) => setFormData((p) => ({ ...p, areaMain: e.target.value }))}
-              className={`w-full ${field}`} />
-          </div>
-          <div>
-            <label className={labelCls}>附屬建物</label>
-            <input type="number" min="0" step="0.01" placeholder="選填" value={formData.areaAncillary}
-              onChange={(e) => setFormData((p) => ({ ...p, areaAncillary: e.target.value }))}
-              className={`w-full ${field}`} />
-          </div>
-          <div>
-            <label className={labelCls}>公設坪數</label>
-            <input type="number" min="0" step="0.01" placeholder="選填" value={formData.areaCommon}
-              onChange={(e) => setFormData((p) => ({ ...p, areaCommon: e.target.value }))}
-              className={`w-full ${field}`} />
-          </div>
-          <div>
-            <label className={labelCls}>土地坪數</label>
-            <input type="number" min="0" step="0.01" placeholder="選填" value={formData.areaLand}
-              onChange={(e) => setFormData((p) => ({ ...p, areaLand: e.target.value }))}
-              className={`w-full ${field}`} />
-          </div>
-          <div>
-            <label className={labelCls}>車位坪數</label>
-            <input type="number" min="0" step="0.01" placeholder="選填" value={formData.areaParkingSpace}
-              onChange={(e) => setFormData((p) => ({ ...p, areaParkingSpace: e.target.value }))}
-              className={`w-full ${field}`} />
-          </div>
-        </div>
-      </section>
-
       {/* 車位資訊 */}
       <section>
         <h3 className={sectionTitle}>車位資訊</h3>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div>
-            <label className={labelCls}>車位型式</label>
-            <select value={formData.parkingType}
-              onChange={(e) => setFormData((p) => ({ ...p, parkingType: e.target.value }))}
-              className={`w-full ${field}`}>
-              {PARKING_TYPES.map((t) => (
-                <option key={t.value} value={t.value}>{t.label}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className={labelCls}>車位樓層/號碼（例：B3 75）</label>
-            <input type="text" placeholder="例：B3 75" value={formData.parkingSpaceInfo}
-              onChange={(e) => setFormData((p) => ({ ...p, parkingSpaceInfo: e.target.value }))}
-              className={`w-full ${field}`} />
-          </div>
-          {isSale ? (
-            <>
+        <div className="space-y-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div>
+              <label className={labelCompact}>車位</label>
+              <select
+                value={parkingUi.select}
+                onChange={(e) => {
+                  const select = e.target.value;
+                  setParkingUi((prev) => ({ ...prev, select }));
+                  if (!select) {
+                    setParkingPriceUi({ mode: "included", amount: "" });
+                  }
+                }}
+                className={`${fieldCompact} mt-1`}
+              >
+                <option value="">無</option>
+                {PARKING_TYPE_OPTIONS.map((code) => (
+                  <option key={code} value={code}>
+                    {PARKING_TYPE_LABELS[code]}
+                  </option>
+                ))}
+                {(LEGACY_PARKING_TYPES as readonly string[]).includes(parkingUi.select) ? (
+                  <option value={parkingUi.select}>{PARKING_TYPE_LABELS[parkingUi.select]}</option>
+                ) : null}
+                <option value={PARKING_CUSTOM}>自訂</option>
+              </select>
+              {parkingUi.select === PARKING_CUSTOM ? (
+                <input
+                  type="text"
+                  required
+                  value={parkingUi.custom}
+                  onChange={(e) => setParkingUi((prev) => ({ ...prev, custom: e.target.value }))}
+                  className={`${fieldCompact} mt-2`}
+                  placeholder="自訂車位型式"
+                  aria-label="自訂車位型式"
+                />
+              ) : null}
+            </div>
+            {isRent ? (
               <div>
-                <label className={labelCls}>車位價格（萬元）</label>
+                <label className={labelCompact}>車位價格</label>
+                <div
+                  className={`mt-1 flex h-[42px] items-stretch overflow-hidden rounded-lg border border-zinc-300 ${
+                    parkingExtraDisabled ? "bg-zinc-100" : "bg-white"
+                  }`}
+                >
+                  <select
+                    value={parkingPriceUi.mode}
+                    disabled={parkingExtraDisabled}
+                    onChange={(e) => {
+                      const mode = e.target.value as ParkingPriceUi["mode"];
+                      setParkingPriceUi((prev) => ({
+                        mode,
+                        amount: mode === "included" ? "" : prev.amount,
+                      }));
+                    }}
+                    className={`h-full shrink-0 border-0 bg-transparent py-2 pl-3 pr-7 text-sm disabled:text-zinc-400 ${
+                      parkingPriceUi.mode === "separate" && hasParking ? "max-w-[5.25rem]" : "min-w-0 flex-1"
+                    }`}
+                  >
+                    <option value="included">含在租金內</option>
+                    <option value="separate">另計</option>
+                  </select>
+                  {parkingPriceUi.mode === "separate" && hasParking ? (
+                    <>
+                      <div className="w-px shrink-0 self-stretch bg-zinc-200" aria-hidden />
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={parkingPriceUi.amount}
+                        onChange={(e) => setParkingPriceUi((prev) => ({ ...prev, amount: e.target.value }))}
+                        className="min-w-0 flex-1 border-0 bg-transparent px-2 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-0"
+                        placeholder="金額（元）"
+                        aria-label="車位價格金額"
+                      />
+                    </>
+                  ) : null}
+                </div>
+              </div>
+            ) : (
+              <div>
+                <label className={labelCls}>車位價格</label>
                 <input
                   type="number"
                   min="0"
                   step="0.01"
-                  placeholder="不含總價時填寫，例：150"
+                  placeholder="單位：萬元"
                   value={formData.parkingPrice}
                   onChange={(e) => setFormData((p) => ({ ...p, parkingPrice: e.target.value }))}
-                  className={`w-full ${field}`}
+                  className={`${field} mt-1`}
                 />
               </div>
+            )}
+            <div>
+              <label className={labelCompact}>車位編號</label>
+              <input
+                type="text"
+                value={formData.parkingSpaceInfo}
+                disabled={isRent ? parkingExtraDisabled : false}
+                onChange={(e) => setFormData((p) => ({ ...p, parkingSpaceInfo: e.target.value }))}
+                className={`${fieldCompact} mt-1 disabled:bg-zinc-100 disabled:text-zinc-400`}
+              />
+            </div>
+          </div>
+          {isSale ? (
+            <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <label className={labelCls}>車位是否含於總價</label>
                 <select
@@ -576,37 +844,11 @@ export function AdminListingForm({ mode, submitUrl, initialData, lockedListingTy
                 >
                   <option value="">未填寫</option>
                   <option value="yes">含於總價</option>
-                  <option value="no">不含（另計）</option>
+                  <option value="no">不含</option>
                 </select>
               </div>
-            </>
+            </div>
           ) : null}
-        </div>
-      </section>
-
-      {/* 鄰近捷運（選填） */}
-      <section>
-        <h3 className={sectionTitle}>鄰近捷運（選填）</h3>
-        <p className="-mt-1 mb-3 text-xs text-zinc-500">
-          若物件鄰近捷運站，可填寫此欄位。會顯示在外網物件卡片與詳情頁，方便客戶辨識交通。
-        </p>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div>
-            <label className={labelCls}>捷運線</label>
-            <select value={formData.mrtLine}
-              onChange={(e) => setFormData((p) => ({ ...p, mrtLine: e.target.value }))}
-              className={`w-full ${field}`}>
-              {MRT_LINES.map((l) => (
-                <option key={l} value={l}>{l || "未填寫"}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className={labelCls}>捷運站</label>
-            <input type="text" placeholder="例：內湖站、信義安和站" value={formData.mrtStation}
-              onChange={(e) => setFormData((p) => ({ ...p, mrtStation: e.target.value }))}
-              className={`w-full ${field}`} />
-          </div>
         </div>
       </section>
 
@@ -614,37 +856,206 @@ export function AdminListingForm({ mode, submitUrl, initialData, lockedListingTy
       {isRent ? (
         <section>
           <h3 className={sectionTitle}>租賃條件與帶看</h3>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {([
-              ["petsAllowed", "可養寵物"],
-              ["taxDeductible", "可報稅"],
-              ["rentSubsidy", "可租屋補助"],
-              ["canRegisterAddress", "可入戶籍"],
-            ] as const).map(([key, label]) => (
-              <div key={key}>
-                <label className={labelCls}>{label}</label>
-                <select value={formData[key]}
-                  onChange={(e) => setFormData((p) => ({ ...p, [key]: e.target.value as "" | "yes" | "no" }))}
-                  className={`w-full ${field}`}>
+          <div className="grid gap-3">
+            <div className="grid gap-3 sm:grid-cols-3">
+              {([
+                ["rentSubsidy", "租屋補助"],
+                ["taxDeductible", "報稅"],
+                ["canRegisterAddress", "入戶籍"],
+              ] as const).map(([key, label]) => (
+                <div key={key}>
+                  <label className={labelCompact}>{label}</label>
+                  <select
+                    value={formData[key]}
+                    onChange={(e) => setFormData((p) => ({ ...p, [key]: e.target.value as "" | "yes" | "no" }))}
+                    className={`${fieldCompact} mt-1 h-[42px] py-0`}
+                  >
+                    <option value="">未填寫</option>
+                    <option value="yes">可</option>
+                    <option value="no">不可</option>
+                  </select>
+                </div>
+              ))}
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3 sm:items-start">
+              <div>
+                <label className={labelCompact}>帶看方式</label>
+                <select
+                  value={formData.viewingMethod}
+                  onChange={(e) =>
+                    setFormData((p) => ({ ...p, viewingMethod: e.target.value as "" | "KEY" | "OWNER_APPOINTMENT" }))
+                  }
+                  className={`${fieldCompact} mt-1 h-[42px] py-0`}
+                >
+                  <option value="">未填寫</option>
+                  <option value="KEY">有鑰匙，隨時可帶看</option>
+                  <option value="OWNER_APPOINTMENT">需約屋主時間</option>
+                </select>
+              </div>
+              <div>
+                <label className={labelCompact}>寵物</label>
+                <select
+                  value={formData.petsAllowed}
+                  onChange={(e) => setFormData((p) => ({ ...p, petsAllowed: e.target.value as "" | "yes" | "no" }))}
+                  className={`${fieldCompact} mt-1 h-[42px] py-0`}
+                >
                   <option value="">未填寫</option>
                   <option value="yes">可</option>
                   <option value="no">不可</option>
                 </select>
               </div>
-            ))}
-            <div className="sm:col-span-2">
-              <label className={labelCls}>帶看方式</label>
-              <select value={formData.viewingMethod}
-                onChange={(e) => setFormData((p) => ({ ...p, viewingMethod: e.target.value as "" | "KEY" | "OWNER_APPOINTMENT" }))}
-                className={`w-full ${field}`}>
-                <option value="">未填寫</option>
-                <option value="KEY">有鑰匙，隨時可帶看</option>
-                <option value="OWNER_APPOINTMENT">需約屋主時間</option>
-              </select>
+              <div>
+                <label className={labelCompact}>能否短租</label>
+                <select
+                  value={shortTermUi.select}
+                  onChange={(e) =>
+                    setShortTermUi((prev) => ({
+                      select: e.target.value,
+                      other: e.target.value === CHOICE_OTHER ? prev.other : "",
+                    }))
+                  }
+                  className={`${fieldCompact} mt-1 h-[42px] py-0`}
+                >
+                  <option value="">未填寫</option>
+                  {SHORT_TERM_CHOICES.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                  <option value={CHOICE_OTHER}>其他</option>
+                </select>
+                {shortTermUi.select === CHOICE_OTHER ? (
+                  <input
+                    type="text"
+                    required
+                    aria-label="短租自訂內容"
+                    value={shortTermUi.other}
+                    onChange={(e) => setShortTermUi({ select: CHOICE_OTHER, other: e.target.value })}
+                    className={`${fieldCompact} mt-2`}
+                  />
+                ) : null}
+              </div>
             </div>
           </div>
         </section>
       ) : null}
+
+      {/* 服務費 */}
+      {isRent ? (
+        <section>
+          <h3 className={sectionTitle}>服務費</h3>
+          <div className="grid grid-cols-1 sm:max-w-[calc(50%-0.375rem)]">
+            <div>
+              <span className={labelCompact}>服務費</span>
+              <select
+                value={serviceFeeUi.select}
+                onChange={(e) =>
+                  setServiceFeeUi((prev) => ({
+                    select: e.target.value,
+                    other: e.target.value === CHOICE_OTHER ? prev.other : "",
+                  }))
+                }
+                className={`${fieldCompact} mt-1 h-[42px] py-0`}
+              >
+                <option value="">未填寫</option>
+                {SERVICE_FEE_CHOICES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+                <option value={CHOICE_OTHER}>其他</option>
+              </select>
+              {serviceFeeUi.select === CHOICE_OTHER ? (
+                <input
+                  type="text"
+                  required
+                  value={serviceFeeUi.other}
+                  onChange={(e) => setServiceFeeUi({ select: CHOICE_OTHER, other: e.target.value })}
+                  className={`${fieldCompact} mt-2`}
+                  placeholder="自訂服務費"
+                  aria-label="服務費自訂"
+                />
+              ) : null}
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {/* 屋主聯絡資訊 */}
+      <section>
+        <h3 className={sectionTitle}>屋主聯絡資訊</h3>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label className={labelCls}>屋主姓名</label>
+            <input required value={formData.contactName}
+              onChange={(e) => setFormData((p) => ({ ...p, contactName: e.target.value }))}
+              className={`w-full ${field}`} />
+          </div>
+          <div>
+            <label className={labelCls}>屋主電話</label>
+            <input required value={formData.contactPhone}
+              onChange={(e) => setFormData((p) => ({ ...p, contactPhone: e.target.value }))}
+              className={`w-full ${field}`} />
+          </div>
+          <div>
+            <label className={labelCls}>屋主身分證字號</label>
+            <input
+              type="text"
+              inputMode="text"
+              autoComplete="off"
+              maxLength={20}
+              value={formData.ownerIdCardUrl}
+              onChange={(e) => setFormData((p) => ({ ...p, ownerIdCardUrl: e.target.value }))}
+              className={`w-full ${field}`}
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* 鄰近捷運 */}
+      <section>
+        <h3 className={sectionTitle}>鄰近捷運</h3>
+        <p className="-mt-1 mb-3 text-xs text-zinc-500">
+          若物件鄰近捷運站，可填寫此欄位。會顯示在外網物件卡片與詳情頁，方便客戶辨識交通。
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label className={labelCls}>捷運線</label>
+            <select value={formData.mrtLine}
+              onChange={(e) => {
+                const mrtLine = e.target.value;
+                setFormData((p) => {
+                  const stations = getMrtStationsForLine(mrtLine);
+                  const keepStation = stations.includes(p.mrtStation);
+                  return { ...p, mrtLine, mrtStation: keepStation ? p.mrtStation : "" };
+                });
+              }}
+              className={`w-full ${field}`}>
+              {MRT_LINE_OPTIONS.map((l) => (
+                <option key={l} value={l}>
+                  {l || "未填寫"}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className={labelCls}>捷運站</label>
+            <select
+              value={formData.mrtStation}
+              disabled={mrtStationSelectDisabled}
+              onChange={(e) => setFormData((p) => ({ ...p, mrtStation: e.target.value }))}
+              className={`w-full ${field} disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-500`}
+            >
+              <option value="">{mrtStationSelectDisabled ? "請先選擇捷運線" : "請選擇捷運站"}</option>
+              {mrtStationOptions.map((station) => (
+                <option key={station} value={station}>
+                  {station}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </section>
 
       {/* 買賣專用：建物資訊 */}
       {isSale ? (
@@ -652,8 +1063,8 @@ export function AdminListingForm({ mode, submitUrl, initialData, lockedListingTy
           <h3 className={sectionTitle}>建物資訊</h3>
           <div className="grid gap-3 sm:grid-cols-3">
             <div>
-              <label className={labelCls}>屋齡（年）</label>
-              <input type="number" min="0" step="0.1" placeholder="例：8.5" value={formData.buildingAge}
+              <label className={labelCls}>屋齡</label>
+              <input type="number" min="0" step="0.1" placeholder="單位：年" value={formData.buildingAge}
                 onChange={(e) => setFormData((p) => ({ ...p, buildingAge: e.target.value }))}
                 className={`w-full ${field}`} />
             </div>
@@ -698,8 +1109,8 @@ export function AdminListingForm({ mode, submitUrl, initialData, lockedListingTy
               </select>
             </div>
             <div>
-              <label className={labelCls}>法定用途（例：住家用）</label>
-              <input type="text" placeholder="選填" value={formData.legalUsage}
+              <label className={labelCls}>法定用途</label>
+              <input type="text" value={formData.legalUsage}
                 onChange={(e) => setFormData((p) => ({ ...p, legalUsage: e.target.value }))}
                 className={`w-full ${field}`} />
             </div>
@@ -707,45 +1118,51 @@ export function AdminListingForm({ mode, submitUrl, initialData, lockedListingTy
         </section>
       ) : null}
 
-      {/* 屋主聯絡資訊 */}
-      <section>
-        <h3 className={sectionTitle}>屋主聯絡資訊</h3>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div>
-            <label className={labelCls}>屋主姓名</label>
-            <input required placeholder="例如：王先生" value={formData.contactName}
-              onChange={(e) => setFormData((p) => ({ ...p, contactName: e.target.value }))}
-              className={`w-full ${field}`} />
-          </div>
-          <div>
-            <label className={labelCls}>屋主電話</label>
-            <input required placeholder="例如：0912-345-678" value={formData.contactPhone}
-              onChange={(e) => setFormData((p) => ({ ...p, contactPhone: e.target.value }))}
-              className={`w-full ${field}`} />
-          </div>
-          <div className="sm:col-span-2">
-            <label className={labelCls}>屋主身分證字號（選填）</label>
-            <input
-              type="text"
-              inputMode="text"
-              autoComplete="off"
-              placeholder="例：A123456789 或末四碼"
-              maxLength={20}
-              value={formData.ownerIdCardUrl}
-              onChange={(e) => setFormData((p) => ({ ...p, ownerIdCardUrl: e.target.value }))}
-              className={`w-full ${field}`}
-            />
-          </div>
-        </div>
-      </section>
-
       {/* 圖片 + 影片 */}
       <section>
         <h3 className={sectionTitle}>圖片與影片</h3>
+        {mediaStatus ? (
+          <p
+            className={`mb-3 rounded-lg px-3 py-2 text-xs sm:text-sm ${
+              mediaStatus.includes("已上傳") || mediaStatus.includes("影片已")
+                ? "bg-emerald-50 text-emerald-800"
+                : "bg-red-50 text-red-700"
+            }`}
+          >
+            {mediaStatus}
+          </p>
+        ) : null}
         <div className="grid grid-cols-2 gap-3 sm:gap-4">
+          {/* 影片區 */}
+          <div className="min-w-0 rounded-xl border border-zinc-200 p-3 sm:p-4">
+            <p className="mb-2 text-xs font-medium text-zinc-800 sm:text-sm">物件影片</p>
+            {formData.videoUrl ? (
+              <div className="relative mb-3 overflow-hidden rounded-lg bg-zinc-900">
+                <video src={formData.videoUrl} controls className="h-28 w-full object-cover sm:h-40" />
+                <button type="button" onClick={() => setFormData((p) => ({ ...p, videoUrl: "" }))}
+                  className="absolute right-2 top-2 rounded bg-red-600 px-2 py-0.5 text-xs font-medium text-white">
+                  移除
+                </button>
+              </div>
+            ) : null}
+            <input ref={videoInputRef} type="file" accept="video/*,.mp4,.mov,.webm,.m4v" className="hidden"
+              onChange={(e) => { if (e.target.files) uploadFiles(e.target.files, "video"); }} />
+            <button type="button" disabled={uploadingVideo} onClick={() => videoInputRef.current?.click()}
+              className="w-full rounded-lg border border-dashed border-zinc-400 bg-zinc-50 px-2 py-2.5 text-xs text-zinc-600 hover:bg-zinc-100 disabled:opacity-60 sm:px-4 sm:py-3 sm:text-sm">
+              {uploadingVideo ? "上傳中..." : formData.videoUrl ? "＋ 更換影片" : "＋ 選擇影片"}
+            </button>
+            <p className="mt-1 text-[10px] text-zinc-400 sm:text-xs">MP4、MOV、WEBM；正式站單檔建議 4MB 內</p>
+            <div className="mt-2 sm:mt-3">
+              <label className="mb-1 block text-[10px] font-medium text-zinc-600 sm:text-xs">或貼影片連結</label>
+              <input type="text" value={formData.videoUrl}
+                onChange={(e) => setFormData((p) => ({ ...p, videoUrl: e.target.value }))}
+                className={`w-full ${field} text-xs sm:text-sm`} />
+            </div>
+          </div>
+
           {/* 圖片區 */}
           <div className="min-w-0 rounded-xl border border-zinc-200 p-3 sm:p-4">
-            <p className="mb-2 text-xs font-medium text-zinc-800 sm:text-sm">物件圖片（可多張）</p>
+            <p className="mb-2 text-xs font-medium text-zinc-800 sm:text-sm">物件圖片</p>
             {formData.images.length > 0 ? (
               <div className="mb-3 flex flex-wrap gap-1.5 sm:gap-2">
                 {formData.images.map((url) => (
@@ -766,248 +1183,159 @@ export function AdminListingForm({ mode, submitUrl, initialData, lockedListingTy
                 ))}
               </div>
             ) : null}
-            <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden"
+            <input ref={fileInputRef} type="file" accept="image/*,.heic,.heif" multiple className="hidden"
               onChange={(e) => { if (e.target.files) uploadFiles(e.target.files, "image"); }} />
             <button type="button" disabled={uploading} onClick={() => fileInputRef.current?.click()}
               className="w-full rounded-lg border border-dashed border-zinc-400 bg-zinc-50 px-2 py-2.5 text-xs text-zinc-600 hover:bg-zinc-100 disabled:opacity-60 sm:px-4 sm:py-3 sm:text-sm">
               {uploading ? "上傳中..." : "＋ 選擇圖片"}
             </button>
-            <p className="mt-1 text-[10px] text-zinc-400 sm:text-xs">JPG、PNG、WEBP</p>
-          </div>
-
-          {/* 影片區 */}
-          <div className="min-w-0 rounded-xl border border-zinc-200 p-3 sm:p-4">
-            <p className="mb-2 text-xs font-medium text-zinc-800 sm:text-sm">物件影片（選填）</p>
-            {formData.videoUrl ? (
-              <div className="relative mb-3 overflow-hidden rounded-lg bg-zinc-900">
-                <video src={formData.videoUrl} controls className="h-28 w-full object-cover sm:h-40" />
-                <button type="button" onClick={() => setFormData((p) => ({ ...p, videoUrl: "" }))}
-                  className="absolute right-2 top-2 rounded bg-red-600 px-2 py-0.5 text-xs font-medium text-white">
-                  移除
-                </button>
-              </div>
-            ) : null}
-            <input ref={videoInputRef} type="file" accept="video/*" className="hidden"
-              onChange={(e) => { if (e.target.files) uploadFiles(e.target.files, "video"); }} />
-            <button type="button" disabled={uploadingVideo} onClick={() => videoInputRef.current?.click()}
-              className="w-full rounded-lg border border-dashed border-zinc-400 bg-zinc-50 px-2 py-2.5 text-xs text-zinc-600 hover:bg-zinc-100 disabled:opacity-60 sm:px-4 sm:py-3 sm:text-sm">
-              {uploadingVideo ? "上傳中..." : formData.videoUrl ? "＋ 更換影片" : "＋ 選擇影片"}
-            </button>
-            <p className="mt-1 text-[10px] text-zinc-400 sm:text-xs">MP4、WEBM，100MB 內</p>
-            <div className="mt-2 sm:mt-3">
-              <label className="mb-1 block text-[10px] font-medium text-zinc-600 sm:text-xs">或貼影片連結</label>
-              <input type="text" placeholder="https://..." value={formData.videoUrl}
-                onChange={(e) => setFormData((p) => ({ ...p, videoUrl: e.target.value }))}
-                className={`w-full ${field} text-xs sm:text-sm`} />
-            </div>
+            <p className="mt-1 text-[10px] text-zinc-400 sm:text-xs">JPG、PNG、WEBP、HEIC</p>
           </div>
         </div>
       </section>
 
-      {/* 特色 */}
+      {/* 起租日 / 押金 / 家具家電（橫排） */}
+      <section className="space-y-4">
+        {isRent ? (
+          <>
+            <FormRow label="起租日">
+              <div className="relative w-44">
+                <div
+                  className={`flex items-center justify-between rounded-xl border border-zinc-300 bg-white px-3.5 py-3 text-base sm:py-2 sm:text-sm ${
+                    availableUi.date ? "text-zinc-900" : "text-zinc-400"
+                  }`}
+                >
+                  <span>{availableUi.date || "請選擇日期"}</span>
+                  <svg
+                    aria-hidden="true"
+                    viewBox="0 0 24 24"
+                    className="h-4 w-4 text-zinc-400"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                  >
+                    <rect x="3.5" y="5" width="17" height="15" rx="2" />
+                    <path d="M3.5 10h17M8 3v4M16 3v4" strokeLinecap="round" />
+                  </svg>
+                </div>
+                <input
+                  type="date"
+                  aria-label="選擇起租日期"
+                  value={availableUi.date}
+                  onClick={(e) => {
+                    try {
+                      e.currentTarget.showPicker?.();
+                    } catch {
+                      // 瀏覽器不允許時，維持原生輸入框即可
+                    }
+                  }}
+                  onChange={(e) =>
+                    setAvailableUi(e.target.value ? { mode: "date", date: e.target.value } : { mode: "", date: "" })
+                  }
+                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                />
+              </div>
+              <CheckOption
+                checked={availableUi.mode === "immediate"}
+                onChange={(on) => setAvailableUi(on ? { mode: "immediate", date: "" } : { mode: "", date: "" })}
+              >
+                隨時可遷入
+              </CheckOption>
+            </FormRow>
+
+            <FormRow label="押金">
+              <CheckOption
+                checked={depositUi.kind === "two"}
+                onChange={(on) => setDepositUi(on ? { kind: "two", other: "" } : { kind: "", other: "" })}
+              >
+                2 個月
+              </CheckOption>
+              <CheckOption
+                checked={depositUi.kind === "other"}
+                onChange={(on) =>
+                  setDepositUi((prev) => (on ? { kind: "other", other: prev.other } : { kind: "", other: "" }))
+                }
+              >
+                其他
+              </CheckOption>
+              <input
+                type="text"
+                disabled={depositUi.kind !== "other"}
+                placeholder="例：1.5 個月、面議"
+                value={depositUi.other}
+                onChange={(e) => setDepositUi({ kind: "other", other: e.target.value })}
+                className={`${field} !w-44 disabled:bg-zinc-100`}
+              />
+            </FormRow>
+          </>
+        ) : null}
+
+        <FormRow label="提供設備">
+          {EQUIPMENT_ITEMS.map((item) => (
+            <CheckOption
+              key={item}
+              checked={formData.equipmentItems.includes(item)}
+              onChange={(on) =>
+                setFormData((p) => ({
+                  ...p,
+                  equipmentItems: on ? [...p.equipmentItems, item] : p.equipmentItems.filter((x) => x !== item),
+                }))
+              }
+            >
+              {item}
+            </CheckOption>
+          ))}
+        </FormRow>
+
+        <FormRow label="提供家具">
+          {FURNITURE_ITEMS.map((item) => (
+            <CheckOption
+              key={item}
+              checked={formData.furnitureItems.includes(item)}
+              onChange={(on) =>
+                setFormData((p) => ({
+                  ...p,
+                  furnitureItems: on ? [...p.furnitureItems, item] : p.furnitureItems.filter((x) => x !== item),
+                }))
+              }
+            >
+              {item}
+            </CheckOption>
+          ))}
+        </FormRow>
+      </section>
+
+      {/* 物件特色 */}
       <section>
-        <h3 className={sectionTitle}>物件特色（6 格，填寫後會顯示於外網）</h3>
+        <h3 className={sectionTitle}>物件特色</h3>
         <div className="grid gap-3 sm:grid-cols-2">
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i}>
-              <label className={labelCls}>特色 {i + 1}</label>
-              <input type="text"
-                placeholder={["例：鄰近捷運 5 分鐘", "例：高樓層景觀佳", "例：學區方正", "例：近商圈便利", "例：社區管理完善", "例：新裝潢可議"][i]}
+              <label className={labelCompact}>特色 {i + 1}</label>
+              <input
+                type="text"
                 value={formData.features[i] ?? ""}
                 onChange={(e) => setFeatureAt(i, e.target.value)}
-                className={`w-full ${field}`} />
+                className={`${fieldCompact} mt-1`}
+              />
             </div>
           ))}
         </div>
       </section>
 
+      {/* 特殊事項 */}
       <section>
-        <h3 className={sectionTitle}>業務補充欄位（內部）</h3>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div>
-            <label className={labelCls}>家具提供</label>
-            <select
-              value={formData.furnitureProvided}
-              onChange={(e) =>
-                setFormData((p) => ({ ...p, furnitureProvided: e.target.value as AdminListingFormData["furnitureProvided"] }))
-              }
-              className={`w-full ${field}`}
-            >
-              <option value="">未填寫</option>
-              <option value="yes">有</option>
-              <option value="no">無</option>
-              <option value="discuss">可討論</option>
-            </select>
-          </div>
-          <div>
-            <label className={labelCls}>家電提供</label>
-            <select
-              value={formData.applianceProvided}
-              onChange={(e) =>
-                setFormData((p) => ({ ...p, applianceProvided: e.target.value as AdminListingFormData["applianceProvided"] }))
-              }
-              className={`w-full ${field}`}
-            >
-              <option value="">未填寫</option>
-              <option value="yes">有</option>
-              <option value="no">無</option>
-              <option value="discuss">可討論</option>
-            </select>
-          </div>
-          <div>
-            <label className={labelCls}>一層幾戶</label>
-            <input
-              value={formData.householdsPerFloor}
-              onChange={(e) => setFormData((p) => ({ ...p, householdsPerFloor: e.target.value }))}
-              className={`w-full ${field}`}
-            />
-          </div>
-          <div>
-            <label className={labelCls}>使照登記</label>
-            <input
-              value={formData.registrationUse}
-              onChange={(e) => setFormData((p) => ({ ...p, registrationUse: e.target.value }))}
-              className={`w-full ${field}`}
-            />
-          </div>
-
-          {isRent ? (
-            <>
-              <div>
-                <label className={labelCls}>能否短租</label>
-                <select
-                  value={formData.shortTermRent}
-                  onChange={(e) => setFormData((p) => ({ ...p, shortTermRent: e.target.value }))}
-                  className={`w-full ${field}`}
-                >
-                  <option value="">未填寫</option>
-                  {SHORT_TERM_CHOICES.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                  {formData.shortTermRent && !SHORT_TERM_CHOICES.some((c) => c === formData.shortTermRent) ? (
-                    <option value={formData.shortTermRent}>{formData.shortTermRent}（舊資料）</option>
-                  ) : null}
-                </select>
-              </div>
-              <div>
-                <label className={labelCls}>服務費</label>
-                <select
-                  value={formData.serviceFee}
-                  onChange={(e) => setFormData((p) => ({ ...p, serviceFee: e.target.value }))}
-                  className={`w-full ${field}`}
-                >
-                  <option value="">未填寫</option>
-                  {SERVICE_FEE_CHOICES.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                  {formData.serviceFee && !SERVICE_FEE_CHOICES.some((c) => c === formData.serviceFee) ? (
-                    <option value={formData.serviceFee}>{formData.serviceFee}（舊資料）</option>
-                  ) : null}
-                </select>
-              </div>
-
-              <div className="sm:col-span-2">
-                <span className={labelCls}>押金</span>
-                <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-zinc-800">
-                  <label className="inline-flex cursor-pointer items-center gap-2">
-                    <input
-                      type="radio"
-                      name="depositKind"
-                      checked={depositUi.kind === ""}
-                      onChange={() => setDepositUi({ kind: "", other: "" })}
-                      className="h-4 w-4"
-                    />
-                    未填寫
-                  </label>
-                  <label className="inline-flex cursor-pointer items-center gap-2">
-                    <input
-                      type="radio"
-                      name="depositKind"
-                      checked={depositUi.kind === "two"}
-                      onChange={() => setDepositUi({ kind: "two", other: "" })}
-                      className="h-4 w-4"
-                    />
-                    2 個月
-                  </label>
-                  <label className="inline-flex cursor-pointer items-center gap-2">
-                    <input
-                      type="radio"
-                      name="depositKind"
-                      checked={depositUi.kind === "other"}
-                      onChange={() => setDepositUi((prev) => ({ kind: "other", other: prev.other }))}
-                      className="h-4 w-4"
-                    />
-                    其他
-                    <input
-                      type="text"
-                      disabled={depositUi.kind !== "other"}
-                      placeholder="例：1.5 個月、面議"
-                      value={depositUi.other}
-                      onChange={(e) => setDepositUi((prev) => ({ ...prev, kind: "other", other: e.target.value }))}
-                      className={`min-w-[10rem] max-w-full flex-1 ${field} disabled:bg-zinc-100`}
-                    />
-                  </label>
-                </div>
-              </div>
-
-              <div className="sm:col-span-2">
-                <span className={labelCls}>起租日</span>
-                <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-zinc-800">
-                  <label className="inline-flex cursor-pointer items-center gap-2">
-                    <input
-                      type="radio"
-                      name="availableMode"
-                      checked={availableUi.mode === ""}
-                      onChange={() => setAvailableUi({ mode: "", date: "" })}
-                      className="h-4 w-4"
-                    />
-                    未填寫
-                  </label>
-                  <label className="inline-flex cursor-pointer items-center gap-2">
-                    <input
-                      type="radio"
-                      name="availableMode"
-                      checked={availableUi.mode === "immediate"}
-                      onChange={() => setAvailableUi({ mode: "immediate", date: "" })}
-                      className="h-4 w-4"
-                    />
-                    立即起租
-                  </label>
-                  <label className="inline-flex flex-wrap items-center gap-2">
-                    <input
-                      type="radio"
-                      name="availableMode"
-                      checked={availableUi.mode === "date"}
-                      onChange={() => setAvailableUi((prev) => ({ mode: "date", date: prev.date }))}
-                      className="h-4 w-4"
-                    />
-                    <span>指定日起租</span>
-                    <input
-                      type="date"
-                      disabled={availableUi.mode !== "date"}
-                      value={availableUi.date}
-                      onChange={(e) => setAvailableUi({ mode: "date", date: e.target.value })}
-                      className={`${field} w-auto min-w-[11rem] disabled:bg-zinc-100`}
-                    />
-                  </label>
-                </div>
-              </div>
-            </>
-          ) : null}
-        </div>
+        <h3 className={sectionTitle}>特殊事項</h3>
+        <textarea
+          value={formData.specialMatters}
+          onChange={(e) => setFormData((p) => ({ ...p, specialMatters: e.target.value }))}
+          rows={2}
+          className={`w-full ${field}`}
+        />
       </section>
 
-      {/* 上下架 + 送出 */}
+      {/* 送出 */}
       <section className="space-y-3">
-        <label className="flex items-center gap-2 rounded-lg border border-zinc-300 px-3 py-2.5 text-sm">
-          <input type="checkbox" checked={formData.isPublished}
-            onChange={(e) => setFormData((p) => ({ ...p, isPublished: e.target.checked }))} />
-          立即上架（取消勾選則先存草稿）
-        </label>
         <button type="submit" disabled={loading || uploading || uploadingVideo}
           className="w-full rounded-lg bg-zinc-900 px-4 py-3 text-sm font-medium text-white hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60">
           {loading ? "儲存中..." : mode === "create" ? (isRent ? "建立租賃廣告" : "建立買賣廣告") : "儲存修改"}

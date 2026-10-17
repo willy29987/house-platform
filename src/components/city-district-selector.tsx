@@ -27,7 +27,7 @@ export function CityDistrictSelector({
       <select
         value={cityValue}
         onChange={(e) => handleCityChange(e.target.value)}
-        className="flex-1 rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+        className="flex-1 rounded-lg border border-zinc-300 px-3 py-2.5 text-sm"
       >
         <option value="">選擇縣市</option>
         {TAIWAN_REGIONS.map((r) => (

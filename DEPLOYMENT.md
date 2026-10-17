@@ -142,6 +142,18 @@ https://house-platform-xxx.vercel.app
 
 ---
 
+## 3.5 同事在你電腦關機後仍可使用
+
+正式站跑在 Vercel，與你的筆電無關。請：
+
+1. 只分享 **https://你的-vercel-網域**（勿分享 `localhost`）
+2. 在 `/admin/settings` 為每位同事建立 **業務（OPERATOR）** 帳號
+3. 可執行 `PRODUCTION_SITE_URL=https://xxx.vercel.app npm run verify:production` 確認公網可連
+4. 完整說明與可複製給同事的文案：[docs/colleague-admin-guide.md](docs/colleague-admin-guide.md)  
+5. 管理員勾選清單：[docs/colleague-onboarding-checklist.md](docs/colleague-onboarding-checklist.md)
+
+---
+
 ## 4. 上線後驗證（10 分鐘）
 
 ### 4.1 登入後台

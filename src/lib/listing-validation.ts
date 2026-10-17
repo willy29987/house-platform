@@ -80,13 +80,21 @@ export const listingInputSchema = z.object({
   ownerIdCardUrl: optionalString,
   furnitureProvided: optionalBooleanOrDiscuss,
   applianceProvided: optionalBooleanOrDiscuss,
+  furnitureItems: z.array(z.string()).optional(),
+  equipmentItems: z.array(z.string()).optional(),
   shortTermRent: optionalString,
   serviceFee: optionalString,
   registrationUse: optionalString,
+  specialMatters: optionalString,
+  otherFees: optionalString,
   securityDeposit: optionalString,
   availableFrom: optionalString,
   householdsPerFloor: optionalString,
+  roomNumber: optionalString,
   isPublished: z.boolean().optional(),
-});
+}).refine(
+  (data) => data.propertyType !== PropertyType.SUITE || Boolean(data.roomNumber),
+  { message: "分租套房需填寫房間號碼", path: ["roomNumber"] },
+);
 
 export type ListingInput = z.infer<typeof listingInputSchema>;

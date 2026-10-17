@@ -15,7 +15,7 @@ type Props = {
 type Category = "residential" | "office" | "shop";
 
 const CATEGORIES: { key: Category; label: string; types: string[] }[] = [
-  { key: "residential", label: "住家", types: ["APARTMENT", "HOUSE", "STUDIO"] },
+  { key: "residential", label: "住家", types: ["APARTMENT", "ELEVATOR_BUILDING", "HOUSE", "STUDIO", "SUITE"] },
   { key: "office", label: "辦公", types: ["OFFICE"] },
   { key: "shop", label: "店面", types: ["SHOP"] },
 ];

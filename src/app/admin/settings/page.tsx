@@ -1,7 +1,4 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { AdminLogoutButton } from "@/components/admin-logout-button";
-import { GoPublicSiteButton } from "@/components/go-public-site-button";
 import { AdminUsersManager } from "@/components/admin-users-manager";
 import { getCurrentAdmin } from "@/lib/admin-auth";
 
@@ -23,14 +20,19 @@ async function getUsers(): Promise<SettingsUser[]> {
       orderBy: { createdAt: "asc" },
     });
   } catch {
-    const users = await adminUser.findMany({
-      select: { id: true, username: true, role: true, createdAt: true },
-      orderBy: { createdAt: "asc" },
-    });
-    return users.map((u: { id: string; username: string; role: "SUPER_ADMIN" | "OPERATOR"; createdAt: Date }) => ({
-      ...u,
-      displayName: null,
-    }));
+    try {
+      const users = await adminUser.findMany({
+        select: { id: true, username: true, role: true, createdAt: true },
+        orderBy: { createdAt: "asc" },
+      });
+      return users.map((u: { id: string; username: string; role: "SUPER_ADMIN" | "OPERATOR"; createdAt: Date }) => ({
+        ...u,
+        displayName: null,
+      }));
+    } catch (error) {
+      console.error("[db] 帳號列表查詢失敗，已降級：", error instanceof Error ? error.message.trim().split("\n").pop() : error);
+      return [];
+    }
   }
 }
 
@@ -50,25 +52,13 @@ export default async function AdminSettingsPage() {
 
   return (
     <main className="mx-auto w-full max-w-3xl px-6 py-10">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <p className="text-sm text-zinc-600">內部管理後台</p>
-          <h1 className="text-2xl font-bold text-zinc-900">帳號管理</h1>
-          <p className="mt-1 text-xs text-zinc-500">
-            目前登入：<span className="font-medium text-zinc-700">{current.username}</span>
-            <span className="ml-2 rounded-full bg-[#0b2545] px-2 py-0.5 text-white">最高管理員</span>
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <GoPublicSiteButton />
-          <Link
-            href="/admin"
-            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-          >
-            回總覽
-          </Link>
-          <AdminLogoutButton />
-        </div>
+      <div className="mb-6">
+        <p className="text-sm text-zinc-600">內部管理後台</p>
+        <h1 className="text-2xl font-bold text-zinc-900">帳號管理</h1>
+        <p className="mt-1 text-xs text-zinc-500">
+          目前登入：<span className="font-medium text-zinc-700">{current.username}</span>
+          <span className="ml-2 rounded-full bg-[#0b2545] px-2 py-0.5 text-white">最高管理員</span>
+        </p>
       </div>
 
       <section className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-zinc-200">

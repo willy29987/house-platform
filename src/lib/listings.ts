@@ -1,6 +1,6 @@
 import { ListingType, Prisma, type Listing } from "@prisma/client";
 import type { FurnitureApplianceValue } from "@/lib/furniture-appliance-value";
-import { normalizeFurnitureApplianceValue } from "@/lib/furniture-appliance-value";
+import { normalizeFurnitureApplianceValue, normalizeItemList } from "@/lib/furniture-appliance-value";
 import { prisma } from "@/lib/prisma";
 import { LISTING_META_PREFIX, parseListingInternalMeta } from "@/lib/listing-internal-meta";
 
@@ -70,6 +70,13 @@ export type ListingDetail = ListingCard & {
   contactName: string;
   contactPhone: string;
   ownerIdCardUrl: string | null;
+  // 租客需要看到的租住條件與勾選的設備／家具（皆為選填，示範資料可省略）
+  serviceFee?: string | null;
+  securityDeposit?: string | null;
+  availableFrom?: string | null;
+  shortTermRent?: string | null;
+  furnitureItems?: string[];
+  equipmentItems?: string[];
 };
 
 export function maskAddress(address: string) {
@@ -110,11 +117,16 @@ export type AdminListingDetail = ListingDetail & {
   shortTermRent?: string | null;
   serviceFee?: string | null;
   registrationUse?: string | null;
+  specialMatters?: string | null;
+  otherFees?: string | null;
   securityDeposit?: string | null;
   availableFrom?: string | null;
   householdsPerFloor?: string | null;
+  roomNumber?: string | null;
   furnitureProvided?: FurnitureApplianceValue;
   applianceProvided?: FurnitureApplianceValue;
+  furnitureItems?: string[];
+  equipmentItems?: string[];
 };
 
 export type ListingFilters = {
@@ -176,15 +188,23 @@ export type AdminListing = {
   coverImage: string | null;
   videoUrl: string | null;
   createdByUsername: string | null;
+  contactName: string;
   furnitureProvided: FurnitureApplianceValue;
   applianceProvided: FurnitureApplianceValue;
+  furnitureItems?: string[];
+  equipmentItems?: string[];
   shortTermRent: string | null;
   serviceFee: string | null;
   registrationUse: string | null;
   securityDeposit: string | null;
   availableFrom: string | null;
   householdsPerFloor: string | null;
+  roomNumber: string | null;
   isPublished: boolean;
+  unpublishCategory: "DEAL" | "PAUSE" | "OTHER" | null;
+  unpublishNote: string | null;
+  expectedReleaseDate: string | null;
+  unpublishedAt: string | null;
   createdAt: Date;
 };
 
@@ -472,6 +492,11 @@ function mapListingRowToDetail(row: Listing): ListingDetail {
     contactName: row.contactName,
     contactPhone: row.contactPhone,
     ownerIdCardUrl: normalizeImageUrl(row.ownerIdCardUrl),
+    securityDeposit: meta.securityDeposit ?? null,
+    availableFrom: meta.availableFrom ?? null,
+    shortTermRent: meta.shortTermRent ?? null,
+    furnitureItems: normalizeItemList(meta.furnitureItems),
+    equipmentItems: normalizeItemList(meta.equipmentItems),
   };
 }
 
@@ -512,7 +537,7 @@ export function mapListingRowToCard(row: ListingRow): ListingCard {
   };
 }
 
-export async function getListings(filters: ListingFilters): Promise<ListingCard[]> {
+async function getListingsImpl(filters: ListingFilters): Promise<ListingCard[]> {
   if (!hasDatabaseUrl()) {
     return filterMockListings(filters);
   }
@@ -551,7 +576,7 @@ export async function getListings(filters: ListingFilters): Promise<ListingCard[
   return rows.map((row) => mapListingRowToCard(row));
 }
 
-export async function getListingById(id: string): Promise<ListingDetail | null> {
+async function getListingByIdImpl(id: string): Promise<ListingDetail | null> {
   if (!hasDatabaseUrl()) {
     return mockListingDetails[id] ?? null;
   }
@@ -564,7 +589,7 @@ export async function getListingById(id: string): Promise<ListingDetail | null> 
   return mapListingRowToDetail(listing);
 }
 
-export async function getListingsByIds(ids: string[]): Promise<ListingCard[]> {
+async function getListingsByIdsImpl(ids: string[]): Promise<ListingCard[]> {
   const uniqueIds = [...new Set(ids.filter(Boolean))].slice(0, 60);
   if (uniqueIds.length === 0) {
     return [];
@@ -582,7 +607,7 @@ export async function getListingsByIds(ids: string[]): Promise<ListingCard[]> {
   return uniqueIds.map((id) => map.get(id)).filter((listing): listing is ListingCard => Boolean(listing));
 }
 
-export async function getAdminListingById(id: string): Promise<AdminListingDetail | null> {
+async function getAdminListingByIdImpl(id: string): Promise<AdminListingDetail | null> {
   if (!hasDatabaseUrl()) {
     const detail = mockListingDetails[id];
     if (!detail) {
@@ -602,16 +627,21 @@ export async function getAdminListingById(id: string): Promise<AdminListingDetai
       shortTermRent: meta.shortTermRent ?? null,
       serviceFee: meta.serviceFee ?? null,
       registrationUse: meta.registrationUse ?? null,
+      specialMatters: meta.specialMatters ?? null,
+      otherFees: meta.otherFees ?? null,
       securityDeposit: meta.securityDeposit ?? null,
       availableFrom: meta.availableFrom ?? null,
       householdsPerFloor: meta.householdsPerFloor ?? null,
+      roomNumber: meta.roomNumber ?? null,
       furnitureProvided: normalizeFurnitureApplianceValue(meta.furnitureProvided),
       applianceProvided: normalizeFurnitureApplianceValue(meta.applianceProvided),
+      furnitureItems: normalizeItemList(meta.furnitureItems),
+      equipmentItems: normalizeItemList(meta.equipmentItems),
     };
   });
 }
 
-export async function getAdminListings(): Promise<AdminListing[]> {
+async function getAdminListingsImpl(): Promise<AdminListing[]> {
   if (!hasDatabaseUrl()) {
     return mockListings.map((listing) => ({
       id: listing.id,
@@ -651,6 +681,7 @@ export async function getAdminListings(): Promise<AdminListing[]> {
       ...collectLegacyImages(listing.images, listing.coverImage),
       videoUrl: null,
       createdByUsername: null,
+      contactName: "",
       furnitureProvided: null,
       applianceProvided: null,
       shortTermRent: null,
@@ -659,7 +690,12 @@ export async function getAdminListings(): Promise<AdminListing[]> {
       securityDeposit: null,
       availableFrom: null,
       householdsPerFloor: null,
+      roomNumber: null,
       isPublished: true,
+      unpublishCategory: null,
+      unpublishNote: null,
+      expectedReleaseDate: null,
+      unpublishedAt: null,
       createdAt: listing.createdAt,
     }));
   }
@@ -669,6 +705,7 @@ export async function getAdminListings(): Promise<AdminListing[]> {
       id: true,
       title: true,
       listingType: true,
+      contactName: true,
       propertyType: true,
       city: true,
       district: true,
@@ -717,12 +754,19 @@ export async function getAdminListings(): Promise<AdminListing[]> {
         createdByUsername: meta.createdByUsername ?? null,
         furnitureProvided: normalizeFurnitureApplianceValue(meta.furnitureProvided),
         applianceProvided: normalizeFurnitureApplianceValue(meta.applianceProvided),
+        furnitureItems: normalizeItemList(meta.furnitureItems),
+        equipmentItems: normalizeItemList(meta.equipmentItems),
         shortTermRent: meta.shortTermRent ?? null,
         serviceFee: meta.serviceFee ?? null,
         registrationUse: meta.registrationUse ?? null,
         securityDeposit: meta.securityDeposit ?? null,
         availableFrom: meta.availableFrom ?? null,
         householdsPerFloor: meta.householdsPerFloor ?? null,
+        roomNumber: meta.roomNumber ?? null,
+        unpublishCategory: meta.unpublishCategory ?? null,
+        unpublishNote: meta.unpublishNote ?? null,
+        expectedReleaseDate: meta.expectedReleaseDate ?? null,
+        unpublishedAt: meta.unpublishedAt ?? null,
         ...collectLegacyImages(row.images, row.coverImage),
       };
     }),
@@ -767,12 +811,15 @@ export type AdminListingRecord = {
   createdByUsername: string | null;
   furnitureProvided: FurnitureApplianceValue;
   applianceProvided: FurnitureApplianceValue;
+  furnitureItems?: string[];
+  equipmentItems?: string[];
   shortTermRent: string | null;
   serviceFee: string | null;
   registrationUse: string | null;
   securityDeposit: string | null;
   availableFrom: string | null;
   householdsPerFloor: string | null;
+  roomNumber: string | null;
   hasElevator: boolean | null;
   contactName: string;
   contactPhone: string;
@@ -781,11 +828,15 @@ export type AdminListingRecord = {
   images: string[];
   videoUrl: string | null;
   isPublished: boolean;
+  unpublishCategory: "DEAL" | "PAUSE" | "OTHER" | null;
+  unpublishNote: string | null;
+  expectedReleaseDate: string | null;
+  unpublishedAt: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
 
-export async function getAdminListingRecords(): Promise<AdminListingRecord[]> {
+async function getAdminListingRecordsImpl(): Promise<AdminListingRecord[]> {
   if (!hasDatabaseUrl()) return [];
   const rows = await prisma.listing.findMany({
     orderBy: { createdAt: "desc" },
@@ -830,12 +881,15 @@ export async function getAdminListingRecords(): Promise<AdminListingRecord[]> {
       createdByUsername: meta.createdByUsername ?? null,
       furnitureProvided: normalizeFurnitureApplianceValue(meta.furnitureProvided),
       applianceProvided: normalizeFurnitureApplianceValue(meta.applianceProvided),
+      furnitureItems: normalizeItemList(meta.furnitureItems),
+      equipmentItems: normalizeItemList(meta.equipmentItems),
       shortTermRent: meta.shortTermRent ?? null,
       serviceFee: meta.serviceFee ?? null,
       registrationUse: meta.registrationUse ?? null,
       securityDeposit: meta.securityDeposit ?? null,
       availableFrom: meta.availableFrom ?? null,
       householdsPerFloor: meta.householdsPerFloor ?? null,
+      roomNumber: meta.roomNumber ?? null,
       hasElevator: r.hasElevator,
       contactName: r.contactName,
       contactPhone: r.contactPhone,
@@ -843,6 +897,10 @@ export async function getAdminListingRecords(): Promise<AdminListingRecord[]> {
       ...collectLegacyImages(r.images, r.coverImage),
       videoUrl: r.videoUrl,
       isPublished: r.isPublished,
+      unpublishCategory: meta.unpublishCategory ?? null,
+      unpublishNote: meta.unpublishNote ?? null,
+      expectedReleaseDate: meta.expectedReleaseDate ?? null,
+      unpublishedAt: meta.unpublishedAt ?? null,
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
     };
@@ -862,7 +920,7 @@ export type AdminStats = {
   weekInquiries: number;
 };
 
-export async function getAdminStats(): Promise<AdminStats> {
+async function getAdminStatsImpl(): Promise<AdminStats> {
   if (!hasDatabaseUrl()) {
     return {
       rentPublished: 0,
@@ -920,7 +978,7 @@ export async function getAdminStats(): Promise<AdminStats> {
   };
 }
 
-export async function getInquiries(): Promise<InquiryItem[]> {
+async function getInquiriesImpl(): Promise<InquiryItem[]> {
   if (!hasDatabaseUrl()) {
     return mockInquiries;
   }
@@ -980,4 +1038,64 @@ function filterMockListings(filters: ListingFilters) {
       return true;
     })
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+}
+
+
+// ---------------------------------------------------------------------------
+// 資料庫連不上時的保護層：不讓整頁 500。
+// 開發環境前台退回示範資料，正式環境回傳空資料（不顯示假物件給客人）。
+// ---------------------------------------------------------------------------
+async function safeDb<T>(label: string, run: () => Promise<T>, fallback: () => T): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    const msg = error instanceof Error ? error.message.trim().split("\n").pop() : String(error);
+    console.error(`[db] ${label} 失敗，已降級：${msg}`);
+    return fallback();
+  }
+}
+
+const isDev = process.env.NODE_ENV !== "production";
+
+export function getListings(filters: ListingFilters): Promise<ListingCard[]> {
+  return safeDb("getListings", () => getListingsImpl(filters), () => (isDev ? filterMockListings(filters) : []));
+}
+
+export function getListingById(id: string): Promise<ListingDetail | null> {
+  return safeDb("getListingById", () => getListingByIdImpl(id), () => (isDev ? (mockListingDetails[id] ?? null) : null));
+}
+
+export function getListingsByIds(ids: string[]): Promise<ListingCard[]> {
+  return safeDb("getListingsByIds", () => getListingsByIdsImpl(ids), () => []);
+}
+
+export function getAdminListingById(id: string): Promise<AdminListingDetail | null> {
+  return safeDb("getAdminListingById", () => getAdminListingByIdImpl(id), () => null);
+}
+
+export function getAdminListings(): Promise<AdminListing[]> {
+  return safeDb("getAdminListings", () => getAdminListingsImpl(), () => []);
+}
+
+export function getAdminListingRecords(): Promise<AdminListingRecord[]> {
+  return safeDb("getAdminListingRecords", () => getAdminListingRecordsImpl(), () => []);
+}
+
+export function getAdminStats(): Promise<AdminStats> {
+  return safeDb("getAdminStats", () => getAdminStatsImpl(), () => ({
+    rentPublished: 0,
+    salePublished: 0,
+    unpublished: 0,
+    totalListings: 0,
+    todayNewListings: 0,
+    weekNewListings: 0,
+    totalInquiries: 0,
+    unhandledInquiries: 0,
+    todayInquiries: 0,
+    weekInquiries: 0,
+  }));
+}
+
+export function getInquiries(): Promise<InquiryItem[]> {
+  return safeDb("getInquiries", () => getInquiriesImpl(), () => []);
 }

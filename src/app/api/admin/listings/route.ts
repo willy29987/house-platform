@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentAdmin, requireAdminSession } from "@/lib/admin-auth";
+import { normalizeItemList } from "@/lib/furniture-appliance-value";
 import { toListingDescription } from "@/lib/listing-internal-meta";
 import { prisma } from "@/lib/prisma";
 import { listingInputSchema } from "@/lib/listing-validation";
@@ -45,12 +46,17 @@ export async function POST(request: Request) {
           createdByUsername: current.username,
           furnitureProvided: data.furnitureProvided ?? null,
           applianceProvided: data.applianceProvided ?? null,
+          furnitureItems: normalizeItemList(data.furnitureItems),
+          equipmentItems: normalizeItemList(data.equipmentItems),
           shortTermRent: data.shortTermRent ?? null,
           serviceFee: data.serviceFee ?? null,
           registrationUse: data.registrationUse ?? null,
+          specialMatters: data.specialMatters ?? null,
+          otherFees: data.otherFees ?? null,
           securityDeposit: data.securityDeposit ?? null,
           availableFrom: data.availableFrom ?? null,
           householdsPerFloor: data.householdsPerFloor ?? null,
+          roomNumber: data.roomNumber ?? null,
         }),
         features: data.features ?? [],
         city: data.city,

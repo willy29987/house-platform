@@ -71,3 +71,4 @@ npm run dev
 - 不提供公開刊登頁，僅內部登入後台進行新增/修改房源。
 - 收藏功能採瀏覽器 `localStorage`，免登入即可使用。
 - 後台登入入口：`/admin/login`，登入後可進入 `/admin`。
+- 同事使用正式站（Vercel、無需你的電腦開機）：見 [docs/colleague-admin-guide.md](docs/colleague-admin-guide.md)。

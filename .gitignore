@@ -36,6 +36,9 @@ yarn-error.log*
 # user-uploaded media (dev-only fallback; production uses Supabase Storage)
 /public/uploads
 
+# Cursor Simple Browser artifact (local only)
+/vscode:
+
 # vercel
 .vercel
 

@@ -2,6 +2,66 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "Cursor: 外網・手機（本機・內嵌）",
+      "command": "runCommands",
+      "args": {
+        "commands": [
+          {
+            "command": "simpleBrowser.api.open",
+            "args": [
+              "http://127.0.0.1:3000/mobile-preview"
+            ]
+          }
+        ]
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Cursor: 外網・電腦（本機・內嵌）",
+      "command": "runCommands",
+      "args": {
+        "commands": [
+          {
+            "command": "simpleBrowser.api.open",
+            "args": [
+              "http://127.0.0.1:3000/"
+            ]
+          }
+        ]
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Cursor: 外網・手機（內網・內嵌）",
+      "command": "runCommands",
+      "args": {
+        "commands": [
+          {
+            "command": "simpleBrowser.api.open",
+            "args": [
+              "http://127.0.0.1:3000/mobile-preview?lan=1"
+            ]
+          }
+        ]
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Cursor: 外網・電腦（內網・內嵌）",
+      "command": "runCommands",
+      "args": {
+        "commands": [
+          {
+            "command": "simpleBrowser.api.open",
+            "args": [
+              "http://127.0.0.1:3000/?lan=1"
+            ]
+          }
+        ]
+      },
+      "problemMatcher": []
+    },
+    {
       "label": "Cursor: 後台・手機（本機・內嵌）",
       "command": "runCommands",
       "args": {
@@ -23,7 +83,9 @@
         "commands": [
           {
             "command": "simpleBrowser.api.open",
-            "args": ["http://127.0.0.1:3000/admin/login"]
+            "args": [
+              "http://127.0.0.1:3000/admin/login"
+            ]
           }
         ]
       },
@@ -37,7 +99,7 @@
           {
             "command": "simpleBrowser.api.open",
             "args": [
-              "http://192.168.10.115:3000/mobile-preview?scope=admin&path=/admin/login&lan=1"
+              "http://127.0.0.1:3000/mobile-preview?scope=admin&path=%2Fadmin%2Flogin&lan=1"
             ]
           }
         ]
@@ -51,7 +113,9 @@
         "commands": [
           {
             "command": "simpleBrowser.api.open",
-            "args": ["http://192.168.10.115:3000/admin/login"]
+            "args": [
+              "http://127.0.0.1:3000/admin/login?lan=1"
+            ]
           }
         ]
       },

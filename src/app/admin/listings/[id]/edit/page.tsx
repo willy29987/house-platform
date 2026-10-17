@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 import { AdminListingForm, type AdminListingFormData } from "@/components/admin-listing-form";
 import { GoPublicSiteButton } from "@/components/go-public-site-button";
 import { getAdminListingById } from "@/lib/listings";
-import { furnitureApplianceToFormTri } from "@/lib/furniture-appliance-value";
 
 type AdminEditListingPageProps = {
   params: Promise<{ id: string }>;
@@ -75,14 +74,17 @@ export default async function AdminEditListingPage({ params }: AdminEditListingP
     contactName: listing.contactName,
     contactPhone: listing.contactPhone,
     ownerIdCardUrl: listing.ownerIdCardUrl ?? "",
-    furnitureProvided: furnitureApplianceToFormTri(listing.furnitureProvided),
-    applianceProvided: furnitureApplianceToFormTri(listing.applianceProvided),
+    furnitureItems: listing.furnitureItems ?? [],
+    equipmentItems: listing.equipmentItems ?? [],
     shortTermRent: listing.shortTermRent ?? "",
     serviceFee: listing.serviceFee ?? "",
     registrationUse: listing.registrationUse ?? "",
+    specialMatters: listing.specialMatters ?? "",
+    otherFees: listing.otherFees ?? "",
     securityDeposit: listing.securityDeposit ?? "",
     availableFrom: listing.availableFrom ?? "",
     householdsPerFloor: listing.householdsPerFloor ?? "",
+    roomNumber: listing.roomNumber ?? "",
     isPublished: listing.isPublished,
   };
 

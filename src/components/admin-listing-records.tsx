@@ -6,7 +6,13 @@ import type { AdminListingRecord } from "@/lib/listings";
 import { ToggleListingButton } from "@/components/toggle-listing-button";
 import { DownloadExcelButton } from "@/components/download-excel-button";
 import { formatParkingTypeLabel } from "@/lib/parking-type-label";
-import { formatFurnitureApplianceZh } from "@/lib/furniture-appliance-value";
+import { formatFurnitureAndEquipmentZh } from "@/lib/furniture-appliance-value";
+import {
+  formatRocDate,
+  getDaysUntilRelease,
+  isUpcomingRelease as computeIsUpcomingRelease,
+  unpublishCategoryLabel,
+} from "@/lib/listing-internal-meta";
 
 type Props = { records: AdminListingRecord[] };
 
@@ -81,11 +87,91 @@ export function AdminListingRecords({ records }: Props) {
       .filter((r) => {
         if (!k) return true;
         return `${r.title}${r.city}${r.district}${r.address}${r.community ?? ""}`.toLowerCase().includes(k);
+      })
+      .sort((a, b) => {
+        // 1) 即將釋出（未上架且距釋出日 ≤ 60 天）置頂
+        const aUp = computeIsUpcomingRelease({
+          isPublished: a.isPublished,
+          expectedReleaseDate: a.expectedReleaseDate,
+        });
+        const bUp = computeIsUpcomingRelease({
+          isPublished: b.isPublished,
+          expectedReleaseDate: b.expectedReleaseDate,
+        });
+        if (aUp && !bUp) return -1;
+        if (!aUp && bUp) return 1;
+        // 同為即將釋出 → 距離釋出近的優先
+        if (aUp && bUp) {
+          const aDays = getDaysUntilRelease(a.expectedReleaseDate) ?? Number.POSITIVE_INFINITY;
+          const bDays = getDaysUntilRelease(b.expectedReleaseDate) ?? Number.POSITIVE_INFINITY;
+          if (aDays !== bDays) return aDays - bDays;
+        }
+        // 2) 都未上架 → 下架時間新的優先（reverse chronological）
+        if (!a.isPublished && !b.isPublished) {
+          const aT = a.unpublishedAt ? new Date(a.unpublishedAt).getTime() : 0;
+          const bT = b.unpublishedAt ? new Date(b.unpublishedAt).getTime() : 0;
+          if (aT !== bT) return bT - aT;
+        }
+        // 3) 預設：建立時間新的優先
+        return b.createdAt.getTime() - a.createdAt.getTime();
       });
   }, [records, type, status, keyword]);
 
+  const upcomingList = useMemo(
+    () =>
+      records
+        .filter((r) => r.listingType === type)
+        .filter((r) =>
+          computeIsUpcomingRelease({
+            isPublished: r.isPublished,
+            expectedReleaseDate: r.expectedReleaseDate,
+          }),
+        )
+        .sort((a, b) => {
+          const aDays = getDaysUntilRelease(a.expectedReleaseDate) ?? Number.POSITIVE_INFINITY;
+          const bDays = getDaysUntilRelease(b.expectedReleaseDate) ?? Number.POSITIVE_INFINITY;
+          return aDays - bDays;
+        }),
+    [records, type],
+  );
+
   return (
     <div>
+      {upcomingList.length > 0 ? (
+        <div className="mb-4 rounded-2xl border border-amber-300 bg-amber-50 p-3 shadow-sm sm:p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="flex items-center gap-2 text-sm font-bold text-amber-900">
+              <span aria-hidden>🔔</span>
+              即將釋出提醒
+              <span className="rounded-full bg-amber-200/80 px-2 py-0.5 text-[11px] font-bold text-amber-900">
+                {upcomingList.length} 筆
+              </span>
+            </p>
+            <p className="text-[11px] text-amber-700">
+              下架後預計釋出日 ≤ 2 個月（60 天）的物件，已自動置頂於下方列表。
+            </p>
+          </div>
+          <ul className="mt-2 grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+            {upcomingList.slice(0, 6).map((r) => {
+              const days = getDaysUntilRelease(r.expectedReleaseDate);
+              return (
+                <li key={r.id} className="flex items-center justify-between gap-2 rounded-lg bg-white/80 px-2.5 py-1.5 text-xs ring-1 ring-amber-200">
+                  <Link href={`/listings/${r.id}`} className="line-clamp-1 min-w-0 flex-1 font-semibold text-amber-900 hover:underline">
+                    {r.title}
+                  </Link>
+                  <span className="shrink-0 rounded-full bg-amber-200/80 px-2 py-0.5 text-[11px] font-bold text-amber-900">
+                    {days === 0 ? "今日" : days != null ? `剩 ${days} 天` : "—"}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+          {upcomingList.length > 6 ? (
+            <p className="mt-1.5 text-[11px] text-amber-700">…另有 {upcomingList.length - 6} 筆，請於下方查看。</p>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <button type="button" onClick={() => setType("RENT")} className={`rounded-full px-3 py-1 text-xs ${type === "RENT" ? "bg-[#0b2545] text-white" : "bg-zinc-100 text-zinc-700"}`}>租賃</button>
         <button type="button" onClick={() => setType("SALE")} className={`rounded-full px-3 py-1 text-xs ${type === "SALE" ? "bg-[#0b2545] text-white" : "bg-zinc-100 text-zinc-700"}`}>買賣</button>
@@ -97,8 +183,58 @@ export function AdminListingRecords({ records }: Props) {
       </div>
 
       <div className="space-y-3">
-        {filtered.map((r) => (
-          <article key={r.id} className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
+        {filtered.map((r) => {
+          const upcoming = computeIsUpcomingRelease({
+            isPublished: r.isPublished,
+            expectedReleaseDate: r.expectedReleaseDate,
+          });
+          const daysUntilRelease = getDaysUntilRelease(r.expectedReleaseDate);
+          const articleClass = upcoming
+            ? "overflow-hidden rounded-2xl border-2 border-amber-400 bg-amber-50/40 shadow-sm ring-1 ring-amber-200"
+            : !r.isPublished
+              ? "overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50/60 shadow-sm"
+              : "overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm";
+          return (
+          <article key={r.id} className={articleClass}>
+            {upcoming ? (
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200 bg-amber-100/80 px-3 py-1.5 text-xs font-semibold text-amber-900">
+                <span className="inline-flex items-center gap-1.5">
+                  <span aria-hidden>⏰</span>
+                  即將釋出
+                  {daysUntilRelease != null ? (
+                    <span className="rounded-full bg-amber-200/80 px-2 py-0.5 text-[11px] font-bold text-amber-900">
+                      {daysUntilRelease === 0 ? "今日釋出" : `剩 ${daysUntilRelease} 天`}
+                    </span>
+                  ) : null}
+                  {r.unpublishCategory ? (
+                    <span className="text-[11px] font-medium text-amber-700">
+                      · {unpublishCategoryLabel(r.unpublishCategory)}
+                    </span>
+                  ) : null}
+                </span>
+                <span className="text-amber-800/90">
+                  下架 {r.unpublishedAt ? formatRocDate(r.unpublishedAt) : "—"}
+                  　·　預計釋出 {formatRocDate(r.expectedReleaseDate)}
+                </span>
+              </div>
+            ) : !r.isPublished ? (
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 bg-zinc-100/80 px-3 py-1.5 text-xs font-semibold text-zinc-700">
+                <span className="inline-flex items-center gap-1.5">
+                  <span aria-hidden>📦</span>
+                  已下架
+                  {r.unpublishCategory ? (
+                    <span className="text-[11px] font-medium text-zinc-500">
+                      · {unpublishCategoryLabel(r.unpublishCategory)}
+                    </span>
+                  ) : null}
+                </span>
+                <span className="text-zinc-600">
+                  下架 {r.unpublishedAt ? formatRocDate(r.unpublishedAt) : "—"}
+                  {r.expectedReleaseDate ? `　·　預計釋出 ${formatRocDate(r.expectedReleaseDate)}` : ""}
+                  {daysUntilRelease != null && daysUntilRelease > 60 ? `（${daysUntilRelease} 天後）` : ""}
+                </span>
+              </div>
+            ) : null}
             <div className="grid grid-cols-[168px_1fr] gap-0 sm:grid-cols-[210px_1fr] lg:grid-cols-[225px_1fr]">
               <div className="relative h-[132px] overflow-hidden bg-zinc-100 sm:h-[146px] lg:h-[150px]">
                 {(() => {
@@ -145,6 +281,11 @@ export function AdminListingRecords({ records }: Props) {
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
                     <Link href={`/listings/${r.id}`} className="line-clamp-1 text-sm font-bold leading-snug text-zinc-950 hover:text-[#0b2545] sm:text-base">
+                      {r.propertyType === "SUITE" && r.roomNumber ? (
+                        <span className="mr-1.5 rounded bg-[#0b2545]/10 px-1.5 py-0.5 align-middle text-[11px] font-bold text-[#0b2545]">
+                          房號 {r.roomNumber}
+                        </span>
+                      ) : null}
                       {r.title}
                     </Link>
                     <p className="mt-1 truncate text-xs font-medium text-zinc-600">
@@ -159,6 +300,14 @@ export function AdminListingRecords({ records }: Props) {
                       上架 {new Intl.DateTimeFormat("zh-TW").format(r.createdAt)}
                     </span>
                     <ToggleListingButton listingId={r.id} isPublished={r.isPublished} listingType={r.listingType} />
+                    <Link
+                      href={`/listings/${r.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-lg border border-[#0b2545]/20 bg-[#0b2545]/5 px-2.5 py-1 text-xs font-semibold text-[#0b2545] hover:bg-[#0b2545]/10"
+                    >
+                      查看廣告 ↗
+                    </Link>
                     <Link href={`/admin/listings/${r.id}/edit`} className="rounded-lg border border-zinc-300 px-2.5 py-1 text-xs font-semibold text-zinc-700 hover:bg-zinc-50">
                       修改內容
                     </Link>
@@ -178,6 +327,7 @@ export function AdminListingRecords({ records }: Props) {
             <details className="border-t border-zinc-100 bg-zinc-50 px-4 py-1 text-xs">
               <summary className="flex cursor-pointer list-none justify-center text-base font-bold leading-none text-zinc-600 [&::-webkit-details-marker]:hidden">⌄</summary>
               <div className="mt-1 grid gap-x-6 gap-y-1.5 sm:grid-cols-2 lg:grid-cols-3">
+                {r.propertyType === "SUITE" ? <DetailRow label="房間號碼" value={r.roomNumber} /> : null}
                 <DetailRow label="朝向" value={r.orientation} />
                 <DetailRow label="一層幾戶" value={r.householdsPerFloor} />
                 <DetailRow label="主建物" value={formatPing(r.areaMain)} />
@@ -202,14 +352,35 @@ export function AdminListingRecords({ records }: Props) {
                     <DetailRow label="能否短租" value={r.shortTermRent} />
                     <DetailRow label="服務費" value={r.serviceFee} />
                     <DetailRow label="押金" value={r.securityDeposit} />
-                    <DetailRow label="家具/家電" value={`${formatFurnitureApplianceZh(r.furnitureProvided)} / ${formatFurnitureApplianceZh(r.applianceProvided)}`} />
+                    <DetailRow label="家具/設備" value={formatFurnitureAndEquipmentZh({ furnitureItems: r.furnitureItems, furnitureLegacy: r.furnitureProvided, equipmentItems: r.equipmentItems, equipmentLegacy: r.applianceProvided })} />
                   </>
                 ) : null}
                 <DetailRow label="特色" value={r.features.filter(Boolean).join(" / ") || "—"} />
+                {!r.isPublished ? (
+                  <>
+                    <DetailRow label="下架類型" value={unpublishCategoryLabel(r.unpublishCategory)} />
+                    <DetailRow
+                      label="下架時間"
+                      value={r.unpublishedAt ? formatRocDate(r.unpublishedAt) : "—"}
+                    />
+                    <DetailRow
+                      label="預計釋出"
+                      value={r.expectedReleaseDate ? formatRocDate(r.expectedReleaseDate) : "—"}
+                    />
+                    {daysUntilRelease != null && daysUntilRelease >= 0 ? (
+                      <DetailRow
+                        label="距釋出"
+                        value={daysUntilRelease === 0 ? "今日" : `${daysUntilRelease} 天`}
+                      />
+                    ) : null}
+                    <DetailRow label="下架備註" value={r.unpublishNote} />
+                  </>
+                ) : null}
               </div>
             </details>
           </article>
-        ))}
+          );
+        })}
         {filtered.length === 0 ? <p className="rounded-xl bg-zinc-50 p-6 text-center text-sm text-zinc-500">沒有符合條件的物件</p> : null}
       </div>
     </div>

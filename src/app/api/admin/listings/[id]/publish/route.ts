@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 
 const toggleSchema = z.object({
   isPublished: z.boolean(),
-  unpublishCategory: z.enum(["DEAL", "PAUSE"]).optional(),
+  unpublishCategory: z.enum(["DEAL", "PAUSE", "OTHER"]).optional(),
   unpublishNote: z.string().optional(),
   expectedReleaseDate: z.string().optional(),
 });
@@ -37,7 +37,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
 
   const listing = await prisma.listing.findUnique({
     where: { id },
-    select: { id: true, description: true },
+    select: { id: true, description: true, listingType: true },
   });
 
   if (!listing) {
@@ -48,16 +48,9 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     return NextResponse.json({ ok: false, message: "你只能上下架自己刊登的廣告。" }, { status: 403 });
   }
 
-  if (!parsed.data.isPublished) {
-    if (!parsed.data.unpublishCategory) {
-      return NextResponse.json({ ok: false, message: "請選擇下架類型。" }, { status: 400 });
-    }
-    if (parsed.data.unpublishCategory === "PAUSE" && !parsed.data.unpublishNote?.trim()) {
-      return NextResponse.json({ ok: false, message: "請備註暫停出租原因。" }, { status: 400 });
-    }
-    if (parsed.data.unpublishCategory === "DEAL" && !parsed.data.expectedReleaseDate?.trim()) {
-      return NextResponse.json({ ok: false, message: "請填寫預計釋出日期。" }, { status: 400 });
-    }
+  // 下架類型僅租賃物件強制填寫（買賣物件下架不需要）
+  if (!parsed.data.isPublished && listing.listingType === "RENT" && !parsed.data.unpublishCategory) {
+    return NextResponse.json({ ok: false, message: "請選擇下架類型。" }, { status: 400 });
   }
 
   const meta = parseListingInternalMeta(listing.description);
@@ -70,6 +63,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
         unpublishCategory: parsed.data.isPublished ? null : (parsed.data.unpublishCategory ?? null),
         unpublishNote: parsed.data.isPublished ? null : (parsed.data.unpublishNote?.trim() || null),
         expectedReleaseDate: parsed.data.isPublished ? null : (parsed.data.expectedReleaseDate?.trim() || null),
+        unpublishedAt: parsed.data.isPublished ? null : (meta.unpublishedAt ?? new Date().toISOString()),
       }),
     },
   });

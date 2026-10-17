@@ -114,6 +114,29 @@ export function AdminUsersManager({ initialUsers, hasDatabase }: AdminUsersManag
     }, 1000);
   }
 
+  async function onChangeDisplayName(id: string, displayName: string) {
+    const trimmed = displayName.trim();
+    if (!trimmed) {
+      alert("請填寫業務姓名");
+      return;
+    }
+
+    const res = await fetch(`/api/admin/users/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ displayName: trimmed }),
+    });
+    const data = (await res.json()) as { ok: boolean; message?: string };
+
+    if (!res.ok || !data.ok) {
+      alert(data.message ?? "更新失敗");
+      return;
+    }
+
+    setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, displayName: trimmed } : u)));
+    router.refresh();
+  }
+
   async function onChangeRole(id: string, role: AdminUser["role"]) {
     const res = await fetch(`/api/admin/users/${id}`, {
       method: "PATCH",
@@ -133,15 +156,6 @@ export function AdminUsersManager({ initialUsers, hasDatabase }: AdminUsersManag
 
   return (
     <div className="space-y-6">
-      {/* 角色說明 */}
-      <div className="rounded-xl bg-blue-50/60 p-4 text-sm text-blue-900">
-        <p className="font-medium">權限說明</p>
-        <ul className="mt-2 list-inside list-disc space-y-0.5 text-xs">
-          <li><strong>最高管理員 (SUPER_ADMIN)</strong>：可操作物件 + 管理人員帳號</li>
-          <li><strong>業務 (OPERATOR)</strong>：可查看所有物件，僅能修改自己刊登的廣告</li>
-        </ul>
-      </div>
-
       <div>
         <h3 className="mb-3 text-base font-semibold text-zinc-900">目前帳號</h3>
         {users.length === 0 ? (
@@ -154,8 +168,36 @@ export function AdminUsersManager({ initialUsers, hasDatabase }: AdminUsersManag
                   <div className="flex items-center gap-3">
                     <div>
                       <p className="text-sm font-semibold text-zinc-900">{user.username}</p>
-                      <p className="text-xs text-zinc-600">{user.displayName || "未設定業務姓名"}</p>
-                      <p className="text-xs text-zinc-500">
+                      <div className="mt-1 flex max-w-xs flex-wrap items-center gap-2">
+                        <label className="sr-only" htmlFor={`display-name-${user.id}`}>
+                          業務姓名
+                        </label>
+                        <input
+                          id={`display-name-${user.id}`}
+                          type="text"
+                          defaultValue={user.displayName ?? ""}
+                          key={`${user.id}:${user.displayName ?? ""}`}
+                          placeholder="業務姓名"
+                          className="min-w-[8rem] flex-1 rounded-lg border border-zinc-300 px-2 py-1 text-xs text-zinc-800"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              void onChangeDisplayName(user.id, (e.target as HTMLInputElement).value);
+                            }
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            const input = (e.currentTarget.previousElementSibling as HTMLInputElement | null);
+                            if (input) void onChangeDisplayName(user.id, input.value);
+                          }}
+                          className="rounded-lg border border-zinc-300 px-2 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
+                        >
+                          儲存姓名
+                        </button>
+                      </div>
+                      <p className="mt-1 text-xs text-zinc-500">
                         建立於 {new Intl.DateTimeFormat("zh-TW").format(new Date(user.createdAt))}
                       </p>
                     </div>

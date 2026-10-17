@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ListingCardFavorite } from "@/components/listing-card-favorite";
 import { maskAddress, type ListingCard as ListingCardType } from "@/lib/listings";
 import { getMrtBadgeClass, shortMrtLine } from "@/lib/mrt";
+import { propertyTypeLabel } from "@/lib/property-type-label";
 
 function formatPrice(price: number, type: "RENT" | "SALE") {
   if (type === "RENT") {
@@ -133,7 +134,7 @@ export function ListingCardItem({ listing, className = "" }: Props) {
         {/* 社區／車位與價格同一列（省一列高度） */}
         <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1 border-t border-zinc-100 pt-1.5 pb-0">
           <span className="min-w-0 flex-1 line-clamp-1 text-[13px] font-semibold text-zinc-700">
-            🏢 {listing.community || (listing.hasElevator ? "電梯大樓" : "公寓")}
+            🏢 {listing.community || propertyTypeLabel(listing.propertyType)}
           </span>
           <div
             className={`flex shrink-0 items-baseline gap-0.5 tabular-nums ${

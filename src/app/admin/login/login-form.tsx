@@ -32,30 +32,36 @@ function LoginFormInner({ nextPath, initialError }: LoginFormProps) {
   const error = queryError || initialError || "";
 
   return (
-    <form method="POST" action="/api/admin/login-form" className="mt-6 grid gap-3">
+    <form method="POST" action="/api/admin/login-form" className="mt-6 grid gap-4">
       <input type="hidden" name="next" value={targetPath} />
-      <input
-        required
-        name="username"
-        value={username}
-        onChange={(event) => setUsername(event.target.value)}
-        placeholder="帳號"
-        autoComplete="username"
-        className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"
-      />
-      <input
-        required
-        type="password"
-        name="password"
-        value={password}
-        onChange={(event) => setPassword(event.target.value)}
-        placeholder="密碼"
-        autoComplete="current-password"
-        className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"
-      />
+      <label className="grid gap-1.5">
+        <span className="text-xs font-semibold text-zinc-600">帳號</span>
+        <input
+          required
+          name="username"
+          value={username}
+          onChange={(event) => setUsername(event.target.value)}
+          placeholder="請輸入帳號"
+          autoComplete="username"
+          className="rounded-xl border border-zinc-300 px-4 py-3.5 text-base outline-none ring-[#0b2545]/20 focus:border-[#0b2545] focus:ring-2"
+        />
+      </label>
+      <label className="grid gap-1.5">
+        <span className="text-xs font-semibold text-zinc-600">密碼</span>
+        <input
+          required
+          type="password"
+          name="password"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          placeholder="請輸入密碼"
+          autoComplete="current-password"
+          className="rounded-xl border border-zinc-300 px-4 py-3.5 text-base outline-none ring-[#0b2545]/20 focus:border-[#0b2545] focus:ring-2"
+        />
+      </label>
       <button
         type="submit"
-        className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700"
+        className="mt-1 rounded-xl bg-[#0b2545] px-4 py-3.5 text-base font-semibold text-white shadow-md hover:bg-[#1e3a8a] active:scale-[0.99]"
       >
         登入後台
       </button>

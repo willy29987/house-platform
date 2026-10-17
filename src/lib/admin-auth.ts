@@ -51,13 +51,18 @@ export async function getCurrentAdmin(): Promise<CurrentAdmin | null> {
 
   if (!process.env.DATABASE_URL) return null;
 
-  const { prisma } = await import("@/lib/prisma");
-  const user = await prisma.adminUser.findUnique({
-    where: { username },
-    select: { id: true, username: true, role: true },
-  });
-  if (!user) return null;
-  return { id: user.id, username: user.username, role: user.role as AdminRole, source: "db" };
+  try {
+    const { prisma } = await import("@/lib/prisma");
+    const user = await prisma.adminUser.findUnique({
+      where: { username },
+      select: { id: true, username: true, role: true },
+    });
+    if (!user) return null;
+    return { id: user.id, username: user.username, role: user.role as AdminRole, source: "db" };
+  } catch (error) {
+    console.error("[db] getCurrentAdmin 查詢失敗，已降級：", error instanceof Error ? error.message.trim().split("\n").pop() : error);
+    return null;
+  }
 }
 
 export async function requireAdminSession() {

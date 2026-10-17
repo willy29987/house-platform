@@ -20,8 +20,10 @@ enum ListingType {
 
 enum PropertyType {
   APARTMENT
+  ELEVATOR_BUILDING
   HOUSE
   STUDIO
+  SUITE
   OFFICE
   SHOP
 }

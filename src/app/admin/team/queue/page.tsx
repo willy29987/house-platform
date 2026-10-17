@@ -8,10 +8,15 @@ import { getContentDraftDelegate, missingContentDraftMessage } from "@/lib/conte
 async function getDrafts() {
   const contentDraft = getContentDraftDelegate();
   if (!contentDraft) return [];
-  return contentDraft.findMany({
-    orderBy: { createdAt: "desc" },
-    take: 100,
-  });
+  try {
+    return await contentDraft.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    });
+  } catch (error) {
+    console.error("[db] 內容草稿查詢失敗，已降級：", error instanceof Error ? error.message.trim().split("\n").pop() : error);
+    return [];
+  }
 }
 
 export default async function AdminTeamQueuePage() {

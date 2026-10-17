@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 更新 .vscode/tasks.json 內「後台・內網」任務的 Simple Browser 網址。
+ * 更新 .vscode/tasks.json 內「內網・內嵌」任務的 Simple Browser 網址。
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -12,8 +12,38 @@ const PORT = process.env.PORT || "3000";
 const WATCH = process.argv.includes("--watch");
 const INTERVAL_MS = Number(process.env.LAN_SYNC_MS || "4000");
 
-const LABEL_MOBILE = "Cursor: 後台・手機（內網・內嵌）";
-const LABEL_DESKTOP = "Cursor: 後台・電腦（內網・內嵌）";
+const LAN_TASKS = [
+  {
+    label: "Cursor: 外網・手機（內網・內嵌）",
+    buildUrl: (lanMobilePreview) => {
+      const u = new URL(lanMobilePreview);
+      u.searchParams.set("lan", "1");
+      return u.toString();
+    },
+    pathForFetch: "/mobile-preview",
+  },
+  {
+    label: "Cursor: 外網・電腦（內網・內嵌）",
+    buildUrl: (lanBase) => `${lanBase}/?lan=1`,
+    pathForFetch: "/",
+  },
+  {
+    label: "Cursor: 後台・手機（內網・內嵌）",
+    buildUrl: (lanMobilePreview) => {
+      const u = new URL(lanMobilePreview);
+      u.searchParams.set("scope", "admin");
+      u.searchParams.set("path", "/admin/login");
+      u.searchParams.set("lan", "1");
+      return u.toString();
+    },
+    pathForFetch: "/mobile-preview",
+  },
+  {
+    label: "Cursor: 後台・電腦（內網・內嵌）",
+    buildUrl: (lanBase) => `${lanBase}/admin/login?lan=1`,
+    pathForFetch: "/admin/login",
+  },
+];
 
 async function fetchLanUrl(pathSuffix) {
   const encoded = encodeURIComponent(pathSuffix);
@@ -28,12 +58,9 @@ async function fetchLanUrl(pathSuffix) {
   return data.localhost || `http://127.0.0.1:${PORT}${pathSuffix}`;
 }
 
-function adminMobilePreviewUrl(baseMobilePreviewUrl) {
-  const u = new URL(baseMobilePreviewUrl);
-  u.searchParams.set("scope", "admin");
-  u.searchParams.set("path", "/admin/login");
-  u.searchParams.set("lan", "1");
-  return u.toString();
+function lanBaseFromUrl(fullUrl) {
+  const u = new URL(fullUrl);
+  return `${u.protocol}//${u.host}`;
 }
 
 function setTaskBrowserUrl(tasks, label, url) {
@@ -44,35 +71,51 @@ function setTaskBrowserUrl(tasks, label, url) {
   task.args.commands[0].args = [url];
 }
 
-function patchTasks(adminMobileUrl, adminDesktopUrl) {
+function patchTasks(updates) {
   const raw = fs.readFileSync(TASKS_PATH, "utf8");
   const tasks = JSON.parse(raw);
+  let changed = false;
 
-  const mobileTask = tasks.tasks.find((t) => t.label === LABEL_MOBILE);
-  const desktopTask = tasks.tasks.find((t) => t.label === LABEL_DESKTOP);
-  const prevMobile = mobileTask?.args?.commands?.[0]?.args?.[0];
-  const prevDesktop = desktopTask?.args?.commands?.[0]?.args?.[0];
-  if (prevMobile === adminMobileUrl && prevDesktop === adminDesktopUrl) return false;
+  for (const { label, url } of updates) {
+    const task = tasks.tasks.find((t) => t.label === label);
+    const prev = task?.args?.commands?.[0]?.args?.[0];
+    if (prev === url) continue;
+    setTaskBrowserUrl(tasks, label, url);
+    changed = true;
+  }
 
-  setTaskBrowserUrl(tasks, LABEL_MOBILE, adminMobileUrl);
-  setTaskBrowserUrl(tasks, LABEL_DESKTOP, adminDesktopUrl);
-  fs.writeFileSync(TASKS_PATH, `${JSON.stringify(tasks, null, 2)}\n`);
-  return true;
+  if (changed) {
+    fs.writeFileSync(TASKS_PATH, `${JSON.stringify(tasks, null, 2)}\n`);
+  }
+  return changed;
 }
 
 async function syncOnce() {
-  const [mobileShell, adminDesktop] = await Promise.all([
+  const [lanMobilePreview, lanHome, lanAdminLogin] = await Promise.all([
     fetchLanUrl("/mobile-preview"),
+    fetchLanUrl("/"),
     fetchLanUrl("/admin/login"),
   ]);
-  const adminMobile = adminMobilePreviewUrl(mobileShell);
-  const changed = patchTasks(adminMobile, adminDesktop);
+  const lanBase = lanBaseFromUrl(lanHome);
+
+  const updates = LAN_TASKS.map((spec) => {
+    const seed =
+      spec.pathForFetch === "/mobile-preview" ? lanMobilePreview : lanBase;
+    const url =
+      spec.pathForFetch === "/admin/login"
+        ? spec.buildUrl(lanBase)
+        : spec.buildUrl(seed);
+    return { label: spec.label, url };
+  });
+
+  const changed = patchTasks(updates);
   if (changed) {
-    process.stderr.write(
-      `[lan-preview] 後台內嵌網址已更新\n  手機 ${adminMobile}\n  電腦 ${adminDesktop}\n`,
-    );
+    process.stderr.write("[lan-preview] 內嵌網址已更新\n");
+    for (const { label, url } of updates) {
+      process.stderr.write(`  ${label}\n    ${url}\n`);
+    }
   }
-  return { adminMobile, adminDesktop, changed };
+  return { updates, changed };
 }
 
 async function main() {
