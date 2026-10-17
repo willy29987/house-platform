@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AdminLogoutButton } from "@/components/admin-logout-button";
 import { BrandLogo } from "@/components/brand-logo";
+import { AdminCloudSyncBootstrap } from "@/components/admin-cloud-sync-bootstrap";
 
 export type AdminShellUser = {
   username: string;
@@ -60,6 +61,7 @@ export function AdminShell({ current, children }: AdminShellProps) {
 
   return (
     <div className="flex min-h-[100dvh] flex-col bg-[#f4f6f9]">
+      {current ? <AdminCloudSyncBootstrap /> : null}
       <header className="sticky top-0 z-40 border-b border-[#0b2545]/10 bg-white/95 shadow-sm backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-screen-2xl items-center gap-3 px-3 sm:h-16 sm:px-4 lg:px-6">
           <button

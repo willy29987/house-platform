@@ -1,0 +1,147 @@
+import {
+  ADMIN_CLOUD_DATA_KEYS,
+  type AdminCloudDataKey,
+} from "@/lib/admin-cloud-data-keys";
+export { ADMIN_CLOUD_DATA_KEYS } from "@/lib/admin-cloud-data-keys";
+import type { CommissionRecord } from "@/lib/commission-stats";
+import {
+  emptyOwnerTrackingStore,
+  type OwnerTrackingStore,
+} from "@/lib/owner-tracking-preview";
+import type { TenantManagerStore } from "@/lib/tenant-manager-storage";
+
+const pushTimers = new Map<AdminCloudDataKey, ReturnType<typeof setTimeout>>();
+
+async function fetchCloudPayload(key: AdminCloudDataKey): Promise<unknown | null> {
+  const res = await fetch(`/api/admin/cloud-data/${key}`, { credentials: "same-origin" });
+  if (!res.ok) return null;
+  const json = (await res.json()) as { ok?: boolean; payload?: unknown };
+  if (!json.ok) return null;
+  return json.payload ?? null;
+}
+
+export async function pushCloudPayload(key: AdminCloudDataKey, payload: unknown): Promise<void> {
+  await fetch(`/api/admin/cloud-data/${key}`, {
+    method: "PUT",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ payload }),
+  });
+}
+
+export function schedulePushCloudPayload(key: AdminCloudDataKey, payload: unknown, delayMs = 400): void {
+  const prev = pushTimers.get(key);
+  if (prev) clearTimeout(prev);
+  pushTimers.set(
+    key,
+    setTimeout(() => {
+      pushTimers.delete(key);
+      void pushCloudPayload(key, payload);
+    }, delayMs),
+  );
+}
+
+function hasOwnerTrackingData(store: OwnerTrackingStore): boolean {
+  return store.cases.length > 0 || store.followUps.length > 0;
+}
+
+function hasCommissionData(records: CommissionRecord[]): boolean {
+  return records.length > 0;
+}
+
+function hasTenantData(store: TenantManagerStore): boolean {
+  return store.tenants.length > 0 || Object.keys(store.rent).length > 0 || Object.keys(store.utility).length > 0;
+}
+
+let ownerTrackingHydrate: Promise<OwnerTrackingStore> | null = null;
+
+/** 屋主追蹤：雲端為準；雲端空且本機有資料則上傳一次 */
+export function hydrateOwnerTrackingStoreOnce(
+  readLocal: () => OwnerTrackingStore,
+  writeLocal: (store: OwnerTrackingStore) => void,
+): Promise<OwnerTrackingStore> {
+  if (!ownerTrackingHydrate) {
+    ownerTrackingHydrate = (async () => {
+      const local = readLocal();
+      const cloud = (await fetchCloudPayload(ADMIN_CLOUD_DATA_KEYS.ownerTracking)) as OwnerTrackingStore | null;
+      if (cloud && hasOwnerTrackingData(cloud)) {
+        writeLocal(cloud);
+        return cloud;
+      }
+      if (hasOwnerTrackingData(local)) {
+        await pushCloudPayload(ADMIN_CLOUD_DATA_KEYS.ownerTracking, local);
+        return local;
+      }
+      return emptyOwnerTrackingStore;
+    })();
+  }
+  return ownerTrackingHydrate;
+}
+
+let commissionHydrate: Promise<CommissionRecord[]> | null = null;
+
+export function hydrateCommissionRecordsOnce(
+  readLocal: () => CommissionRecord[],
+  writeLocal: (records: CommissionRecord[]) => void,
+): Promise<CommissionRecord[]> {
+  if (!commissionHydrate) {
+    commissionHydrate = (async () => {
+      const local = readLocal();
+      const cloud = (await fetchCloudPayload(ADMIN_CLOUD_DATA_KEYS.commissionRecords)) as CommissionRecord[] | null;
+      if (Array.isArray(cloud) && cloud.length > 0) {
+        writeLocal(cloud);
+        return cloud;
+      }
+      if (hasCommissionData(local)) {
+        await pushCloudPayload(ADMIN_CLOUD_DATA_KEYS.commissionRecords, local);
+        return local;
+      }
+      return [];
+    })();
+  }
+  return commissionHydrate;
+}
+
+let tenantHydrate: Promise<TenantManagerStore> | null = null;
+
+export function hydrateTenantManagerStoreOnce(
+  readLocal: () => TenantManagerStore,
+  writeLocal: (store: TenantManagerStore) => void,
+  empty: TenantManagerStore,
+): Promise<TenantManagerStore> {
+  if (!tenantHydrate) {
+    tenantHydrate = (async () => {
+      const local = readLocal();
+      const cloud = (await fetchCloudPayload(ADMIN_CLOUD_DATA_KEYS.tenantManager)) as TenantManagerStore | null;
+      if (cloud && hasTenantData(cloud)) {
+        writeLocal(cloud);
+        return cloud;
+      }
+      if (hasTenantData(local)) {
+        await pushCloudPayload(ADMIN_CLOUD_DATA_KEYS.tenantManager, local);
+        return local;
+      }
+      return empty;
+    })();
+  }
+  return tenantHydrate;
+}
+
+/** 進入後台時預先同步三種資料（與各頁 hydrateOnce 共用同一 Promise） */
+export function prefetchAdminCloudData(): void {
+  if (typeof window === "undefined") return;
+  void import("@/lib/owner-tracking-preview").then(({ loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreLocal }) =>
+    hydrateOwnerTrackingStoreOnce(loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreLocal),
+  );
+  void import("@/lib/commission-stats").then(({ loadCommissionRecordsLocal, persistCommissionRecordsLocal }) =>
+    hydrateCommissionRecordsOnce(loadCommissionRecordsLocal, persistCommissionRecordsLocal),
+  );
+  void import("@/lib/tenant-manager-storage").then(
+    ({ loadTenantManagerStoreLocal, persistTenantManagerStoreLocal, emptyTenantManagerStore }) =>
+      hydrateTenantManagerStoreOnce(
+        loadTenantManagerStoreLocal,
+        persistTenantManagerStoreLocal,
+        emptyTenantManagerStore,
+      ),
+  );
+}

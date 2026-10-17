@@ -7,7 +7,8 @@ import {
   formatFollowUpWhen,
   formatOwnerCaseAddress,
   emptyOwnerTrackingStore,
-  loadOwnerTrackingStore,
+  loadOwnerTrackingStoreLocal,
+  persistOwnerTrackingStoreLocal,
   newId,
   OWNER_TRACKING_STATUS_OPTIONS,
   deleteOwnerFollowUp,
@@ -21,6 +22,7 @@ import {
 import { COMMUNITY_PROPERTY_TYPES, PARKING_PRICE_INCLUDED_LABEL } from "@/lib/owner-tracking-form-ui";
 import { formatParkingTypeLabel } from "@/lib/parking-type-label";
 import { propertyTypeLabel } from "@/lib/property-type-label";
+import { hydrateOwnerTrackingStoreOnce } from "@/lib/admin-cloud-sync-client";
 
 type Props = {
   caseId: string;
@@ -38,8 +40,12 @@ export function OwnerTrackingDetail({ caseId, currentUsername }: Props) {
   const [flash, setFlash] = useState<string | null>(null);
 
   useEffect(() => {
-    setStore(loadOwnerTrackingStore());
-    setHydrated(true);
+    void hydrateOwnerTrackingStoreOnce(loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreLocal).then(
+      (next) => {
+        setStore(next);
+        setHydrated(true);
+      },
+    );
   }, [caseId]);
 
   const ownerCase = useMemo(

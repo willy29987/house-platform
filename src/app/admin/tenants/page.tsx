@@ -26,7 +26,7 @@ export default async function AdminTenantsPage() {
       </div>
 
       <div className="mb-4 rounded-xl bg-blue-50 px-4 py-3 text-xs text-blue-800 ring-1 ring-blue-200">
-        這是第一版示範：資料暫存於此瀏覽器（localStorage），換裝置或清除快取會看不到。確認流程後可再升級為雲端資料庫，供多人多裝置共用。
+        房客資料已同步至雲端（Supabase），本機與 Vercel 正式站共用。若資料是在本機 localhost 建立的，請在本機登入後台開啟「房客管理」讓系統自動上傳一次。
       </div>
 
       <TenantManager />

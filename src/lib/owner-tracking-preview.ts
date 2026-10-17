@@ -138,13 +138,9 @@ function normalizeCase(raw: Record<string, unknown>, fallbackAssignee = "—"): 
   };
 }
 
-export function loadOwnerTrackingStore(): OwnerTrackingStore {
-  if (typeof window === "undefined") {
-    return { cases: [], followUps: [] };
-  }
+function parseOwnerTrackingStoreRaw(raw: string | null, withInitialFollowUps = true): OwnerTrackingStore {
+  if (!raw) return emptyOwnerTrackingStore;
   try {
-    const raw = window.localStorage.getItem(OWNER_TRACKING_STORAGE_KEY);
-    if (!raw) return emptyOwnerTrackingStore;
     const parsed = JSON.parse(raw) as OwnerTrackingStore;
     const store: OwnerTrackingStore = {
       cases: (parsed.cases ?? []).map((c) => normalizeCase(c as unknown as Record<string, unknown>)),
@@ -153,14 +149,35 @@ export function loadOwnerTrackingStore(): OwnerTrackingStore {
         status: normalizeFollowUpStatus(String(f.status)),
       })),
     };
-    const withInitial = ensureInitialFollowUps(store);
-    if (withInitial.followUps.length !== store.followUps.length) {
-      saveOwnerTrackingStore(withInitial);
-    }
-    return withInitial;
+    return withInitialFollowUps ? ensureInitialFollowUps(store) : store;
   } catch {
     return emptyOwnerTrackingStore;
   }
+}
+
+/** 只讀本機快取（不觸發雲端上傳） */
+export function loadOwnerTrackingStoreLocal(): OwnerTrackingStore {
+  if (typeof window === "undefined") return emptyOwnerTrackingStore;
+  const raw = window.localStorage.getItem(OWNER_TRACKING_STORAGE_KEY);
+  return parseOwnerTrackingStoreRaw(raw, true);
+}
+
+export function persistOwnerTrackingStoreLocal(store: OwnerTrackingStore): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(OWNER_TRACKING_STORAGE_KEY, JSON.stringify(store));
+}
+
+export function loadOwnerTrackingStore(): OwnerTrackingStore {
+  if (typeof window === "undefined") {
+    return emptyOwnerTrackingStore;
+  }
+  const raw = window.localStorage.getItem(OWNER_TRACKING_STORAGE_KEY);
+  const base = parseOwnerTrackingStoreRaw(raw, false);
+  const withInitial = ensureInitialFollowUps(base);
+  if (withInitial.followUps.length !== base.followUps.length) {
+    saveOwnerTrackingStore(withInitial);
+  }
+  return withInitial;
 }
 
 /** 舊案件若無任何追蹤，補一筆「建立案件」以對齊聯絡次數與時間軸。 */
@@ -184,8 +201,13 @@ function ensureInitialFollowUps(store: OwnerTrackingStore): OwnerTrackingStore {
 }
 
 export function saveOwnerTrackingStore(store: OwnerTrackingStore) {
+  persistOwnerTrackingStoreLocal(store);
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(OWNER_TRACKING_STORAGE_KEY, JSON.stringify(store));
+  void import("@/lib/admin-cloud-sync-client").then(({ schedulePushCloudPayload }) => {
+    void import("@/lib/admin-cloud-data-keys").then(({ ADMIN_CLOUD_DATA_KEYS }) => {
+      schedulePushCloudPayload(ADMIN_CLOUD_DATA_KEYS.ownerTracking, store);
+    });
+  });
 }
 
 export function lastFollowUp(

@@ -65,7 +65,7 @@ export function emptyCommissionRecord(): CommissionRecord {
   };
 }
 
-export function loadCommissionRecords(): CommissionRecord[] {
+export function loadCommissionRecordsLocal(): CommissionRecord[] {
   if (typeof window === "undefined") return [];
   try {
     const raw = window.localStorage.getItem(COMMISSION_STORAGE_KEY);
@@ -77,9 +77,23 @@ export function loadCommissionRecords(): CommissionRecord[] {
   }
 }
 
-export function saveCommissionRecords(records: CommissionRecord[]): void {
+export function persistCommissionRecordsLocal(records: CommissionRecord[]): void {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(COMMISSION_STORAGE_KEY, JSON.stringify(records));
+}
+
+export function loadCommissionRecords(): CommissionRecord[] {
+  return loadCommissionRecordsLocal();
+}
+
+export function saveCommissionRecords(records: CommissionRecord[]): void {
+  persistCommissionRecordsLocal(records);
+  if (typeof window === "undefined") return;
+  void import("@/lib/admin-cloud-sync-client").then(({ schedulePushCloudPayload }) => {
+    void import("@/lib/admin-cloud-data-keys").then(({ ADMIN_CLOUD_DATA_KEYS }) => {
+      schedulePushCloudPayload(ADMIN_CLOUD_DATA_KEYS.commissionRecords, records);
+    });
+  });
 }
 
 export function appendCommissionRecord(record: CommissionRecord): CommissionRecord[] {

@@ -7,6 +7,8 @@ import {
   appendOwnerCase,
   OWNER_TRACKING_STATUS_OPTIONS,
   loadOwnerTrackingStore,
+  loadOwnerTrackingStoreLocal,
+  persistOwnerTrackingStoreLocal,
   type OwnerTrackingStatus,
   ownerCaseToInput,
   saveOwnerTrackingStore,
@@ -47,6 +49,7 @@ import {
 } from "@/lib/parking-type-label";
 import { PROPERTY_TYPE_OPTIONS, propertyTypeLabel } from "@/lib/property-type-label";
 import { TAIWAN_REGIONS } from "@/lib/taiwan-regions";
+import { hydrateOwnerTrackingStoreOnce } from "@/lib/admin-cloud-sync-client";
 
 type Props = {
   currentUsername: string;
@@ -133,7 +136,8 @@ export function OwnerTrackingNewForm({ currentUsername, mode = "create", caseId 
 
   useEffect(() => {
     if (!isEdit || !caseId) return;
-    const store = loadOwnerTrackingStore();
+    void hydrateOwnerTrackingStoreOnce(loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreLocal).then(
+      (store) => {
     const found = store.cases.find((c) => c.id === caseId);
     if (!found) {
       setError("找不到此案件");
@@ -154,6 +158,8 @@ export function OwnerTrackingNewForm({ currentUsername, mode = "create", caseId 
     const knownType = (PROPERTY_TYPE_OPTIONS as readonly string[]).includes(found.propertyType);
     setPropertyTypeCustom(!knownType);
     setHydrated(true);
+      },
+    );
   }, [isEdit, caseId]);
 
   function setField<K extends keyof OwnerCaseInput>(key: K, value: OwnerCaseInput[K]) {

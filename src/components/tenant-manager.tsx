@@ -1,6 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import {
+  emptyTenantManagerStore,
+  loadTenantManagerStoreLocal,
+  persistTenantManagerStoreLocal,
+  type TenantManagerStore,
+} from "@/lib/tenant-manager-storage";
+import {
+  ADMIN_CLOUD_DATA_KEYS,
+  hydrateTenantManagerStoreOnce,
+  schedulePushCloudPayload,
+} from "@/lib/admin-cloud-sync-client";
 
 /** 房客資料（自有出租用）。先存瀏覽器本機，確認流程後再接資料庫。 */
 type Tenant = {
@@ -33,32 +44,9 @@ type UtilityRecord = {
   gasAmount: number;
 };
 
-type Store = {
-  tenants: Tenant[];
-  /** key: `${tenantId}:${month}` */
-  rent: Record<string, RentRecord>;
-  utility: Record<string, UtilityRecord>;
-};
+type Store = TenantManagerStore;
 
-const STORAGE_KEY = "house-platform:tenant-manager:v1";
-
-const emptyStore: Store = { tenants: [], rent: {}, utility: {} };
-
-function loadStore(): Store {
-  if (typeof window === "undefined") return emptyStore;
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return emptyStore;
-    const parsed = JSON.parse(raw) as Store;
-    return {
-      tenants: parsed.tenants ?? [],
-      rent: parsed.rent ?? {},
-      utility: parsed.utility ?? {},
-    };
-  } catch {
-    return emptyStore;
-  }
-}
+const emptyStore = emptyTenantManagerStore;
 
 function currentMonth(): string {
   const d = new Date();
@@ -104,20 +92,29 @@ const emptyTenant = (): Tenant => ({
 export function TenantManager() {
   const [store, setStore] = useState<Store>(emptyStore);
   const [hydrated, setHydrated] = useState(false);
+  const [cloudSynced, setCloudSynced] = useState(false);
   const [month, setMonth] = useState<string>(currentMonth());
   const [editing, setEditing] = useState<Tenant | null>(null);
   const [reminderTenant, setReminderTenant] = useState<Tenant | null>(null);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    setStore(loadStore());
-    setHydrated(true);
+    void hydrateTenantManagerStoreOnce(
+      loadTenantManagerStoreLocal,
+      persistTenantManagerStoreLocal,
+      emptyStore,
+    ).then((next) => {
+      setStore(next);
+      setCloudSynced(true);
+      setHydrated(true);
+    });
   }, []);
 
   useEffect(() => {
-    if (!hydrated) return;
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
-  }, [store, hydrated]);
+    if (!hydrated || !cloudSynced) return;
+    persistTenantManagerStoreLocal(store);
+    schedulePushCloudPayload(ADMIN_CLOUD_DATA_KEYS.tenantManager, store);
+  }, [store, hydrated, cloudSynced]);
 
   const tenants = store.tenants;
 

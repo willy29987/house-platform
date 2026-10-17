@@ -5,7 +5,11 @@ import { useEffect, useState } from "react";
 import { AdminListingForm, type AdminListingFormData } from "@/components/admin-listing-form";
 import { createEmptyFormData } from "@/lib/listing-form-defaults";
 import { ownerCaseToListingDraft } from "@/lib/owner-case-to-listing-draft";
-import { loadOwnerTrackingStore } from "@/lib/owner-tracking-preview";
+import {
+  loadOwnerTrackingStoreLocal,
+  persistOwnerTrackingStoreLocal,
+} from "@/lib/owner-tracking-preview";
+import { hydrateOwnerTrackingStoreOnce } from "@/lib/admin-cloud-sync-client";
 
 type Props = {
   listingType: "RENT" | "SALE";
@@ -18,12 +22,19 @@ export function AdminNewListingClient({ listingType, fromOwnerCaseId }: Props) {
   const [sourceLabel, setSourceLabel] = useState<string | null>(null);
 
   useEffect(() => {
-    let data = createEmptyFormData(listingType);
-    let found: boolean | null = null;
-    let label: string | null = null;
+    let cancelled = false;
+    void (async () => {
+      const store = await hydrateOwnerTrackingStoreOnce(
+        loadOwnerTrackingStoreLocal,
+        persistOwnerTrackingStoreLocal,
+      );
+      if (cancelled) return;
 
-    if (fromOwnerCaseId?.trim()) {
-      const store = loadOwnerTrackingStore();
+      let data = createEmptyFormData(listingType);
+      let found: boolean | null = null;
+      let label: string | null = null;
+
+      if (fromOwnerCaseId?.trim()) {
       const ownerCase = store.cases.find((c) => c.id === fromOwnerCaseId.trim());
       if (ownerCase) {
         data = ownerCaseToListingDraft(ownerCase, listingType);
@@ -32,11 +43,15 @@ export function AdminNewListingClient({ listingType, fromOwnerCaseId }: Props) {
       } else {
         found = false;
       }
-    }
+      }
 
-    setInitialData(data);
-    setOwnerCaseFound(found);
-    setSourceLabel(label);
+      setInitialData(data);
+      setOwnerCaseFound(found);
+      setSourceLabel(label);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [fromOwnerCaseId, listingType]);
 
   if (!initialData) {

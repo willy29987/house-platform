@@ -1,15 +1,18 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CommissionRecordForm } from "@/components/commission-record-form";
 import {
   appendCommissionRecord,
   commissionDraftFromListing,
   hasCommissionForListing,
+  loadCommissionRecordsLocal,
+  persistCommissionRecordsLocal,
   type CommissionListingDraftSource,
   type CommissionRecord,
 } from "@/lib/commission-stats";
+import { hydrateCommissionRecordsOnce } from "@/lib/admin-cloud-sync-client";
 
 type Props = CommissionListingDraftSource & {
   isPublished: boolean;
@@ -27,6 +30,10 @@ export function ListingDealCloseButton({
   const [expectedReleaseDate, setExpectedReleaseDate] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    void hydrateCommissionRecordsOnce(loadCommissionRecordsLocal, persistCommissionRecordsLocal);
+  }, []);
 
   if (!isPublished) return null;
 

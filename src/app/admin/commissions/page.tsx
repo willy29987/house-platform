@@ -26,7 +26,7 @@ export default async function AdminCommissionsPage() {
       </div>
 
       <div className="mb-4 rounded-xl bg-blue-50 px-4 py-3 text-xs text-blue-800 ring-1 ring-blue-200">
-        這是第一版示範：資料暫存於此瀏覽器（localStorage），換裝置或清除快取會看不到。確認流程後可再升級為雲端資料庫，供多人多裝置共用。
+        服務費紀錄已同步至雲端（Supabase），本機、Vercel 正式站與同事後台會共用同一份資料。首次使用時，若本機瀏覽器裡已有舊資料，請在本機登入後台開啟此頁，系統會自動上傳一次。
       </div>
 
       <CommissionManager />

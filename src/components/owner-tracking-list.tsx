@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   formatOwnerCaseAddress,
-  loadOwnerTrackingStore,
+  loadOwnerTrackingStoreLocal,
+  persistOwnerTrackingStoreLocal,
   OWNER_TRACKING_STATUS_OPTIONS,
   statusBadgeClass,
   emptyOwnerTrackingStore,
@@ -21,6 +22,7 @@ import {
   buildOwnerTrackingWorkbook,
   downloadOwnerTrackingExcel,
 } from "@/lib/owner-tracking-excel-export";
+import { hydrateOwnerTrackingStoreOnce } from "@/lib/admin-cloud-sync-client";
 
 type Props = {
   currentUsername: string;
@@ -57,13 +59,21 @@ export function OwnerTrackingList({ currentUsername, isSuperAdmin = false }: Pro
   }, [store.cases]);
 
   useEffect(() => {
-    setStore(loadOwnerTrackingStore());
-    setHydrated(true);
+    void hydrateOwnerTrackingStoreOnce(loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreLocal).then(
+      (next) => {
+        setStore(next);
+        setHydrated(true);
+      },
+    );
   }, []);
 
   useEffect(() => {
     if (!hydrated) return;
-    const refresh = () => setStore(loadOwnerTrackingStore());
+    const refresh = () => {
+      void hydrateOwnerTrackingStoreOnce(loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreLocal).then(
+        setStore,
+      );
+    };
     window.addEventListener("focus", refresh);
     document.addEventListener("visibilitychange", refresh);
     return () => {

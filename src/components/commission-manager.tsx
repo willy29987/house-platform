@@ -7,10 +7,12 @@ import {
   commissionTypeLabel,
   emptyCommissionRecord,
   formatCommissionNtd,
-  loadCommissionRecords,
+  loadCommissionRecordsLocal,
+  persistCommissionRecordsLocal,
   saveCommissionRecords,
   type CommissionRecord,
 } from "@/lib/commission-stats";
+import { hydrateCommissionRecordsOnce } from "@/lib/admin-cloud-sync-client";
 
 function currentYear(): number {
   return new Date().getFullYear();
@@ -19,18 +21,24 @@ function currentYear(): number {
 export function CommissionManager() {
   const [records, setRecords] = useState<CommissionRecord[]>([]);
   const [hydrated, setHydrated] = useState(false);
+  const [cloudSynced, setCloudSynced] = useState(false);
   const [year, setYear] = useState<number>(currentYear());
   const [editing, setEditing] = useState<CommissionRecord | null>(null);
 
   useEffect(() => {
-    setRecords(loadCommissionRecords());
-    setHydrated(true);
+    void hydrateCommissionRecordsOnce(loadCommissionRecordsLocal, persistCommissionRecordsLocal).then(
+      (next) => {
+        setRecords(next);
+        setCloudSynced(true);
+        setHydrated(true);
+      },
+    );
   }, []);
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || !cloudSynced) return;
     saveCommissionRecords(records);
-  }, [records, hydrated]);
+  }, [records, hydrated, cloudSynced]);
 
   const years = useMemo(() => {
     const set = new Set<number>([currentYear()]);
