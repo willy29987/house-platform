@@ -21,8 +21,8 @@ async function fetchCloudPayload(key: AdminCloudDataKey): Promise<unknown | null
   return json.payload ?? null;
 }
 
-export async function pushCloudPayload(key: AdminCloudDataKey, payload: unknown): Promise<void> {
-  await fetch(`/api/admin/cloud-data/${key}`, {
+export async function pushCloudPayload(key: AdminCloudDataKey, payload: unknown): Promise<Response> {
+  return fetch(`/api/admin/cloud-data/${key}`, {
     method: "PUT",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },

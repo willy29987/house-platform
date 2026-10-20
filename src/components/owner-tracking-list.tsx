@@ -10,7 +10,6 @@ import {
   statusBadgeClass,
   deleteOwnerCase,
   emptyOwnerTrackingStore,
-  saveOwnerTrackingStore,
   type OwnerCasePreview,
   type OwnerFollowUpPreview,
   type OwnerTrackingStore,
@@ -21,7 +20,10 @@ import {
 } from "@/lib/owner-tracking-list-query";
 import { PROPERTY_TYPE_OPTIONS, propertyTypeLabel } from "@/lib/property-type-label";
 import {
+  ADMIN_CLOUD_DATA_KEYS,
   hydrateOwnerTrackingStoreOnce,
+  invalidateOwnerTrackingHydrateCache,
+  pushCloudPayload,
   refreshOwnerTrackingFromCloud,
 } from "@/lib/admin-cloud-sync-client";
 
@@ -63,6 +65,7 @@ export function OwnerTrackingList({
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const assigneeOptions = useMemo(() => {
     const names = new Set(staffUsernames.map((u) => u.trim()).filter(Boolean));
@@ -130,12 +133,27 @@ export function OwnerTrackingList({
     return rows.slice(start, start + PAGE_SIZE);
   }, [rows, page]);
 
-  function handleDeleteCase(caseId: string) {
-    if (!isSuperAdmin) return;
+  async function handleDeleteCase(caseId: string) {
+    if (!isSuperAdmin || deletingId) return;
     if (!window.confirm("確定刪除此案件？追蹤紀錄一併刪除，且無法復原。")) return;
-    const next = deleteOwnerCase(store, caseId);
-    saveOwnerTrackingStore(next);
-    setStore(next);
+    setDeletingId(caseId);
+    try {
+      const next = deleteOwnerCase(store, caseId);
+      persistOwnerTrackingStoreLocal(next);
+      setStore(next);
+      invalidateOwnerTrackingHydrateCache();
+      const res = await pushCloudPayload(ADMIN_CLOUD_DATA_KEYS.ownerTracking, next);
+      if (!res.ok) {
+        throw new Error("雲端儲存失敗，請重新整理後再試");
+      }
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "刪除失敗");
+      void refreshOwnerTrackingFromCloud(loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreLocal).then(
+        setStore,
+      );
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   async function onExportExcel() {

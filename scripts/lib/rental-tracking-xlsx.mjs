@@ -21,6 +21,7 @@ function mapRentalProgressToStatus(row) {
   if (rentOut || /已出租|結案|已租/.test(combined)) return "已出租結案";
   if (/可帶看|只可帶看/.test(combined)) return "只可帶看";
   if (/未接/.test(progress)) return "未接";
+  if (/未同意/.test(progress)) return "持續聯繫";
   if (/無效|重複/.test(combined)) return "無效／重複";
   if (/同意|委託/.test(combined)) return "同意委託";
   return "持續聯繫";
