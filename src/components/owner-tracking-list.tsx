@@ -28,6 +28,8 @@ import {
 type Props = {
   currentUsername: string;
   isSuperAdmin?: boolean;
+  /** 後台帳號（含無案件的 R001 等），供負責人篩選 */
+  staffUsernames?: string[];
 };
 
 const PAGE_SIZE = 100;
@@ -44,7 +46,11 @@ function formatListWhen(iso: string): string {
   return `${md} ${hm}`;
 }
 
-export function OwnerTrackingList({ currentUsername, isSuperAdmin = false }: Props) {
+export function OwnerTrackingList({
+  currentUsername,
+  isSuperAdmin = false,
+  staffUsernames = [],
+}: Props) {
   const [store, setStore] = useState<OwnerTrackingStore>(emptyOwnerTrackingStore);
   const [hydrated, setHydrated] = useState(false);
   const [keyword, setKeyword] = useState("");
@@ -59,11 +65,13 @@ export function OwnerTrackingList({ currentUsername, isSuperAdmin = false }: Pro
   const [page, setPage] = useState(1);
 
   const assigneeOptions = useMemo(() => {
-    const names = new Set(
-      store.cases.map((c) => c.assignee.trim()).filter((name) => name && name !== "—"),
-    );
+    const names = new Set(staffUsernames.map((u) => u.trim()).filter(Boolean));
+    for (const c of store.cases) {
+      const a = c.assignee.trim();
+      if (a && a !== "—") names.add(a);
+    }
     return Array.from(names).sort((a, b) => a.localeCompare(b, "zh-Hant"));
-  }, [store.cases]);
+  }, [store.cases, staffUsernames]);
 
   useEffect(() => {
     void hydrateOwnerTrackingStoreOnce(loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreLocal)
