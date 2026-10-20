@@ -152,6 +152,7 @@ https://house-platform-xxx.vercel.app
 4. 完整說明與可複製給同事的文案：[docs/colleague-admin-guide.md](docs/colleague-admin-guide.md)  
 5. 管理員勾選清單：[docs/colleague-onboarding-checklist.md](docs/colleague-onboarding-checklist.md)  
 6. 若屋主追蹤等資料是在本機 Cursor／內嵌瀏覽器建的：`npm run push:local-admin-data`（寫入 Supabase，Vercel 共用）
+7. 若歷史資料在 **Google 試算表**：下載 xlsx 到 `exports/`，依 [docs/google-sheets-import.md](docs/google-sheets-import.md) 執行 `npm run import:spreadsheet`
 
 ---
 

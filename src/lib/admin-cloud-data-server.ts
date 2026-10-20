@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { ADMIN_CLOUD_DATA_KEYS, type AdminCloudDataKey } from "@/lib/admin-cloud-data-keys";
 import { prisma } from "@/lib/prisma";
 import {
+  mergeOwnerTrackingStores,
   normalizeOwnerTrackingStore,
   type OwnerTrackingStore,
 } from "@/lib/owner-tracking-preview";
@@ -20,7 +21,16 @@ export async function readAdminCloudPayload(key: AdminCloudDataKey): Promise<unk
 }
 
 export async function writeAdminCloudPayload(key: AdminCloudDataKey, payload: unknown): Promise<void> {
-  const toWrite = preparePayloadForStorage(key, payload);
+  let toWrite = preparePayloadForStorage(key, payload);
+  if (key === ADMIN_CLOUD_DATA_KEYS.ownerTracking) {
+    const existing = await readAdminCloudPayload(key);
+    if (existing && typeof existing === "object") {
+      toWrite = mergeOwnerTrackingStores(
+        existing as OwnerTrackingStore,
+        toWrite as OwnerTrackingStore,
+      );
+    }
+  }
   await prisma.adminCloudData.upsert({
     where: { key },
     create: { key, payload: toWrite as Prisma.InputJsonValue },

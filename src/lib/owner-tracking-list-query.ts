@@ -73,9 +73,5 @@ export function buildOwnerTrackingListRows(
         .toLowerCase();
       return hay.includes(q);
     })
-    .sort((a, b) => {
-      const ta = a.last?.createdAt ?? a.case.createdAt;
-      const tb = b.last?.createdAt ?? b.case.createdAt;
-      return tb.localeCompare(ta);
-    });
+    .sort((a, b) => b.case.createdAt.localeCompare(a.case.createdAt));
 }

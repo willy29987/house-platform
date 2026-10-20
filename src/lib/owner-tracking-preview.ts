@@ -225,13 +225,34 @@ export function saveOwnerTrackingStore(store: OwnerTrackingStore) {
   });
 }
 
-/** 業務只能看 assignee 為自己的案件；最高管理員看全部 */
+/** 合併雲端寫入：以 id 聯集，避免舊版 localStorage 覆蓋整庫 */
+export function mergeOwnerTrackingStores(
+  base: OwnerTrackingStore,
+  overlay: OwnerTrackingStore,
+): OwnerTrackingStore {
+  const casesById = new Map(base.cases.map((c) => [c.id, c]));
+  for (const c of overlay.cases) {
+    casesById.set(c.id, c);
+  }
+  const followById = new Map(base.followUps.map((f) => [f.id, f]));
+  for (const f of overlay.followUps) {
+    followById.set(f.id, f);
+  }
+  return normalizeOwnerTrackingStore({
+    cases: [...casesById.values()],
+    followUps: [...followById.values()],
+  });
+}
+
+/** 業務可看自己的案件；未分配（—）為共用池；最高管理員看全部 */
 export function canViewOwnerTrackingCase(
   ownerCase: Pick<OwnerCasePreview, "assignee">,
   opts: { currentUsername: string; isSuperAdmin: boolean },
 ): boolean {
   if (opts.isSuperAdmin) return true;
-  return ownerCase.assignee.trim() === opts.currentUsername.trim();
+  const a = ownerCase.assignee.trim();
+  if (!a || a === "—") return true;
+  return a === opts.currentUsername.trim();
 }
 
 export function lastFollowUp(

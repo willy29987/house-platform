@@ -45,6 +45,7 @@ https://_______________/admin/login
 
 注意：
 · 屋主追蹤、服務費、房客管理已同步 Supabase 雲端；若資料是在 **localhost** 建的，請在本機登入後台各開一次對應頁面，會自動上傳。物件刊登與圖片本來就在雲端。
+· 舊 **Google 試算表** 請管理員依 [google-sheets-import.md](google-sheets-import.md) 匯入正式站，勿再只用試算表當主檔。
 · 任何時間都可使用，與辦公室電腦是否開機無關。
 ```
 

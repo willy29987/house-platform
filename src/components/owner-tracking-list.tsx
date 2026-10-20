@@ -18,12 +18,17 @@ import {
   listCommunityCell,
 } from "@/lib/owner-tracking-list-query";
 import { PROPERTY_TYPE_OPTIONS, propertyTypeLabel } from "@/lib/property-type-label";
-import { hydrateOwnerTrackingStoreOnce } from "@/lib/admin-cloud-sync-client";
+import {
+  hydrateOwnerTrackingStoreOnce,
+  refreshOwnerTrackingFromCloud,
+} from "@/lib/admin-cloud-sync-client";
 
 type Props = {
   currentUsername: string;
   isSuperAdmin?: boolean;
 };
+
+const PAGE_SIZE = 100;
 
 /** 表頭與資料列共用，避免巢狀 grid 錯位 */
 const LIST_ROW_GRID =
@@ -49,6 +54,7 @@ export function OwnerTrackingList({ currentUsername, isSuperAdmin = false }: Pro
   const [syncError, setSyncError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
   const assigneeOptions = useMemo(() => {
     const names = new Set(
@@ -74,7 +80,7 @@ export function OwnerTrackingList({ currentUsername, isSuperAdmin = false }: Pro
   useEffect(() => {
     if (!hydrated) return;
     const refresh = () => {
-      void hydrateOwnerTrackingStoreOnce(loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreLocal).then(
+      void refreshOwnerTrackingFromCloud(loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreLocal).then(
         setStore,
       );
     };
@@ -98,6 +104,21 @@ export function OwnerTrackingList({ currentUsername, isSuperAdmin = false }: Pro
       }),
     [store, keyword, statusFilter, propertyTypeFilter, assigneeFilter, currentUsername, isSuperAdmin],
   );
+
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+
+  useEffect(() => {
+    setPage(1);
+  }, [keyword, statusFilter, propertyTypeFilter, assigneeFilter]);
+
+  useEffect(() => {
+    setPage((p) => Math.min(p, totalPages));
+  }, [totalPages]);
+
+  const pageRows = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return rows.slice(start, start + PAGE_SIZE);
+  }, [rows, page]);
 
   async function onExportExcel() {
     setExporting(true);
@@ -212,6 +233,23 @@ export function OwnerTrackingList({ currentUsername, isSuperAdmin = false }: Pro
         </Link>
       </div>
 
+      {rows.length > 0 ? (
+        <p className="text-sm text-zinc-600">
+          共 <span className="font-semibold tabular-nums text-zinc-900">{rows.length.toLocaleString("zh-TW")}</span>{" "}
+          筆符合條件
+          {rows.length > PAGE_SIZE ? (
+            <>
+              {" "}
+              · 此頁顯示{" "}
+              <span className="font-medium tabular-nums">
+                {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, rows.length)}
+              </span>{" "}
+              · 第 {page} / {totalPages} 頁（每頁 {PAGE_SIZE} 筆）
+            </>
+          ) : null}
+        </p>
+      ) : null}
+
       <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white shadow-sm">
         <div className="min-w-[62rem]">
         <div
@@ -238,14 +276,114 @@ export function OwnerTrackingList({ currentUsername, isSuperAdmin = false }: Pro
               {store.cases.length === 0 ? "尚無案件，請按「新增案件」建立" : "沒有符合條件的案件"}
             </li>
           ) : (
-            rows.map(({ case: c, last, contactCount }) => (
+            pageRows.map(({ case: c, last, contactCount }) => (
               <CaseRow key={c.id} item={c} last={last} contactCount={contactCount} />
             ))
           )}
         </ul>
         </div>
       </div>
+
+      {rows.length > PAGE_SIZE ? (
+        <OwnerTrackingPagination
+          page={page}
+          totalPages={totalPages}
+          onPageChange={setPage}
+        />
+      ) : null}
     </div>
+  );
+}
+
+function OwnerTrackingPagination({
+  page,
+  totalPages,
+  onPageChange,
+}: {
+  page: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+}) {
+  const windowPages = useMemo(() => {
+    const maxButtons = 5;
+    let start = Math.max(1, page - Math.floor(maxButtons / 2));
+    let end = start + maxButtons - 1;
+    if (end > totalPages) {
+      end = totalPages;
+      start = Math.max(1, end - maxButtons + 1);
+    }
+    const list: number[] = [];
+    for (let i = start; i <= end; i++) list.push(i);
+    return list;
+  }, [page, totalPages]);
+
+  return (
+    <nav
+      className="flex flex-wrap items-center justify-center gap-2 py-2"
+      aria-label="屋主追蹤分頁"
+    >
+      <button
+        type="button"
+        disabled={page <= 1}
+        onClick={() => onPageChange(page - 1)}
+        className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        上一頁
+      </button>
+      <div className="flex flex-wrap items-center justify-center gap-1">
+        {windowPages[0]! > 1 ? (
+          <>
+            <PageButton n={1} current={page} onSelect={onPageChange} />
+            {windowPages[0]! > 2 ? <span className="px-1 text-zinc-400">…</span> : null}
+          </>
+        ) : null}
+        {windowPages.map((n) => (
+          <PageButton key={n} n={n} current={page} onSelect={onPageChange} />
+        ))}
+        {windowPages[windowPages.length - 1]! < totalPages ? (
+          <>
+            {windowPages[windowPages.length - 1]! < totalPages - 1 ? (
+              <span className="px-1 text-zinc-400">…</span>
+            ) : null}
+            <PageButton n={totalPages} current={page} onSelect={onPageChange} />
+          </>
+        ) : null}
+      </div>
+      <button
+        type="button"
+        disabled={page >= totalPages}
+        onClick={() => onPageChange(page + 1)}
+        className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        下一頁
+      </button>
+    </nav>
+  );
+}
+
+function PageButton({
+  n,
+  current,
+  onSelect,
+}: {
+  n: number;
+  current: number;
+  onSelect: (page: number) => void;
+}) {
+  const active = n === current;
+  return (
+    <button
+      type="button"
+      aria-current={active ? "page" : undefined}
+      onClick={() => onSelect(n)}
+      className={`min-w-[2.25rem] rounded-lg px-2 py-1.5 text-sm font-medium tabular-nums ${
+        active
+          ? "bg-[#0b2545] text-white"
+          : "border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50"
+      }`}
+    >
+      {n}
+    </button>
   );
 }
 

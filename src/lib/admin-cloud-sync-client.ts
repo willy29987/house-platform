@@ -56,7 +56,11 @@ function hasTenantData(store: TenantManagerStore): boolean {
 
 let ownerTrackingHydrate: Promise<OwnerTrackingStore> | null = null;
 
-/** 屋主追蹤：雲端為準；雲端空且本機有資料則上傳一次 */
+export function invalidateOwnerTrackingHydrateCache(): void {
+  ownerTrackingHydrate = null;
+}
+
+/** 屋主追蹤：雲端為準；雲端空且本機有資料則上傳一次（同步失敗時絕不覆寫雲端） */
 export function hydrateOwnerTrackingStoreOnce(
   readLocal: () => OwnerTrackingStore,
   writeLocal: (store: OwnerTrackingStore) => void,
@@ -65,13 +69,25 @@ export function hydrateOwnerTrackingStoreOnce(
     ownerTrackingHydrate = (async () => {
       try {
         const local = normalizeOwnerTrackingStore(readLocal());
-        const rawCloud = (await fetchCloudPayload(ADMIN_CLOUD_DATA_KEYS.ownerTracking)) as OwnerTrackingStore | null;
+        const res = await fetch(`/api/admin/cloud-data/${ADMIN_CLOUD_DATA_KEYS.ownerTracking}`, {
+          credentials: "same-origin",
+        });
+        const cloudFetchOk = res.ok;
+        let rawCloud: OwnerTrackingStore | null = null;
+        if (cloudFetchOk) {
+          const json = (await res.json()) as { ok?: boolean; payload?: unknown };
+          rawCloud = (json.payload as OwnerTrackingStore | undefined) ?? null;
+        }
         const cloud = rawCloud ? normalizeOwnerTrackingStore(rawCloud) : null;
         if (cloud && hasOwnerTrackingData(cloud)) {
           writeLocal(cloud);
           return cloud;
         }
         if (hasOwnerTrackingData(local)) {
+          if (!cloudFetchOk) {
+            console.warn("[owner-tracking] 雲端讀取失敗，僅顯示本機快取，不上傳以免覆蓋雲端");
+            return local;
+          }
           await pushCloudPayload(ADMIN_CLOUD_DATA_KEYS.ownerTracking, local);
           return local;
         }
@@ -84,6 +100,15 @@ export function hydrateOwnerTrackingStoreOnce(
     })();
   }
   return ownerTrackingHydrate;
+}
+
+/** 強制重新自雲端拉資料（例如分頁重新聚焦） */
+export function refreshOwnerTrackingFromCloud(
+  readLocal: () => OwnerTrackingStore,
+  writeLocal: (store: OwnerTrackingStore) => void,
+): Promise<OwnerTrackingStore> {
+  invalidateOwnerTrackingHydrateCache();
+  return hydrateOwnerTrackingStoreOnce(readLocal, writeLocal);
 }
 
 let commissionHydrate: Promise<CommissionRecord[]> | null = null;
