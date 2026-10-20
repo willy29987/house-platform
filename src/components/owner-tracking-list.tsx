@@ -8,7 +8,9 @@ import {
   persistOwnerTrackingStoreLocal,
   OWNER_TRACKING_STATUS_OPTIONS,
   statusBadgeClass,
+  deleteOwnerCase,
   emptyOwnerTrackingStore,
+  saveOwnerTrackingStore,
   type OwnerCasePreview,
   type OwnerFollowUpPreview,
   type OwnerTrackingStore,
@@ -30,9 +32,9 @@ type Props = {
 
 const PAGE_SIZE = 100;
 
-/** 表頭與資料列共用，避免巢狀 grid 錯位 */
+/** 表頭與資料列共用（無負責人欄；上次備註加寬） */
 const LIST_ROW_GRID =
-  "sm:grid sm:grid-cols-[minmax(0,4fr)_6rem_8.5rem_6.5rem_7rem_minmax(0,1fr)_2.25rem_5.75rem_3.25rem_2.75rem] sm:items-center sm:gap-x-2";
+  "sm:grid sm:grid-cols-[minmax(0,3.5fr)_5.5rem_8rem_6rem_6.5rem_minmax(0,2.2fr)_5.5rem_2.5rem_4.5rem] sm:items-center sm:gap-x-3";
 
 function formatListWhen(iso: string): string {
   const d = new Date(iso);
@@ -119,6 +121,14 @@ export function OwnerTrackingList({ currentUsername, isSuperAdmin = false }: Pro
     const start = (page - 1) * PAGE_SIZE;
     return rows.slice(start, start + PAGE_SIZE);
   }, [rows, page]);
+
+  function handleDeleteCase(caseId: string) {
+    if (!isSuperAdmin) return;
+    if (!window.confirm("確定刪除此案件？追蹤紀錄一併刪除，且無法復原。")) return;
+    const next = deleteOwnerCase(store, caseId);
+    saveOwnerTrackingStore(next);
+    setStore(next);
+  }
 
   async function onExportExcel() {
     setExporting(true);
@@ -261,13 +271,12 @@ export function OwnerTrackingList({ currentUsername, isSuperAdmin = false }: Pro
           <span className="min-w-0 truncate">網址</span>
           <span className="min-w-0 truncate">目前狀態</span>
           <span className="min-w-0 truncate">上次備註</span>
-          <span className="min-w-0 text-center">電訪</span>
           <span className="min-w-0 leading-snug tabular-nums">
             建立時間
             <br />
             上次追蹤
           </span>
-          <span className="min-w-0 truncate text-center">負責人</span>
+          <span className="min-w-0 text-center">電訪</span>
           <span className="text-center">操作</span>
         </div>
         <ul className="divide-y divide-zinc-100">
@@ -277,7 +286,14 @@ export function OwnerTrackingList({ currentUsername, isSuperAdmin = false }: Pro
             </li>
           ) : (
             pageRows.map(({ case: c, last, contactCount }) => (
-              <CaseRow key={c.id} item={c} last={last} contactCount={contactCount} />
+              <CaseRow
+                key={c.id}
+                item={c}
+                last={last}
+                contactCount={contactCount}
+                isSuperAdmin={isSuperAdmin}
+                onDelete={() => handleDeleteCase(c.id)}
+              />
             ))
           )}
         </ul>
@@ -408,14 +424,39 @@ function formatListUrl(url: string | null | undefined): string {
   }
 }
 
+function TrashIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M3 6h18" />
+      <path d="M8 6V4h8v2" />
+      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+      <path d="M10 11v6" />
+      <path d="M14 11v6" />
+    </svg>
+  );
+}
+
 function CaseRow({
   item,
   last,
   contactCount,
+  isSuperAdmin,
+  onDelete,
 }: {
   item: OwnerCasePreview;
   last: OwnerFollowUpPreview | null;
   contactCount: number;
+  isSuperAdmin: boolean;
+  onDelete: () => void;
 }) {
   const urlHref = normalizeListingUrl(item.listingUrl);
   const urlLabel = formatListUrl(item.listingUrl);
@@ -471,11 +512,12 @@ function CaseRow({
           )}
         </div>
 
-        <p className="min-w-0 truncate text-xs text-zinc-600" title={last?.note?.trim() || undefined}>
+        <p
+          className="min-w-0 line-clamp-2 text-xs leading-snug text-zinc-600"
+          title={last?.note?.trim() || undefined}
+        >
           {last?.note?.trim() ? last.note.trim() : "—"}
         </p>
-
-        <p className="min-w-0 text-center text-xs tabular-nums text-zinc-600">{contactCount}</p>
 
         <div className="min-w-0 space-y-0.5 text-[11px] leading-tight tabular-nums text-zinc-600 sm:text-xs">
           <p className="truncate" title={formatListWhen(item.createdAt)}>
@@ -489,16 +531,31 @@ function CaseRow({
           </p>
         </div>
 
-        <p className="min-w-0 truncate text-center text-zinc-600">{item.assignee}</p>
+        <p className="min-w-0 text-center text-xs tabular-nums text-zinc-600">{contactCount}</p>
 
-        <div className="min-w-0 text-center">
+        <div className="pointer-events-auto relative z-20 flex min-w-0 items-center justify-center gap-2">
           <Link
             href={`/admin/owner-tracking/${item.id}/edit`}
-            className="pointer-events-auto relative z-20 text-xs font-semibold text-[#1e3a8a] hover:underline"
+            className="text-xs font-semibold text-[#1e3a8a] hover:underline"
             onClick={(e) => e.stopPropagation()}
           >
             修改
           </Link>
+          {isSuperAdmin ? (
+            <button
+              type="button"
+              title="刪除案件"
+              aria-label="刪除案件"
+              className="rounded p-1 text-zinc-400 transition hover:bg-rose-50 hover:text-rose-600"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onDelete();
+              }}
+            >
+              <TrashIcon className="h-4 w-4" />
+            </button>
+          ) : null}
         </div>
       </div>
     </li>

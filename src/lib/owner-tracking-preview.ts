@@ -345,6 +345,22 @@ export function deleteOwnerFollowUp(store: OwnerTrackingStore, followUpId: strin
   };
 }
 
+export function deleteOwnerCase(store: OwnerTrackingStore, caseId: string): OwnerTrackingStore {
+  return {
+    cases: store.cases.filter((c) => c.id !== caseId),
+    followUps: store.followUps.filter((f) => f.caseId !== caseId),
+  };
+}
+
+/** 內網示範案（建立時標 【示範】或 R001 測試資料） */
+export function isOwnerTrackingDemoCase(c: Pick<OwnerCasePreview, "ownerName" | "caseNote" | "assignee">): boolean {
+  const name = c.ownerName.trim();
+  const note = c.caseNote.trim();
+  if (name.includes("示範") || note.includes("示範")) return true;
+  if (name === "0先生") return true;
+  return false;
+}
+
 export function ownerCaseToInput(c: OwnerCasePreview): OwnerCaseInput {
   return {
     address: c.address,
