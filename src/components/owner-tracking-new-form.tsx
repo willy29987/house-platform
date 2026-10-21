@@ -325,6 +325,26 @@ export function OwnerTrackingNewForm({
                 className={`${field} h-[42px] py-0`}
               />
             </label>
+            <label className="block w-[calc(50%-0.375rem)] min-w-0 sm:w-[3.25rem] sm:shrink-0">
+              <span className="mb-1 block text-xs font-medium text-zinc-600">樓層</span>
+              <input
+                type="text"
+                {...imeText}
+                value={form.floor}
+                onChange={(e) => setField("floor", e.target.value)}
+                className={`${field} h-[42px] px-1.5 py-0 text-center`}
+              />
+            </label>
+            <label className="block w-[calc(50%-0.375rem)] min-w-0 sm:w-[3.25rem] sm:shrink-0">
+              <span className="mb-1 block text-xs font-medium text-zinc-600">總樓層</span>
+              <input
+                type="text"
+                {...imeText}
+                value={form.totalFloors}
+                onChange={(e) => setField("totalFloors", e.target.value)}
+                className={`${field} h-[42px] px-1.5 py-0 text-center`}
+              />
+            </label>
           </div>
 
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:gap-3">
@@ -380,7 +400,7 @@ export function OwnerTrackingNewForm({
                 </select>
               )}
             </label>
-            <label className="block w-full min-w-0 sm:w-[10.5rem] sm:shrink-0">
+            <label className="block w-full min-w-0 sm:min-w-[10.5rem] sm:flex-1">
               <span className="mb-1 block text-xs font-medium text-zinc-600">社區</span>
               <input
                 type="text"
@@ -388,27 +408,6 @@ export function OwnerTrackingNewForm({
                 value={form.community}
                 onChange={(e) => setField("community", e.target.value)}
                 className={`${field} h-[42px] py-0`}
-              />
-            </label>
-            <div className="hidden min-w-[1.25rem] flex-1 sm:block" aria-hidden />
-            <label className="block w-[calc(50%-0.375rem)] min-w-0 sm:w-[3.25rem] sm:shrink-0">
-              <span className="mb-1 block text-xs font-medium text-zinc-600">樓層</span>
-              <input
-                type="text"
-                {...imeText}
-                value={form.floor}
-                onChange={(e) => setField("floor", e.target.value)}
-                className={`${field} h-[42px] px-1.5 py-0 text-center`}
-              />
-            </label>
-            <label className="block w-[calc(50%-0.375rem)] min-w-0 sm:w-[3.25rem] sm:shrink-0">
-              <span className="mb-1 block text-xs font-medium text-zinc-600">總樓層</span>
-              <input
-                type="text"
-                {...imeText}
-                value={form.totalFloors}
-                onChange={(e) => setField("totalFloors", e.target.value)}
-                className={`${field} h-[42px] px-1.5 py-0 text-center`}
               />
             </label>
           </div>
