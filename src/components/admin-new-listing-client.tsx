@@ -39,6 +39,9 @@ export function AdminNewListingClient({
       if (cancelled) return;
 
       let data = createEmptyFormData(listingType);
+      if (!fromOwnerCaseId?.trim() && !isSuperAdmin) {
+        data = { ...data, isPublished: false };
+      }
       let found: boolean | null = null;
       let label: string | null = null;
 
@@ -83,7 +86,9 @@ export function AdminNewListingClient({
             <>
               <p className="font-semibold">已從屋主追蹤案件帶入</p>
               <p className="mt-0.5 text-emerald-800/90">
-                {sourceLabel ? `「${sourceLabel}」` : "此案件"}的欄位已預填；請確認縣市／行政區、照片與必填項後再上架。
+                {sourceLabel ? `「${sourceLabel}」` : "此案件"}的欄位已預填；確認後送出會
+                <strong className="font-semibold">直接上架</strong>
+                至官網與後台列表（請補照片與必填項）。
               </p>
               <Link
                 href={`/admin/owner-tracking/${fromOwnerCaseId}`}

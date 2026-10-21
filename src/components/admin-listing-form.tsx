@@ -428,7 +428,8 @@ export function AdminListingForm({ mode, submitUrl, initialData, lockedListingTy
     router.refresh();
     setTimeout(() => {
       const typeParam = isRent ? "rent" : "sale";
-      router.push(`/admin?type=${typeParam}&mine=1&off=1`);
+      const qs = formData.isPublished ? "mine=1" : "mine=1&off=1";
+      router.push(`/admin?type=${typeParam}&${qs}`);
     }, 500);
   }
 

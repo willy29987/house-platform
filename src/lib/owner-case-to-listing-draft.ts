@@ -72,6 +72,6 @@ export function ownerCaseToListingDraft(
     livingRooms: layout.living.trim(),
     bathrooms: layout.bath.trim(),
     balconies: layout.balcony.trim(),
-    isPublished: false,
+    isPublished: true,
   };
 }

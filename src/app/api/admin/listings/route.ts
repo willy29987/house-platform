@@ -103,7 +103,10 @@ export async function POST(request: Request) {
         contactName: data.contactName,
         contactPhone: data.contactPhone,
         ownerIdCardUrl: data.ownerIdCardUrl ?? null,
-        isPublished: current.role === "SUPER_ADMIN" ? (data.isPublished ?? true) : false,
+        isPublished:
+          current.role === "SUPER_ADMIN"
+            ? (data.isPublished ?? true)
+            : data.isPublished === true,
       },
       select: { id: true },
     });
