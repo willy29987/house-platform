@@ -138,15 +138,22 @@ export function normalizeCase(raw: Record<string, unknown>, fallbackAssignee = "
   };
 }
 
+function stripLegacyCreateCaseNote(note: string): string {
+  return note.trim() === "建立案件" ? "" : note;
+}
+
 /** 雲端／合併資料進列表前一律正規化，避免 null 欄位導致 .trim() 崩潰 */
 export function normalizeOwnerTrackingStore(store: OwnerTrackingStore): OwnerTrackingStore {
   return {
-    cases: (store.cases ?? []).map((c) => normalizeCase(c as unknown as Record<string, unknown>)),
+    cases: (store.cases ?? []).map((c) => {
+      const base = normalizeCase(c as unknown as Record<string, unknown>);
+      return { ...base, caseNote: stripLegacyCreateCaseNote(base.caseNote) };
+    }),
     followUps: (store.followUps ?? []).map((f) => ({
       id: String(f.id ?? newId("fu")),
       caseId: String(f.caseId ?? ""),
       status: normalizeFollowUpStatus(String(f.status ?? "")),
-      note: String(f.note ?? ""),
+      note: stripLegacyCreateCaseNote(String(f.note ?? "")),
       createdBy: String(f.createdBy ?? ""),
       createdAt: String(f.createdAt ?? new Date().toISOString()),
     })),

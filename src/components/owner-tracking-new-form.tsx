@@ -135,6 +135,15 @@ export function OwnerTrackingNewForm({
   const [initialStatus, setInitialStatus] = useState<OwnerTrackingStatus>("持續聯繫");
 
   const field = "w-full rounded-lg border border-zinc-300 px-3 py-2.5 text-sm";
+  /** 避免 inputMode=tel/url/numeric 導致中文輸入法在欄位間切換 */
+  const imeText = {
+    lang: "zh-Hant",
+    autoComplete: "off",
+    autoCorrect: "off",
+    autoCapitalize: "off",
+    spellCheck: false,
+    inputMode: "text" as const,
+  };
   const selectCompact =
     "w-full min-w-0 rounded-lg border border-zinc-300 bg-white py-2 pl-1.5 pr-5 text-xs leading-snug";
   const hasParking = Boolean(parkingUi.select);
@@ -304,6 +313,7 @@ export function OwnerTrackingNewForm({
               <span className="mb-1 block text-xs font-medium text-zinc-600">地址</span>
               <input
                 type="text"
+                {...imeText}
                 value={form.address}
                 onChange={(e) => setField("address", e.target.value)}
                 className={`${field} h-[42px] py-0`}
@@ -368,6 +378,7 @@ export function OwnerTrackingNewForm({
               <span className="mb-1 block text-xs font-medium text-zinc-600">社區</span>
               <input
                 type="text"
+                {...imeText}
                 value={form.community}
                 onChange={(e) => setField("community", e.target.value)}
                 className={`${field} h-[42px] py-0`}
@@ -378,7 +389,7 @@ export function OwnerTrackingNewForm({
               <span className="mb-1 block text-xs font-medium text-zinc-600">樓層</span>
               <input
                 type="text"
-                inputMode="numeric"
+                {...imeText}
                 value={form.floor}
                 onChange={(e) => setField("floor", e.target.value)}
                 className={`${field} h-[42px] px-1.5 py-0 text-center`}
@@ -388,7 +399,7 @@ export function OwnerTrackingNewForm({
               <span className="mb-1 block text-xs font-medium text-zinc-600">總樓層</span>
               <input
                 type="text"
-                inputMode="numeric"
+                {...imeText}
                 value={form.totalFloors}
                 onChange={(e) => setField("totalFloors", e.target.value)}
                 className={`${field} h-[42px] px-1.5 py-0 text-center`}
@@ -416,7 +427,7 @@ export function OwnerTrackingNewForm({
               >
                 <input
                   type="text"
-                  inputMode="decimal"
+                  {...imeText}
                   value={layoutUi[key]}
                   onChange={(e) => setLayoutUi((prev) => ({ ...prev, [key]: e.target.value }))}
                   className={`h-[42px] w-full min-w-0 rounded-lg border bg-white py-2 pl-2 text-sm ${
@@ -470,7 +481,7 @@ export function OwnerTrackingNewForm({
                   <div className="w-px shrink-0 self-stretch bg-zinc-200" aria-hidden />
                   <input
                     type="text"
-                    inputMode="decimal"
+                    {...imeText}
                     value={managementFeeUi.amount}
                     onChange={(e) => setManagementFeeUi((prev) => ({ ...prev, amount: e.target.value }))}
                     className="min-w-0 flex-1 border-0 bg-transparent px-2 text-sm focus:outline-none focus:ring-0"
@@ -554,7 +565,7 @@ export function OwnerTrackingNewForm({
                   <div className="w-px shrink-0 self-stretch bg-zinc-200" aria-hidden />
                   <input
                     type="text"
-                    inputMode="decimal"
+                    {...imeText}
                     value={parkingPriceUi.amount}
                     onChange={(e) => setParkingPriceUi((prev) => ({ ...prev, amount: e.target.value }))}
                     className="min-w-0 flex-1 border-0 bg-transparent px-2 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-0"
@@ -665,6 +676,7 @@ export function OwnerTrackingNewForm({
           <FormField label="姓名">
             <input
               type="text"
+              {...imeText}
               value={form.ownerName}
               onChange={(e) => setField("ownerName", e.target.value)}
               className={field}
@@ -673,7 +685,8 @@ export function OwnerTrackingNewForm({
           <FormField label="電話">
             <input
               type="text"
-              autoComplete="off"
+              {...imeText}
+              name="contactNumber"
               value={form.phone}
               onChange={(e) => setField("phone", e.target.value)}
               className={field}
@@ -682,8 +695,7 @@ export function OwnerTrackingNewForm({
           <FormField label="網址">
             <input
               type="text"
-              autoComplete="off"
-              spellCheck={false}
+              {...imeText}
               value={form.listingUrl}
               onChange={(e) => setField("listingUrl", e.target.value)}
               className={field}
@@ -738,6 +750,7 @@ export function OwnerTrackingNewForm({
               <span className="mb-1 block text-xs font-medium text-zinc-600">追蹤備註</span>
               <input
                 type="text"
+                {...imeText}
                 value={form.caseNote}
                 onChange={(e) => setField("caseNote", e.target.value)}
                 className="w-full rounded-lg border border-zinc-300 px-3 py-2.5 text-sm"
