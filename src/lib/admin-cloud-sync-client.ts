@@ -6,6 +6,8 @@ export { ADMIN_CLOUD_DATA_KEYS } from "@/lib/admin-cloud-data-keys";
 import type { CommissionRecord } from "@/lib/commission-stats";
 import {
   emptyOwnerTrackingStore,
+  getOwnerTrackingLocalPersistedAt,
+  loadOwnerTrackingStoreLocal,
   normalizeOwnerTrackingStore,
   type OwnerTrackingStore,
 } from "@/lib/owner-tracking-preview";
@@ -40,6 +42,46 @@ export function schedulePushCloudPayload(key: AdminCloudDataKey, payload: unknow
       void pushCloudPayload(key, payload);
     }, delayMs),
   );
+}
+
+export function cancelScheduledPushCloudPayload(key: AdminCloudDataKey): void {
+  const prev = pushTimers.get(key);
+  if (prev) clearTimeout(prev);
+  pushTimers.delete(key);
+}
+
+/** 延遲上傳時讀最新 localStorage，避免舊 closure 把已刪案件推回雲端 */
+export function schedulePushOwnerTrackingFromLocal(delayMs = 400): void {
+  const key = ADMIN_CLOUD_DATA_KEYS.ownerTracking;
+  cancelScheduledPushCloudPayload(key);
+  pushTimers.set(
+    key,
+    setTimeout(() => {
+      pushTimers.delete(key);
+      void pushCloudPayload(key, loadOwnerTrackingStoreLocal());
+    }, delayMs),
+  );
+}
+
+const LOCAL_DELETE_TRUST_MS = 15_000;
+
+function pickOwnerTrackingAfterCloudFetch(
+  local: OwnerTrackingStore,
+  cloud: OwnerTrackingStore | null,
+): OwnerTrackingStore {
+  if (!cloud || !hasOwnerTrackingData(cloud)) {
+    return hasOwnerTrackingData(local) ? local : emptyOwnerTrackingStore;
+  }
+  if (!hasOwnerTrackingData(local)) {
+    return cloud;
+  }
+  const localIds = new Set(local.cases.map((c) => c.id));
+  const cloudHasExtraCases = cloud.cases.some((c) => !localIds.has(c.id));
+  const recentlyPersistedLocally = Date.now() - getOwnerTrackingLocalPersistedAt() < LOCAL_DELETE_TRUST_MS;
+  if (recentlyPersistedLocally && cloudHasExtraCases && local.cases.length < cloud.cases.length) {
+    return local;
+  }
+  return cloud;
 }
 
 function hasOwnerTrackingData(store: OwnerTrackingStore): boolean {
@@ -79,9 +121,24 @@ export function hydrateOwnerTrackingStoreOnce(
           rawCloud = (json.payload as OwnerTrackingStore | undefined) ?? null;
         }
         const cloud = rawCloud ? normalizeOwnerTrackingStore(rawCloud) : null;
-        if (cloud && hasOwnerTrackingData(cloud)) {
-          writeLocal(cloud);
-          return cloud;
+        const chosen = pickOwnerTrackingAfterCloudFetch(local, cloud);
+
+        if (
+          chosen === local &&
+          cloud &&
+          hasOwnerTrackingData(cloud) &&
+          local.cases.length < cloud.cases.length &&
+          cloudFetchOk &&
+          Date.now() - getOwnerTrackingLocalPersistedAt() < LOCAL_DELETE_TRUST_MS
+        ) {
+          await pushCloudPayload(ADMIN_CLOUD_DATA_KEYS.ownerTracking, local);
+        }
+
+        if (hasOwnerTrackingData(chosen)) {
+          if (chosen !== local) {
+            writeLocal(chosen);
+          }
+          return chosen;
         }
         if (hasOwnerTrackingData(local)) {
           if (!cloudFetchOk) {

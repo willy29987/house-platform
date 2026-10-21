@@ -5,7 +5,10 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   formatOwnerCaseAddress,
+  getOwnerTrackingLocalPersistedAt,
   loadOwnerTrackingStoreLocal,
+  normalizeOwnerTrackingStore,
+  OWNER_TRACKING_STORAGE_KEY,
   persistOwnerTrackingStoreLocal,
   OWNER_TRACKING_STATUS_OPTIONS,
   statusBadgeClass,
@@ -23,6 +26,7 @@ import { PROPERTY_TYPE_OPTIONS, propertyTypeLabel } from "@/lib/property-type-la
 import {
   ADMIN_CLOUD_DATA_KEYS,
   hydrateOwnerTrackingStoreOnce,
+  cancelScheduledPushCloudPayload,
   invalidateOwnerTrackingHydrateCache,
   pushCloudPayload,
   refreshOwnerTrackingFromCloud,
@@ -203,6 +207,7 @@ function OwnerTrackingListInner({
   useEffect(() => {
     if (!hydrated) return;
     const refresh = () => {
+      if (Date.now() - getOwnerTrackingLocalPersistedAt() < 3000) return;
       void refreshOwnerTrackingFromCloud(loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreLocal).then(
         setStore,
       );
@@ -213,6 +218,16 @@ function OwnerTrackingListInner({
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", refresh);
     };
+  }, [hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== OWNER_TRACKING_STORAGE_KEY) return;
+      setStore(normalizeOwnerTrackingStore(loadOwnerTrackingStoreLocal()));
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
   }, [hydrated]);
 
   const rows = useMemo(
@@ -277,6 +292,7 @@ function OwnerTrackingListInner({
     if (!window.confirm("確定刪除此案件？追蹤紀錄一併刪除，且無法復原。")) return;
     setDeletingId(caseId);
     try {
+      cancelScheduledPushCloudPayload(ADMIN_CLOUD_DATA_KEYS.ownerTracking);
       const next = deleteOwnerCase(store, caseId);
       persistOwnerTrackingStoreLocal(next);
       setStore(next);

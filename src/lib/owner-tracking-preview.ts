@@ -184,9 +184,17 @@ export function loadOwnerTrackingStoreLocal(): OwnerTrackingStore {
   return parseOwnerTrackingStoreRaw(raw, true);
 }
 
+let ownerTrackingLocalPersistedAt = 0;
+
+/** 本機剛寫入屋主追蹤後的時間戳，用於避免雲端 refresh 蓋掉刪除等操作 */
+export function getOwnerTrackingLocalPersistedAt(): number {
+  return ownerTrackingLocalPersistedAt;
+}
+
 export function persistOwnerTrackingStoreLocal(store: OwnerTrackingStore): void {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(OWNER_TRACKING_STORAGE_KEY, JSON.stringify(store));
+  ownerTrackingLocalPersistedAt = Date.now();
 }
 
 export function loadOwnerTrackingStore(): OwnerTrackingStore {
@@ -225,10 +233,8 @@ function ensureInitialFollowUps(store: OwnerTrackingStore): OwnerTrackingStore {
 export function saveOwnerTrackingStore(store: OwnerTrackingStore) {
   persistOwnerTrackingStoreLocal(store);
   if (typeof window === "undefined") return;
-  void import("@/lib/admin-cloud-sync-client").then(({ schedulePushCloudPayload }) => {
-    void import("@/lib/admin-cloud-data-keys").then(({ ADMIN_CLOUD_DATA_KEYS }) => {
-      schedulePushCloudPayload(ADMIN_CLOUD_DATA_KEYS.ownerTracking, store);
-    });
+  void import("@/lib/admin-cloud-sync-client").then(({ schedulePushOwnerTrackingFromLocal }) => {
+    schedulePushOwnerTrackingFromLocal();
   });
 }
 
