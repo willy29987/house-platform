@@ -166,14 +166,15 @@ function OwnerTrackingListInner({
           body: JSON.stringify({ items: chunk }),
         });
         const raw = await res.text();
-        let json: {
+        type Listing591CheckApiResponse = {
           ok?: boolean;
           message?: string;
           results?: Record<string, Listing591CheckEntry>;
           cloudPersisted?: boolean;
-        } | null = null;
+        };
+        let json: Listing591CheckApiResponse | null = null;
         try {
-          json = raw ? (JSON.parse(raw) as typeof json) : null;
+          json = raw ? (JSON.parse(raw) as Listing591CheckApiResponse) : null;
         } catch {
           throw new Error(`591 檢查 API 回應異常（HTTP ${res.status}）`);
         }
