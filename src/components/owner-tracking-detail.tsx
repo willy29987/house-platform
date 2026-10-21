@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   formatFollowUpWhen,
@@ -24,6 +24,10 @@ import { COMMUNITY_PROPERTY_TYPES, PARKING_PRICE_INCLUDED_LABEL } from "@/lib/ow
 import { formatParkingTypeLabel } from "@/lib/parking-type-label";
 import { propertyTypeLabel } from "@/lib/property-type-label";
 import { hydrateOwnerTrackingStoreOnce } from "@/lib/admin-cloud-sync-client";
+import {
+  appendOwnerTrackingListContext,
+  ownerTrackingListHrefFromListParam,
+} from "@/lib/owner-tracking-list-url";
 
 type Props = {
   caseId: string;
@@ -33,6 +37,13 @@ type Props = {
 
 export function OwnerTrackingDetail({ caseId, currentUsername, isSuperAdmin = false }: Props) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const listParam = searchParams.get("list");
+  const listHref = ownerTrackingListHrefFromListParam(listParam);
+  const editHref = appendOwnerTrackingListContext(
+    `/admin/owner-tracking/${caseId}/edit`,
+    listParam ?? "",
+  );
   const [store, setStore] = useState<OwnerTrackingStore>(emptyOwnerTrackingStore);
   const [hydrated, setHydrated] = useState(false);
   const [status, setStatus] = useState<OwnerTrackingStatus>("持續聯繫");
@@ -110,7 +121,7 @@ export function OwnerTrackingDetail({ caseId, currentUsername, isSuperAdmin = fa
     return (
       <div className="rounded-xl border border-zinc-200 bg-white p-8 text-center">
         <p className="text-zinc-600">找不到此案件</p>
-        <Link href="/admin/owner-tracking" className="mt-4 inline-block text-sm font-medium text-[#1e3a8a]">
+        <Link href={listHref} className="mt-4 inline-block text-sm font-medium text-[#1e3a8a]">
           ← 回列表
         </Link>
       </div>
@@ -121,7 +132,7 @@ export function OwnerTrackingDetail({ caseId, currentUsername, isSuperAdmin = fa
     return (
       <div className="rounded-xl border border-amber-200 bg-amber-50 p-8 text-center">
         <p className="font-medium text-amber-950">此案件由其他業務負責，您無法查看。</p>
-        <Link href="/admin/owner-tracking" className="mt-4 inline-block text-sm font-medium text-[#1e3a8a]">
+        <Link href={listHref} className="mt-4 inline-block text-sm font-medium text-[#1e3a8a]">
           ← 回我的列表
         </Link>
       </div>
@@ -144,7 +155,7 @@ export function OwnerTrackingDetail({ caseId, currentUsername, isSuperAdmin = fa
         <CaseInfoGrid item={ownerCase} />
         <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-zinc-100 pt-4">
           <Link
-            href={`/admin/owner-tracking/${caseId}/edit`}
+            href={editHref}
             className="inline-flex items-center rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-800 hover:bg-zinc-50"
           >
             修改案件
@@ -297,7 +308,7 @@ export function OwnerTrackingDetail({ caseId, currentUsername, isSuperAdmin = fa
 
       <button
         type="button"
-        onClick={() => router.push("/admin/owner-tracking")}
+        onClick={() => router.push(listHref)}
         className="text-sm font-medium text-zinc-600 hover:text-zinc-900 sm:hidden"
       >
         ← 回列表

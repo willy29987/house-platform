@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   formatOwnerCaseAddress,
   loadOwnerTrackingStoreLocal,
@@ -26,6 +27,24 @@ import {
   pushCloudPayload,
   refreshOwnerTrackingFromCloud,
 } from "@/lib/admin-cloud-sync-client";
+import {
+  appendOwnerTrackingListContext,
+  buildOwnerTrackingListQuery,
+  parseOwnerTrackingListSearch,
+  type OwnerTrackingListUrlState,
+} from "@/lib/owner-tracking-list-url";
+import {
+  emptyOwnerTrackingListingChecksStore,
+  is591ListingUrl,
+  isListing591CheckStale,
+  loadOwnerTrackingListingChecksLocal,
+  mergeListing591CheckResults,
+  normalizeOwnerTrackingListingChecksStore,
+  persistOwnerTrackingListingChecksLocal,
+  resolveListing591ListCategory,
+  type Listing591CheckEntry,
+  type OwnerTrackingListingChecksStore,
+} from "@/lib/owner-tracking-listing-checks";
 
 type Props = {
   currentUsername: string;
@@ -35,6 +54,7 @@ type Props = {
 };
 
 const PAGE_SIZE = 100;
+const MAX_591_CHECK_BATCH = 30;
 
 /** 表頭與資料列共用（無負責人欄；上次備註加寬） */
 const LIST_ROW_GRID =
@@ -48,24 +68,46 @@ function formatListWhen(iso: string): string {
   return `${md} ${hm}`;
 }
 
-export function OwnerTrackingList({
+function OwnerTrackingListInner({
   currentUsername,
   isSuperAdmin = false,
   staffUsernames = [],
 }: Props) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const listQuery = searchParams.toString();
+
+  const urlState = useMemo(
+    () => parseOwnerTrackingListSearch(searchParams, { isSuperAdmin, currentUsername }),
+    [searchParams, isSuperAdmin, currentUsername],
+  );
+  const { keyword, statusFilter, propertyTypeFilter, assigneeFilter, listing591Filter, page } =
+    urlState;
+
+  const patchListUrl = useCallback(
+    (patch: Partial<OwnerTrackingListUrlState>) => {
+      const next = { ...urlState, ...patch };
+      const qs = buildOwnerTrackingListQuery(next);
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    },
+    [urlState, pathname, router],
+  );
+
   const [store, setStore] = useState<OwnerTrackingStore>(emptyOwnerTrackingStore);
   const [hydrated, setHydrated] = useState(false);
-  const [keyword, setKeyword] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("ALL");
-  const [propertyTypeFilter, setPropertyTypeFilter] = useState<string>("ALL");
-  const [assigneeFilter, setAssigneeFilter] = useState<string>(
-    isSuperAdmin ? "ALL" : currentUsername,
-  );
   const [syncError, setSyncError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
-  const [page, setPage] = useState(1);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [checkStore, setCheckStore] = useState<OwnerTrackingListingChecksStore>(
+    emptyOwnerTrackingListingChecksStore,
+  );
+  const [checksHydrated, setChecksHydrated] = useState(false);
+  const [checking591, setChecking591] = useState(false);
+  const [checking591Ids, setChecking591Ids] = useState<Set<string>>(() => new Set());
+  const [check591Error, setCheck591Error] = useState<string | null>(null);
+  const autoCheckSigRef = useRef("");
 
   const assigneeOptions = useMemo(() => {
     const names = new Set(staffUsernames.map((u) => u.trim()).filter(Boolean));
@@ -91,6 +133,73 @@ export function OwnerTrackingList({
   }, []);
 
   useEffect(() => {
+    const local = loadOwnerTrackingListingChecksLocal();
+    setCheckStore(local);
+    void fetch(`/api/admin/cloud-data/${ADMIN_CLOUD_DATA_KEYS.ownerTrackingListingChecks}`, {
+      credentials: "same-origin",
+    })
+      .then(async (res) => {
+        if (!res.ok) return local;
+        const json = (await res.json()) as { ok?: boolean; payload?: unknown };
+        const cloud = normalizeOwnerTrackingListingChecksStore(json.payload);
+        return mergeListing591CheckResults(local, cloud.byCaseId);
+      })
+      .then((merged) => {
+        setCheckStore(merged);
+        persistOwnerTrackingListingChecksLocal(merged);
+      })
+      .finally(() => setChecksHydrated(true));
+  }, []);
+
+  const postListing591Check = useCallback(async (items: { caseId: string; url: string }[]) => {
+    if (items.length === 0) return;
+    setChecking591(true);
+    setCheck591Error(null);
+    setChecking591Ids(new Set(items.map((i) => i.caseId)));
+    try {
+      for (let offset = 0; offset < items.length; offset += MAX_591_CHECK_BATCH) {
+        const chunk = items.slice(offset, offset + MAX_591_CHECK_BATCH);
+        const res = await fetch("/api/admin/owner-tracking/listing-url-check", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ items: chunk }),
+        });
+        const raw = await res.text();
+        let json: {
+          ok?: boolean;
+          message?: string;
+          results?: Record<string, Listing591CheckEntry>;
+          cloudPersisted?: boolean;
+        } | null = null;
+        try {
+          json = raw ? (JSON.parse(raw) as typeof json) : null;
+        } catch {
+          throw new Error(`591 檢查 API 回應異常（HTTP ${res.status}）`);
+        }
+        if (!res.ok || !json?.ok) {
+          throw new Error(json?.message ?? `591 檢查失敗（HTTP ${res.status}）`);
+        }
+        if (json.results) {
+          setCheckStore((prev) => {
+            const merged = mergeListing591CheckResults(prev, json.results!);
+            persistOwnerTrackingListingChecksLocal(merged);
+            return merged;
+          });
+        }
+        if (json.cloudPersisted === false) {
+          setCheck591Error("檢查結果已顯示於本機；雲端未寫入（請確認 DATABASE_URL 與 prisma generate）");
+        }
+      }
+    } catch (e) {
+      setCheck591Error(e instanceof Error ? e.message : "591 檢查失敗");
+    } finally {
+      setChecking591(false);
+      setChecking591Ids(new Set());
+    }
+  }, []);
+
+  useEffect(() => {
     if (!hydrated) return;
     const refresh = () => {
       void refreshOwnerTrackingFromCloud(loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreLocal).then(
@@ -112,26 +221,55 @@ export function OwnerTrackingList({
         statusFilter,
         propertyTypeFilter,
         assigneeFilter: isSuperAdmin ? assigneeFilter : currentUsername,
+        listing591Filter,
+        listingChecksByCaseId: checkStore.byCaseId,
         currentUsername,
         isSuperAdmin,
       }),
-    [store, keyword, statusFilter, propertyTypeFilter, assigneeFilter, currentUsername, isSuperAdmin],
+    [
+      store,
+      keyword,
+      statusFilter,
+      propertyTypeFilter,
+      assigneeFilter,
+      listing591Filter,
+      checkStore.byCaseId,
+      currentUsername,
+      isSuperAdmin,
+    ],
   );
 
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
 
   useEffect(() => {
-    setPage(1);
-  }, [keyword, statusFilter, propertyTypeFilter, assigneeFilter]);
-
-  useEffect(() => {
-    setPage((p) => Math.min(p, totalPages));
-  }, [totalPages]);
+    if (page > totalPages) {
+      patchListUrl({ page: totalPages });
+    }
+  }, [page, totalPages, patchListUrl]);
 
   const pageRows = useMemo(() => {
-    const start = (page - 1) * PAGE_SIZE;
+    const start = (safePage - 1) * PAGE_SIZE;
     return rows.slice(start, start + PAGE_SIZE);
-  }, [rows, page]);
+  }, [rows, safePage]);
+
+  useEffect(() => {
+    if (!hydrated || !checksHydrated || checking591) return;
+    const items = collect591CheckItems(pageRows, checkStore.byCaseId, { force: false });
+    if (items.length === 0) return;
+    const sig = `${safePage}:${items
+      .map((i) => i.caseId)
+      .sort()
+      .join(",")}`;
+    if (autoCheckSigRef.current === sig) return;
+    autoCheckSigRef.current = sig;
+    void postListing591Check(items);
+  }, [hydrated, checksHydrated, checking591, pageRows, checkStore.byCaseId, safePage, postListing591Check]);
+
+  const check591OnPageCount = useMemo(
+    () => collect591CheckItems(pageRows, checkStore.byCaseId, { force: true }).length,
+    [pageRows, checkStore.byCaseId],
+  );
 
   async function handleDeleteCase(caseId: string) {
     if (!isSuperAdmin || deletingId) return;
@@ -183,6 +321,11 @@ export function OwnerTrackingList({
           雲端同步失敗（{syncError}），目前顯示本機快取。請重新整理或稍後再試。
         </p>
       ) : null}
+      {check591Error ? (
+        <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-950">
+          {check591Error}
+        </p>
+      ) : null}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className="text-sm text-zinc-600">屋主開發／委託追蹤</p>
@@ -209,7 +352,7 @@ export function OwnerTrackingList({
           <input
             type="search"
             value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
+            onChange={(e) => patchListUrl({ keyword: e.target.value, page: 1 })}
             placeholder="姓名、電話、地址、物件"
             className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
           />
@@ -218,7 +361,7 @@ export function OwnerTrackingList({
           <span className="mb-1 block text-xs font-medium text-zinc-600">目前狀態</span>
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e) => patchListUrl({ statusFilter: e.target.value, page: 1 })}
             className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
           >
             <option value="ALL">全部</option>
@@ -233,7 +376,7 @@ export function OwnerTrackingList({
           <span className="mb-1 block text-xs font-medium text-zinc-600">物件類別</span>
           <select
             value={propertyTypeFilter}
-            onChange={(e) => setPropertyTypeFilter(e.target.value)}
+            onChange={(e) => patchListUrl({ propertyTypeFilter: e.target.value, page: 1 })}
             className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
           >
             <option value="ALL">全部</option>
@@ -249,7 +392,7 @@ export function OwnerTrackingList({
             <span className="mb-1 block text-xs font-medium text-zinc-600">負責人</span>
             <select
               value={assigneeFilter}
-              onChange={(e) => setAssigneeFilter(e.target.value)}
+              onChange={(e) => patchListUrl({ assigneeFilter: e.target.value, page: 1 })}
               className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
             >
               <option value="ALL">全部</option>
@@ -261,6 +404,36 @@ export function OwnerTrackingList({
             </select>
           </label>
         ) : null}
+        <label className="block min-w-[10rem]">
+          <span className="mb-1 block text-xs font-medium text-zinc-600">591 狀態</span>
+          <select
+            value={listing591Filter}
+            onChange={(e) =>
+              patchListUrl({
+                listing591Filter: e.target.value as OwnerTrackingListUrlState["listing591Filter"],
+                page: 1,
+              })
+            }
+            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+          >
+            <option value="ALL">全部</option>
+            <option value="LIVE">在線</option>
+            <option value="REMOVED">已下架</option>
+            <option value="UNCHECKED">未檢查</option>
+          </select>
+        </label>
+        <button
+          type="button"
+          disabled={checking591 || check591OnPageCount === 0}
+          onClick={() =>
+            void postListing591Check(
+              collect591CheckItems(pageRows, checkStore.byCaseId, { force: true }),
+            )
+          }
+          className="inline-flex h-[42px] w-full items-center justify-center rounded-lg border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-800 hover:bg-zinc-50 disabled:opacity-50 sm:w-auto"
+        >
+          {checking591 ? "檢查中…" : "檢查本頁 591"}
+        </button>
         <Link
           href="/admin/owner-tracking/new"
           className="inline-flex h-[42px] w-full items-center justify-center rounded-lg bg-[#0b2545] px-4 text-sm font-semibold text-white hover:bg-[#1e3a8a] sm:w-auto"
@@ -278,9 +451,9 @@ export function OwnerTrackingList({
               {" "}
               · 此頁顯示{" "}
               <span className="font-medium tabular-nums">
-                {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, rows.length)}
+                {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, rows.length)}
               </span>{" "}
-              · 第 {page} / {totalPages} 頁（每頁 {PAGE_SIZE} 筆）
+              · 第 {safePage} / {totalPages} 頁（每頁 {PAGE_SIZE} 筆）
             </>
           ) : null}
         </p>
@@ -318,6 +491,9 @@ export function OwnerTrackingList({
                 last={last}
                 contactCount={contactCount}
                 isSuperAdmin={isSuperAdmin}
+                listQuery={listQuery}
+                checkEntry={checkStore.byCaseId[c.id]}
+                checking591={checking591Ids.has(c.id)}
                 onDelete={() => handleDeleteCase(c.id)}
               />
             ))
@@ -328,12 +504,20 @@ export function OwnerTrackingList({
 
       {rows.length > PAGE_SIZE ? (
         <OwnerTrackingPagination
-          page={page}
+          page={safePage}
           totalPages={totalPages}
-          onPageChange={setPage}
+          onPageChange={(p) => patchListUrl({ page: p })}
         />
       ) : null}
     </div>
+  );
+}
+
+export function OwnerTrackingList(props: Props) {
+  return (
+    <Suspense fallback={<p className="text-sm text-zinc-500">載入列表…</p>}>
+      <OwnerTrackingListInner {...props} />
+    </Suspense>
   );
 }
 
@@ -429,6 +613,100 @@ function PageButton({
   );
 }
 
+function collect591CheckItems(
+  pageRows: { case: OwnerCasePreview }[],
+  byCaseId: Record<string, Listing591CheckEntry>,
+  opts: { force: boolean },
+): { caseId: string; url: string }[] {
+  const now = Date.now();
+  const items: { caseId: string; url: string }[] = [];
+  for (const { case: c } of pageRows) {
+    if (!is591ListingUrl(c.listingUrl)) continue;
+    const entry = byCaseId[c.id];
+    if (opts.force || isListing591CheckStale(c.listingUrl, entry, now)) {
+      items.push({ caseId: c.id, url: c.listingUrl.trim() });
+    }
+  }
+  return items;
+}
+
+function Listing591StatusBadge({
+  listingUrl,
+  checkEntry,
+  checking,
+}: {
+  listingUrl: string;
+  checkEntry: Listing591CheckEntry | undefined;
+  checking: boolean;
+}) {
+  if (!is591ListingUrl(listingUrl)) {
+    return (
+      <span className="inline-block max-w-full truncate text-[10px] text-zinc-400 sm:text-[11px]">
+        非591
+      </span>
+    );
+  }
+  if (checking) {
+    return (
+      <span className="inline-block text-[10px] font-medium text-zinc-500 sm:text-[11px]">檢查中…</span>
+    );
+  }
+  const category = resolveListing591ListCategory(listingUrl, checkEntry);
+  if (category === "live") {
+    return (
+      <span
+        className="inline-block rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800 sm:text-[11px]"
+        title={
+          checkEntry?.checkedAt
+            ? `上次檢查：${formatListWhen(checkEntry.checkedAt)}`
+            : undefined
+        }
+      >
+        在線
+      </span>
+    );
+  }
+  if (category === "removed") {
+    return (
+      <span
+        className="inline-block rounded-full bg-rose-50 px-1.5 py-0.5 text-[10px] font-semibold text-rose-800 sm:text-[11px]"
+        title={
+          checkEntry?.checkedAt
+            ? `上次檢查：${formatListWhen(checkEntry.checkedAt)}`
+            : undefined
+        }
+      >
+        已下架
+      </span>
+    );
+  }
+  if (
+    checkEntry &&
+    (checkEntry.status === "unknown" || checkEntry.status === "error")
+  ) {
+    const detail =
+      checkEntry.httpStatus != null
+        ? `HTTP ${checkEntry.httpStatus} · 591 可能阻擋自動檢查`
+        : "591 可能阻擋自動檢查";
+    return (
+      <span
+        className="inline-block max-w-full truncate rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900 sm:text-[11px]"
+        title={`${detail} · 上次：${formatListWhen(checkEntry.checkedAt)}`}
+      >
+        無法確認
+      </span>
+    );
+  }
+  return (
+    <span
+      className="inline-block max-w-full truncate text-[10px] text-zinc-400 sm:text-[11px]"
+      title="尚未檢查或超過 24 小時"
+    >
+      未檢查
+    </span>
+  );
+}
+
 function normalizeListingUrl(url: string | null | undefined): string | null {
   const t = (url ?? "").trim();
   if (!t) return null;
@@ -476,21 +754,32 @@ function CaseRow({
   last,
   contactCount,
   isSuperAdmin,
+  listQuery,
+  checkEntry,
+  checking591,
   onDelete,
 }: {
   item: OwnerCasePreview;
   last: OwnerFollowUpPreview | null;
   contactCount: number;
   isSuperAdmin: boolean;
+  listQuery: string;
+  checkEntry: Listing591CheckEntry | undefined;
+  checking591: boolean;
   onDelete: () => void;
 }) {
+  const caseHref = appendOwnerTrackingListContext(`/admin/owner-tracking/${item.id}`, listQuery);
+  const editHref = appendOwnerTrackingListContext(
+    `/admin/owner-tracking/${item.id}/edit`,
+    listQuery,
+  );
   const urlHref = normalizeListingUrl(item.listingUrl);
   const urlLabel = formatListUrl(item.listingUrl);
 
   return (
     <li className="relative transition hover:bg-zinc-50">
       <Link
-        href={`/admin/owner-tracking/${item.id}`}
+        href={caseHref}
         className="absolute inset-0 z-0"
         aria-label={`查看案件：${item.address || item.ownerName}`}
       />
@@ -509,7 +798,7 @@ function CaseRow({
           <p className="mt-0.5 truncate text-xs tabular-nums text-zinc-500">{item.phone || "—"}</p>
         </div>
 
-        <div className="min-w-0 overflow-hidden">
+        <div className="min-w-0 overflow-hidden space-y-0.5">
           {urlHref ? (
             <a
               href={urlHref}
@@ -524,6 +813,11 @@ function CaseRow({
           ) : (
             <span className="pointer-events-none text-xs text-zinc-300">—</span>
           )}
+          <Listing591StatusBadge
+            listingUrl={item.listingUrl}
+            checkEntry={checkEntry}
+            checking={checking591}
+          />
         </div>
 
         <div className="min-w-0 overflow-hidden">
@@ -561,7 +855,7 @@ function CaseRow({
 
         <div className="pointer-events-auto relative z-20 flex min-w-0 items-center justify-center gap-2">
           <Link
-            href={`/admin/owner-tracking/${item.id}/edit`}
+            href={editHref}
             className="text-xs font-semibold text-[#1e3a8a] hover:underline"
             onClick={(e) => e.stopPropagation()}
           >

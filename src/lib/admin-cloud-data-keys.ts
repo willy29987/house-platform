@@ -1,5 +1,6 @@
 export const ADMIN_CLOUD_DATA_KEYS = {
   ownerTracking: "owner_tracking",
+  ownerTrackingListingChecks: "owner_tracking_listing_checks",
   commissionRecords: "commission_records",
   tenantManager: "tenant_manager",
 } as const;

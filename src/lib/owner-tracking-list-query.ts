@@ -1,4 +1,10 @@
 import {
+  matchesListing591Filter,
+  resolveListing591ListCategory,
+  type Listing591CheckEntry,
+  type OwnerTrackingListing591Filter,
+} from "@/lib/owner-tracking-listing-checks";
+import {
   canViewOwnerTrackingCase,
   formatOwnerCaseAddress,
   lastFollowUp,
@@ -34,10 +40,14 @@ export function buildOwnerTrackingListRows(
     statusFilter: string;
     propertyTypeFilter: string;
     assigneeFilter: string;
+    listing591Filter?: OwnerTrackingListing591Filter;
+    listingChecksByCaseId?: Record<string, Listing591CheckEntry>;
     currentUsername?: string;
     isSuperAdmin?: boolean;
   },
 ): OwnerTrackingListRow[] {
+  const listing591Filter = filters.listing591Filter ?? "ALL";
+  const checks = filters.listingChecksByCaseId ?? {};
   const q = filters.keyword.trim().toLowerCase();
   const visibility =
     filters.isSuperAdmin === false && filters.currentUsername
@@ -55,6 +65,10 @@ export function buildOwnerTrackingListRows(
       if (filters.statusFilter !== "ALL" && last?.status !== filters.statusFilter) return false;
       if (filters.propertyTypeFilter !== "ALL" && c.propertyType !== filters.propertyTypeFilter) {
         return false;
+      }
+      if (listing591Filter !== "ALL") {
+        const category = resolveListing591ListCategory(c.listingUrl, checks[c.id]);
+        if (!matchesListing591Filter(category, listing591Filter)) return false;
       }
       if (!q) return true;
       const hay = [

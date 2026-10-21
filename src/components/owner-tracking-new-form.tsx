@@ -57,6 +57,8 @@ type Props = {
   isSuperAdmin?: boolean;
   mode?: "create" | "edit";
   caseId?: string;
+  /** 儲存後返回的列表網址（含篩選 query） */
+  returnListHref?: string;
 };
 
 const emptyForm = (): OwnerCaseInput => ({
@@ -109,6 +111,7 @@ export function OwnerTrackingNewForm({
   isSuperAdmin = false,
   mode = "create",
   caseId,
+  returnListHref,
 }: Props) {
   const router = useRouter();
   const isEdit = mode === "edit" && Boolean(caseId);
@@ -249,7 +252,7 @@ export function OwnerTrackingNewForm({
         return;
       }
       saveOwnerTrackingStore(next);
-      router.push(`/admin/owner-tracking/${caseId}`);
+      router.push(returnListHref ?? "/admin/owner-tracking");
       return;
     }
     const { store: next, caseId: newCaseId } = appendOwnerCase(

@@ -58,7 +58,8 @@ export function proxy(request: NextRequest) {
 
   const loginUrl = new URL("/admin/login", request.url);
   if (pathname !== "/admin/login") {
-    loginUrl.searchParams.set("next", pathname);
+    const next = `${pathname}${request.nextUrl.search}`;
+    loginUrl.searchParams.set("next", next);
   }
   return NextResponse.redirect(loginUrl);
 }
