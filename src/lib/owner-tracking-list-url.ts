@@ -4,6 +4,10 @@ import {
   parseOwnerTrackingListing591Filter,
   type OwnerTrackingListing591Filter,
 } from "@/lib/owner-tracking-listing-checks";
+import {
+  parseOwnerTrackingContactFilter,
+  type OwnerTrackingContactFilter,
+} from "@/lib/owner-tracking-next-contact";
 
 export const OWNER_TRACKING_LIST_PATH = "/admin/owner-tracking";
 
@@ -13,6 +17,7 @@ export type OwnerTrackingListUrlState = {
   propertyTypeFilter: string;
   assigneeFilter: string;
   listing591Filter: OwnerTrackingListing591Filter;
+  contactFilter: OwnerTrackingContactFilter;
   page: number;
 };
 
@@ -33,6 +38,7 @@ export function parseOwnerTrackingListSearch(
     propertyTypeFilter: params.get("ptype") ?? "ALL",
     assigneeFilter,
     listing591Filter: parseOwnerTrackingListing591Filter(params.get("l591")),
+    contactFilter: parseOwnerTrackingContactFilter(params.get("contact")),
     page: Number.isFinite(pageRaw) && pageRaw > 0 ? pageRaw : 1,
   };
 }
@@ -45,6 +51,7 @@ export function buildOwnerTrackingListQuery(state: OwnerTrackingListUrlState): s
   if (state.propertyTypeFilter !== "ALL") p.set("ptype", state.propertyTypeFilter);
   if (state.assigneeFilter !== "ALL") p.set("assignee", state.assigneeFilter);
   if (state.listing591Filter !== "ALL") p.set("l591", state.listing591Filter);
+  if (state.contactFilter !== "ALL") p.set("contact", state.contactFilter);
   if (state.page > 1) p.set("page", String(state.page));
   return p.toString();
 }

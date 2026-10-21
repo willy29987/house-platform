@@ -51,6 +51,8 @@ import {
 import { PROPERTY_TYPE_OPTIONS, propertyTypeLabel } from "@/lib/property-type-label";
 import { TAIWAN_REGIONS } from "@/lib/taiwan-regions";
 import { hydrateOwnerTrackingStoreOnce } from "@/lib/admin-cloud-sync-client";
+import { OwnerTrackingNextContactField } from "@/components/owner-tracking-next-contact-field";
+import { normalizeNextContactDate } from "@/lib/owner-tracking-next-contact";
 
 type Props = {
   currentUsername: string;
@@ -87,6 +89,7 @@ const emptyForm = (): OwnerCaseInput => ({
   serviceFee: "",
   specialMatters: "",
   caseNote: "",
+  nextContactDate: "",
 });
 
 function FormField({
@@ -734,6 +737,13 @@ export function OwnerTrackingNewForm({
       ) : (
         <div className="mt-6 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
           <p className="mb-3 text-sm font-bold text-zinc-900">記錄本次追蹤</p>
+          <div className="mb-4">
+            <OwnerTrackingNextContactField
+              value={form.nextContactDate}
+              onChange={(ymd) => setField("nextContactDate", normalizeNextContactDate(ymd))}
+              compact
+            />
+          </div>
           <div className="grid gap-3 sm:grid-cols-[10rem_1fr_auto] sm:items-end">
             <label className="block">
               <span className="mb-1 block text-xs font-medium text-zinc-600">狀態</span>

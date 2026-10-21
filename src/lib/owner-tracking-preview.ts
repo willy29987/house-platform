@@ -1,6 +1,7 @@
 /** 屋主追蹤預覽版：型別、狀態選項、localStorage（正式版可改 Postgres）。 */
 
 import { formatOwnerCaseAddress, parseTaiwanAddress } from "@/lib/taiwan-address";
+import { normalizeNextContactDate } from "@/lib/owner-tracking-next-contact";
 
 export { formatOwnerCaseAddress } from "@/lib/taiwan-address";
 
@@ -72,6 +73,8 @@ export type OwnerCasePreview = {
   specialMatters: string;
   /** 案件備註 */
   caseNote: string;
+  /** 下次應聯繫日（Asia/Taipei YYYY-MM-DD；空 = 未設定） */
+  nextContactDate: string;
 };
 
 export type OwnerCaseInput = Omit<OwnerCasePreview, "id" | "assignee" | "createdAt">;
@@ -135,6 +138,7 @@ export function normalizeCase(raw: Record<string, unknown>, fallbackAssignee = "
     serviceFee: String(raw.serviceFee ?? ""),
     specialMatters: String(raw.specialMatters ?? ""),
     caseNote: String(raw.caseNote ?? ""),
+    nextContactDate: normalizeNextContactDate(String(raw.nextContactDate ?? "")),
   };
 }
 
@@ -326,6 +330,7 @@ export function appendOwnerCase(
     assignee,
     createdAt,
     ...trimmed,
+    nextContactDate: normalizeNextContactDate(trimmed.nextContactDate),
   };
 
   const initialFollowUp: OwnerFollowUpPreview = {
@@ -401,6 +406,19 @@ export function ownerCaseToInput(c: OwnerCasePreview): OwnerCaseInput {
     serviceFee: c.serviceFee,
     specialMatters: c.specialMatters,
     caseNote: c.caseNote,
+    nextContactDate: c.nextContactDate,
+  };
+}
+
+export function patchOwnerCaseNextContact(
+  store: OwnerTrackingStore,
+  caseId: string,
+  nextContactDate: string,
+): OwnerTrackingStore {
+  const ymd = normalizeNextContactDate(nextContactDate);
+  return {
+    ...store,
+    cases: store.cases.map((c) => (c.id === caseId ? { ...c, nextContactDate: ymd } : c)),
   };
 }
 
@@ -431,6 +449,7 @@ function trimOwnerCaseInput(input: OwnerCaseInput): OwnerCaseInput {
     serviceFee: input.serviceFee.trim(),
     specialMatters: input.specialMatters.trim(),
     caseNote: input.caseNote.trim(),
+    nextContactDate: normalizeNextContactDate(input.nextContactDate),
   };
 }
 
@@ -444,7 +463,11 @@ export function updateOwnerCase(
   const prev = store.cases[idx]!;
   const trimmed = trimOwnerCaseInput(input);
   const cases = [...store.cases];
-  cases[idx] = { ...prev, ...trimmed };
+  cases[idx] = {
+    ...prev,
+    ...trimmed,
+    nextContactDate: normalizeNextContactDate(trimmed.nextContactDate),
+  };
   return { ...store, cases };
 }
 

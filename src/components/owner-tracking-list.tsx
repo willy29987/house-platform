@@ -49,6 +49,11 @@ import {
   type Listing591CheckEntry,
   type OwnerTrackingListingChecksStore,
 } from "@/lib/owner-tracking-listing-checks";
+import {
+  contactDueCategory,
+  formatNextContactLabel,
+  isContactDueTodayView,
+} from "@/lib/owner-tracking-next-contact";
 
 type Props = {
   currentUsername: string;
@@ -60,9 +65,13 @@ type Props = {
 const PAGE_SIZE = 100;
 const MAX_591_CHECK_BATCH = 30;
 
+const COMPACT_FILTER_LABEL = "block shrink-0";
+const COMPACT_FILTER_SELECT =
+  "w-fit max-w-full rounded-lg border border-zinc-300 px-2 py-2 text-sm";
+
 /** 表頭與資料列共用（無負責人欄；上次備註加寬） */
 const LIST_ROW_GRID =
-  "sm:grid sm:grid-cols-[minmax(0,3.5fr)_5.5rem_8rem_6rem_6.5rem_minmax(0,2.2fr)_5.5rem_2.5rem_4.5rem] sm:items-center sm:gap-x-3";
+  "sm:grid sm:grid-cols-[minmax(0,3.5fr)_5.5rem_8rem_6rem_6.5rem_5.5rem_minmax(0,2fr)_5.5rem_2.5rem_4.5rem] sm:items-center sm:gap-x-3";
 
 function formatListWhen(iso: string): string {
   const d = new Date(iso);
@@ -86,7 +95,7 @@ function OwnerTrackingListInner({
     () => parseOwnerTrackingListSearch(searchParams, { isSuperAdmin, currentUsername }),
     [searchParams, isSuperAdmin, currentUsername],
   );
-  const { keyword, statusFilter, propertyTypeFilter, assigneeFilter, listing591Filter, page } =
+  const { keyword, statusFilter, propertyTypeFilter, assigneeFilter, listing591Filter, contactFilter, page } =
     urlState;
 
   const patchListUrl = useCallback(
@@ -238,6 +247,7 @@ function OwnerTrackingListInner({
         propertyTypeFilter,
         assigneeFilter: isSuperAdmin ? assigneeFilter : currentUsername,
         listing591Filter,
+        contactFilter,
         listingChecksByCaseId: checkStore.byCaseId,
         currentUsername,
         isSuperAdmin,
@@ -249,6 +259,7 @@ function OwnerTrackingListInner({
       propertyTypeFilter,
       assigneeFilter,
       listing591Filter,
+      contactFilter,
       checkStore.byCaseId,
       currentUsername,
       isSuperAdmin,
@@ -374,12 +385,12 @@ function OwnerTrackingListInner({
             className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
           />
         </label>
-        <label className="block min-w-[10rem]">
+        <label className={COMPACT_FILTER_LABEL}>
           <span className="mb-1 block text-xs font-medium text-zinc-600">目前狀態</span>
           <select
             value={statusFilter}
             onChange={(e) => patchListUrl({ statusFilter: e.target.value, page: 1 })}
-            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+            className={COMPACT_FILTER_SELECT}
           >
             <option value="ALL">全部</option>
             {OWNER_TRACKING_STATUS_OPTIONS.map((s) => (
@@ -389,12 +400,12 @@ function OwnerTrackingListInner({
             ))}
           </select>
         </label>
-        <label className="block min-w-[10rem]">
+        <label className={COMPACT_FILTER_LABEL}>
           <span className="mb-1 block text-xs font-medium text-zinc-600">物件類別</span>
           <select
             value={propertyTypeFilter}
             onChange={(e) => patchListUrl({ propertyTypeFilter: e.target.value, page: 1 })}
-            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+            className={COMPACT_FILTER_SELECT}
           >
             <option value="ALL">全部</option>
             {PROPERTY_TYPE_OPTIONS.map((code) => (
@@ -405,12 +416,12 @@ function OwnerTrackingListInner({
           </select>
         </label>
         {isSuperAdmin ? (
-          <label className="block min-w-[10rem]">
+          <label className={COMPACT_FILTER_LABEL}>
             <span className="mb-1 block text-xs font-medium text-zinc-600">負責人</span>
             <select
               value={assigneeFilter}
               onChange={(e) => patchListUrl({ assigneeFilter: e.target.value, page: 1 })}
-              className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+              className={COMPACT_FILTER_SELECT}
             >
               <option value="ALL">全部</option>
               {assigneeOptions.map((name) => (
@@ -421,7 +432,7 @@ function OwnerTrackingListInner({
             </select>
           </label>
         ) : null}
-        <label className="block min-w-[10rem]">
+        <label className={COMPACT_FILTER_LABEL}>
           <span className="mb-1 block text-xs font-medium text-zinc-600">591 狀態</span>
           <select
             value={listing591Filter}
@@ -431,7 +442,7 @@ function OwnerTrackingListInner({
                 page: 1,
               })
             }
-            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+            className={COMPACT_FILTER_SELECT}
           >
             <option value="ALL">全部</option>
             <option value="LIVE">在線</option>
@@ -459,25 +470,57 @@ function OwnerTrackingListInner({
         </Link>
       </div>
 
-      {rows.length > 0 ? (
-        <p className="text-sm text-zinc-600">
-          共 <span className="font-semibold tabular-nums text-zinc-900">{rows.length.toLocaleString("zh-TW")}</span>{" "}
-          筆符合條件
-          {rows.length > PAGE_SIZE ? (
-            <>
-              {" "}
-              · 此頁顯示{" "}
-              <span className="font-medium tabular-nums">
-                {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, rows.length)}
-              </span>{" "}
-              · 第 {safePage} / {totalPages} 頁（每頁 {PAGE_SIZE} 筆）
-            </>
-          ) : null}
-        </p>
-      ) : null}
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() =>
+            patchListUrl({
+              contactFilter: isContactDueTodayView(contactFilter) ? "ALL" : "DUE",
+              page: 1,
+            })
+          }
+          className={
+            isContactDueTodayView(contactFilter)
+              ? "inline-flex shrink-0 items-center rounded-lg border border-amber-400 bg-amber-50 px-3 py-1.5 text-sm font-semibold text-amber-950 shadow-sm"
+              : "inline-flex shrink-0 items-center rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm font-semibold text-zinc-800 hover:bg-zinc-50"
+          }
+        >
+          今日待聯繫
+        </button>
+        {rows.length > 0 ? (
+          <p className="text-sm text-zinc-600">
+            共{" "}
+            <span className="font-semibold tabular-nums text-zinc-900">
+              {rows.length.toLocaleString("zh-TW")}
+            </span>{" "}
+            筆符合條件
+            {isContactDueTodayView(contactFilter) ? (
+              <span className="text-zinc-500">（含今日與已逾期）</span>
+            ) : null}
+            {rows.length > PAGE_SIZE ? (
+              <>
+                {" "}
+                · 此頁顯示{" "}
+                <span className="font-medium tabular-nums">
+                  {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, rows.length)}
+                </span>{" "}
+                · 第 {safePage} / {totalPages} 頁（每頁 {PAGE_SIZE} 筆）
+              </>
+            ) : null}
+          </p>
+        ) : hydrated ? (
+          <p className="text-sm text-zinc-600">
+            {isContactDueTodayView(contactFilter)
+              ? "目前沒有今日待聯繫或已逾期的案件"
+              : store.cases.length === 0
+                ? null
+                : "沒有符合條件的案件"}
+          </p>
+        ) : null}
+      </div>
 
       <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white shadow-sm">
-        <div className="min-w-[62rem]">
+        <div className="min-w-[68rem]">
         <div
           className={`hidden border-b border-zinc-100 bg-zinc-50 px-4 py-2.5 text-xs font-semibold text-zinc-500 ${LIST_ROW_GRID}`}
         >
@@ -486,6 +529,7 @@ function OwnerTrackingListInner({
           <span className="min-w-0 truncate">屋主</span>
           <span className="min-w-0 truncate">網址</span>
           <span className="min-w-0 truncate">目前狀態</span>
+          <span className="min-w-0 truncate">下次聯繫</span>
           <span className="min-w-0 truncate">上次備註</span>
           <span className="min-w-0 leading-snug tabular-nums">
             建立時間
@@ -627,6 +671,33 @@ function PageButton({
     >
       {n}
     </button>
+  );
+}
+
+function NextContactBadge({ nextContactDate }: { nextContactDate: string }) {
+  const category = contactDueCategory(nextContactDate);
+  const label = formatNextContactLabel(nextContactDate);
+  if (category === "none") {
+    return <span className="text-[11px] text-zinc-400 sm:text-xs">未排程</span>;
+  }
+  if (category === "today") {
+    return (
+      <span className="inline-block max-w-full truncate rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900 sm:text-[11px]">
+        {label}
+      </span>
+    );
+  }
+  if (category === "overdue") {
+    return (
+      <span className="inline-block max-w-full truncate rounded-full bg-rose-50 px-1.5 py-0.5 text-[10px] font-semibold text-rose-800 sm:text-[11px]">
+        {label}
+      </span>
+    );
+  }
+  return (
+    <span className="inline-block max-w-full truncate text-[10px] font-medium text-sky-800 sm:text-[11px]">
+      {label}
+    </span>
   );
 }
 
@@ -847,6 +918,10 @@ function CaseRow({
           ) : (
             <span className="text-xs text-zinc-400">尚未追蹤</span>
           )}
+        </div>
+
+        <div className="min-w-0 overflow-hidden">
+          <NextContactBadge nextContactDate={item.nextContactDate} />
         </div>
 
         <p

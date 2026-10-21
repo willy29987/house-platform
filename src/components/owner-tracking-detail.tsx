@@ -13,6 +13,7 @@ import {
   OWNER_TRACKING_STATUS_OPTIONS,
   canViewOwnerTrackingCase,
   deleteOwnerFollowUp,
+  patchOwnerCaseNextContact,
   saveOwnerTrackingStore,
   statusBadgeClass,
   type OwnerFollowUpPreview,
@@ -28,6 +29,8 @@ import {
   appendOwnerTrackingListContext,
   ownerTrackingListHrefFromListParam,
 } from "@/lib/owner-tracking-list-url";
+import { OwnerTrackingNextContactField } from "@/components/owner-tracking-next-contact-field";
+import { formatNextContactLabel, normalizeNextContactDate } from "@/lib/owner-tracking-next-contact";
 
 type Props = {
   caseId: string;
@@ -51,6 +54,7 @@ export function OwnerTrackingDetail({ caseId, currentUsername, isSuperAdmin = fa
   const [submitting, setSubmitting] = useState(false);
   const [confirmSubmit, setConfirmSubmit] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
+  const [nextContactDate, setNextContactDate] = useState("");
 
   useEffect(() => {
     void hydrateOwnerTrackingStoreOnce(loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreLocal).then(
@@ -65,6 +69,12 @@ export function OwnerTrackingDetail({ caseId, currentUsername, isSuperAdmin = fa
     () => store.cases.find((c) => c.id === caseId) ?? null,
     [store, caseId],
   );
+
+  useEffect(() => {
+    if (ownerCase) {
+      setNextContactDate(normalizeNextContactDate(ownerCase.nextContactDate));
+    }
+  }, [ownerCase?.id, ownerCase?.nextContactDate]);
 
   const timeline = useMemo(
     () =>
@@ -95,10 +105,11 @@ export function OwnerTrackingDetail({ caseId, currentUsername, isSuperAdmin = fa
       createdBy: currentUsername,
       createdAt: new Date().toISOString(),
     };
-    persist({
+    const withFollowUp: OwnerTrackingStore = {
       ...store,
       followUps: [...store.followUps, entry],
-    });
+    };
+    persist(patchOwnerCaseNextContact(withFollowUp, caseId, nextContactDate));
     setNote("");
     setConfirmSubmit(false);
     setFlash("已記錄本次追蹤");
@@ -147,9 +158,14 @@ export function OwnerTrackingDetail({ caseId, currentUsername, isSuperAdmin = fa
             <h2 className="text-xl font-bold text-zinc-900">{ownerCase.ownerName}</h2>
             <p className="mt-1 text-sm text-zinc-600">{ownerCase.phone}</p>
           </div>
-          <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-700">
-            負責 {ownerCase.assignee}
-          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-700">
+              負責 {ownerCase.assignee}
+            </span>
+            <span className="rounded-full bg-zinc-50 px-3 py-1 text-xs text-zinc-600">
+              下次聯繫：{formatNextContactLabel(ownerCase.nextContactDate)}
+            </span>
+          </div>
         </div>
         <h3 className="mt-5 border-t border-zinc-100 pt-4 text-base font-bold text-zinc-900">案件詳細資訊</h3>
         <CaseInfoGrid item={ownerCase} />
@@ -244,6 +260,16 @@ export function OwnerTrackingDetail({ caseId, currentUsername, isSuperAdmin = fa
           </p>
         ) : null}
         <p className="mb-3 text-sm font-bold text-zinc-900">記錄本次追蹤</p>
+        <div className="mb-4 max-sm:max-h-[40vh] max-sm:overflow-y-auto">
+          <OwnerTrackingNextContactField
+            value={nextContactDate}
+            onChange={(ymd) => {
+              setConfirmSubmit(false);
+              setNextContactDate(normalizeNextContactDate(ymd));
+            }}
+            compact
+          />
+        </div>
         <div className="grid gap-3 sm:grid-cols-[10rem_1fr_auto] sm:items-end">
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-zinc-600">狀態</span>

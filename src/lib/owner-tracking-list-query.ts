@@ -13,6 +13,12 @@ import {
   type OwnerFollowUpPreview,
   type OwnerTrackingStore,
 } from "@/lib/owner-tracking-preview";
+import {
+  contactDueCategory,
+  matchesContactFilter,
+  normalizeNextContactDate,
+  type OwnerTrackingContactFilter,
+} from "@/lib/owner-tracking-next-contact";
 import { COMMUNITY_PROPERTY_TYPES } from "@/lib/owner-tracking-form-ui";
 import { propertyTypeLabel } from "@/lib/property-type-label";
 
@@ -42,11 +48,13 @@ export function buildOwnerTrackingListRows(
     assigneeFilter: string;
     listing591Filter?: OwnerTrackingListing591Filter;
     listingChecksByCaseId?: Record<string, Listing591CheckEntry>;
+    contactFilter?: OwnerTrackingContactFilter;
     currentUsername?: string;
     isSuperAdmin?: boolean;
   },
 ): OwnerTrackingListRow[] {
   const listing591Filter = filters.listing591Filter ?? "ALL";
+  const contactFilter = filters.contactFilter ?? "ALL";
   const checks = filters.listingChecksByCaseId ?? {};
   const q = filters.keyword.trim().toLowerCase();
   const visibility =
@@ -70,6 +78,9 @@ export function buildOwnerTrackingListRows(
         const category = resolveListing591ListCategory(c.listingUrl, checks[c.id]);
         if (!matchesListing591Filter(category, listing591Filter)) return false;
       }
+      if (contactFilter !== "ALL" && !matchesContactFilter(c.nextContactDate, contactFilter)) {
+        return false;
+      }
       if (!q) return true;
       const hay = [
         c.ownerName,
@@ -87,5 +98,21 @@ export function buildOwnerTrackingListRows(
         .toLowerCase();
       return hay.includes(q);
     })
-    .sort((a, b) => b.case.createdAt.localeCompare(a.case.createdAt));
+    .sort((a, b) => {
+      if (contactFilter === "DUE") {
+        const rank = (ymd: string) => {
+          const cat = contactDueCategory(ymd);
+          if (cat === "overdue") return 0;
+          if (cat === "today") return 1;
+          return 2;
+        };
+        const ra = rank(a.case.nextContactDate);
+        const rb = rank(b.case.nextContactDate);
+        if (ra !== rb) return ra - rb;
+        const da = normalizeNextContactDate(a.case.nextContactDate);
+        const db = normalizeNextContactDate(b.case.nextContactDate);
+        if (da !== db) return da.localeCompare(db);
+      }
+      return b.case.createdAt.localeCompare(a.case.createdAt);
+    });
 }
