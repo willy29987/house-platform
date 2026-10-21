@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   addDaysYmd,
   normalizeNextContactDate,
@@ -15,8 +15,7 @@ type Props = {
   compact?: boolean;
 };
 
-export function OwnerTrackingNextContactField({ value, onChange, compact = false }: Props) {
-  const detailsId = useId();
+export function OwnerTrackingNextContactField({ value, onChange, compact: _compact = false }: Props) {
   const today = useMemo(() => taipeiTodayYmd(), []);
   const normalized = normalizeNextContactDate(value);
   const [showDate, setShowDate] = useState(false);
@@ -24,7 +23,7 @@ export function OwnerTrackingNextContactField({ value, onChange, compact = false
   const isPreset =
     !!normalized && DAY_PRESETS.some((d) => normalized === addDaysYmd(today, d));
   const isCustom = !!normalized && !isPreset;
-  const showPicker = showDate || isCustom;
+  const showPicker = showDate || isCustom || isPreset;
 
   function pickDays(days: number) {
     onChange(addDaysYmd(today, days));
@@ -42,9 +41,9 @@ export function OwnerTrackingNextContactField({ value, onChange, compact = false
   }
 
   return (
-    <div className={compact ? "space-y-2" : "space-y-3"}>
-      <span className="block text-xs font-medium text-zinc-600">下次聯繫</span>
-      <div className="flex flex-wrap items-end gap-1.5">
+    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-2">
+      <span className="shrink-0 text-xs font-medium text-zinc-600">下次聯繫</span>
+      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
         <button
           type="button"
           onClick={pickNone}
@@ -74,7 +73,7 @@ export function OwnerTrackingNextContactField({ value, onChange, compact = false
           type="button"
           onClick={openCustomDate}
           className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium ${
-            showPicker
+            showDate || isCustom
               ? "border-[#1e3a8a] bg-[#1e3a8a]/10 text-[#1e3a8a]"
               : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50"
           }`}
@@ -82,36 +81,21 @@ export function OwnerTrackingNextContactField({ value, onChange, compact = false
           指定日期
         </button>
         {showPicker ? (
-          <div className="flex min-w-0 flex-col gap-0.5">
-            <label className="block max-w-[11rem] min-w-[9.5rem]">
-              <span className="sr-only">指定下次聯繫日期</span>
-              <input
-                type="date"
-                min={today}
-                value={normalized || ""}
-                onChange={(e) => onChange(normalizeNextContactDate(e.target.value))}
-                className="h-[34px] w-full rounded-lg border border-zinc-300 px-2 py-1 text-sm"
-                aria-describedby={detailsId}
-              />
-            </label>
-            {normalized ? (
-              <p id={detailsId} className="text-xs text-zinc-500">
-                已排程：
-                <span className="font-medium tabular-nums text-zinc-700">{normalized}</span>
-              </p>
-            ) : null}
-          </div>
+          <label className="block max-w-[11rem] min-w-[9.5rem] shrink-0">
+            <span className="sr-only">指定下次聯繫日期</span>
+            <input
+              type="date"
+              min={today}
+              value={normalized || ""}
+              onChange={(e) => {
+                setShowDate(true);
+                onChange(normalizeNextContactDate(e.target.value));
+              }}
+              className="h-[34px] w-full rounded-lg border border-zinc-300 px-2 py-1 text-sm"
+            />
+          </label>
         ) : null}
       </div>
-      {isPreset && normalized ? (
-        <p id={!showPicker ? detailsId : undefined} className="text-xs text-zinc-500">
-          已排程：<span className="font-medium tabular-nums text-zinc-700">{normalized}</span>
-        </p>
-      ) : !normalized ? (
-        <p id={detailsId} className="text-xs text-zinc-400">
-          未設定時不會出現在「今日待聯繫」篩選。
-        </p>
-      ) : null}
     </div>
   );
 }
