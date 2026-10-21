@@ -206,7 +206,7 @@ function ensureInitialFollowUps(store: OwnerTrackingStore): OwnerTrackingStore {
       id: newId("fu"),
       caseId: c.id,
       status: "持續聯繫",
-      note: c.caseNote.trim() || "建立案件",
+      note: c.caseNote.trim(),
       createdBy: c.assignee,
       createdAt: c.createdAt,
     });
@@ -319,7 +319,7 @@ export function appendOwnerCase(
     id: newId("fu"),
     caseId,
     status: initialStatus,
-    note: input.caseNote.trim() || "建立案件",
+    note: input.caseNote.trim(),
     createdBy: assignee,
     createdAt,
   };

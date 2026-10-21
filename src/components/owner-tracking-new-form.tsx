@@ -258,7 +258,11 @@ export function OwnerTrackingNewForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-6">
+    <form
+      lang="zh-Hant"
+      onSubmit={handleSubmit}
+      className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-6"
+    >
       <div className="grid grid-cols-1 gap-x-5 gap-y-4 sm:grid-cols-2">
         <div className="sm:col-span-2 space-y-4">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:gap-3">
@@ -668,7 +672,8 @@ export function OwnerTrackingNewForm({
           </FormField>
           <FormField label="電話">
             <input
-              type="tel"
+              type="text"
+              autoComplete="off"
               value={form.phone}
               onChange={(e) => setField("phone", e.target.value)}
               className={field}
@@ -676,7 +681,9 @@ export function OwnerTrackingNewForm({
           </FormField>
           <FormField label="網址">
             <input
-              type="url"
+              type="text"
+              autoComplete="off"
+              spellCheck={false}
               value={form.listingUrl}
               onChange={(e) => setField("listingUrl", e.target.value)}
               className={field}
