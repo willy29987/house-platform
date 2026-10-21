@@ -13,7 +13,9 @@ import {
   filterUpcomingRentListings,
   formatRocDate,
   getDaysUntilRelease,
+  isNeverPublishedDraft,
   isUpcomingRelease as computeIsUpcomingRelease,
+  isVisibleInAdminListingPool,
   sortUpcomingRentListingsNewestFirst,
   unpublishCategoryLabel,
 } from "@/lib/listing-internal-meta";
@@ -146,10 +148,13 @@ export function AdminListingTable({
   const searchParams = useSearchParams();
   const initialRerent = searchParams?.get("view") === "rerent";
   const initialMine = searchParams?.get("mine") === "1";
+  const initialMineOff = searchParams?.get("off") === "1";
   const [ownerFilter, setOwnerFilter] = useState<OwnerFilter>(
     initialRerent ? "RERENT" : initialMine ? "MINE" : "ALL",
   );
-  const [mineStatusFilter, setMineStatusFilter] = useState<"ALL" | "UNPUBLISHED">("ALL");
+  const [mineStatusFilter, setMineStatusFilter] = useState<"ALL" | "UNPUBLISHED">(
+    initialMineOff ? "UNPUBLISHED" : "ALL",
+  );
 
   useEffect(() => {
     if (searchParams?.get("view") === "rerent") {
@@ -158,7 +163,7 @@ export function AdminListingTable({
     }
     if (searchParams?.get("mine") === "1") {
       setOwnerFilter("MINE");
-      setMineStatusFilter("ALL");
+      setMineStatusFilter(searchParams?.get("off") === "1" ? "UNPUBLISHED" : "ALL");
       return;
     }
     if (!searchParams?.get("view") && !searchParams?.get("mine")) {
@@ -233,12 +238,7 @@ export function AdminListingTable({
           });
         }
         if (ownerFilter === "MINE" && mineStatusFilter === "UNPUBLISHED") return !l.isPublished;
-        // 「上架中」分頁也納入「即將釋出」物件，方便置頂提醒
-        if (l.isPublished) return true;
-        return computeIsUpcomingRelease({
-          isPublished: l.isPublished,
-          expectedReleaseDate: l.expectedReleaseDate,
-        });
+        return isVisibleInAdminListingPool(l);
       })
       .filter((l) => {
         if (ownerFilter === "RERENT") {
@@ -283,6 +283,8 @@ export function AdminListingTable({
         isPublished: b.isPublished,
         expectedReleaseDate: b.expectedReleaseDate,
       });
+      const aDraft = isNeverPublishedDraft(a);
+      const bDraft = isNeverPublishedDraft(b);
       if (aUp && !bUp) return -1;
       if (!aUp && bUp) return 1;
       if (aUp && bUp) {
@@ -290,6 +292,8 @@ export function AdminListingTable({
         const bDays = getDaysUntilRelease(b.expectedReleaseDate) ?? Number.POSITIVE_INFINITY;
         if (aDays !== bDays) return aDays - bDays;
       }
+      if (aDraft && !bDraft) return -1;
+      if (!aDraft && bDraft) return 1;
       return b.createdAt.getTime() - a.createdAt.getTime();
     });
   }, [
@@ -459,13 +463,25 @@ export function AdminListingTable({
               isPublished: l.isPublished,
               expectedReleaseDate: l.expectedReleaseDate,
             });
+            const draft = isNeverPublishedDraft(l);
             const daysUntilRelease = getDaysUntilRelease(l.expectedReleaseDate);
             const articleClass = upcoming
               ? "overflow-hidden rounded-2xl border-2 border-amber-400 bg-amber-50/40 shadow-sm ring-1 ring-amber-200"
-              : "overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm";
+              : draft
+                ? "overflow-hidden rounded-2xl border-2 border-sky-300 bg-sky-50/30 shadow-sm ring-1 ring-sky-200"
+                : "overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm";
 
             return (
               <article key={l.id} className={articleClass}>
+                {draft ? (
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-sky-200 bg-sky-100/80 px-3 py-1.5 text-xs font-semibold text-sky-950 md:px-4">
+                    <span className="inline-flex items-center gap-1.5">
+                      <span aria-hidden>📝</span>
+                      尚未上架
+                    </span>
+                    <span className="text-sky-800/90">請按「上架」後才會出現在官網首頁</span>
+                  </div>
+                ) : null}
                 {upcoming ? (
                   <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200 bg-amber-100/80 px-3 py-1.5 text-xs font-semibold text-amber-900 md:px-4">
                     <span className="inline-flex items-center gap-1.5">

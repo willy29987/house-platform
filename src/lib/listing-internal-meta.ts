@@ -34,6 +34,42 @@ export function getDaysUntilRelease(expectedReleaseDate: string | null | undefin
   return Math.round(diffMs / (24 * 60 * 60 * 1000));
 }
 
+/** 建立後從未對外上架過的草稿（非回租／非即將釋出） */
+export function isNeverPublishedDraft(listing: {
+  isPublished: boolean;
+  expectedReleaseDate?: string | null;
+  unpublishedAt?: string | null;
+}): boolean {
+  if (listing.isPublished) return false;
+  if (
+    isUpcomingRelease({
+      isPublished: listing.isPublished,
+      expectedReleaseDate: listing.expectedReleaseDate,
+    })
+  ) {
+    return false;
+  }
+  return !listing.unpublishedAt;
+}
+
+/** 後台房源列表：已上架、即將釋出、或未上架草稿 */
+export function isVisibleInAdminListingPool(listing: {
+  isPublished: boolean;
+  expectedReleaseDate?: string | null;
+  unpublishedAt?: string | null;
+}): boolean {
+  if (listing.isPublished) return true;
+  if (
+    isUpcomingRelease({
+      isPublished: listing.isPublished,
+      expectedReleaseDate: listing.expectedReleaseDate,
+    })
+  ) {
+    return true;
+  }
+  return isNeverPublishedDraft(listing);
+}
+
 /** 是否為「即將釋出」物件：未上架 + 距預計釋出日期 ≤ 60 天且 ≥ 0 */
 export function isUpcomingRelease(args: {
   isPublished: boolean;
