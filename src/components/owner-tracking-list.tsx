@@ -107,6 +107,19 @@ function OwnerTrackingListInner({
     [urlState, pathname, router],
   );
 
+  /** 搜尋：本地即時輸入，延遲寫入 URL，避免每鍵 router.replace 造成卡頓 */
+  const [keywordInput, setKeywordInput] = useState(keyword);
+  useEffect(() => {
+    setKeywordInput(keyword);
+  }, [keyword]);
+  useEffect(() => {
+    if (keywordInput === keyword) return;
+    const handle = window.setTimeout(() => {
+      patchListUrl({ keyword: keywordInput, page: 1 });
+    }, 350);
+    return () => window.clearTimeout(handle);
+  }, [keywordInput, keyword, patchListUrl]);
+
   const [store, setStore] = useState<OwnerTrackingStore>(emptyOwnerTrackingStore);
   const [hydrated, setHydrated] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -242,7 +255,7 @@ function OwnerTrackingListInner({
   const rows = useMemo(
     () =>
       buildOwnerTrackingListRows(store, {
-        keyword,
+        keyword: keywordInput,
         statusFilter,
         propertyTypeFilter,
         assigneeFilter: isSuperAdmin ? assigneeFilter : currentUsername,
@@ -254,7 +267,7 @@ function OwnerTrackingListInner({
       }),
     [
       store,
-      keyword,
+      keywordInput,
       statusFilter,
       propertyTypeFilter,
       assigneeFilter,
@@ -379,8 +392,8 @@ function OwnerTrackingListInner({
           <span className="mb-1 block text-xs font-medium text-zinc-600">搜尋</span>
           <input
             type="search"
-            value={keyword}
-            onChange={(e) => patchListUrl({ keyword: e.target.value, page: 1 })}
+            value={keywordInput}
+            onChange={(e) => setKeywordInput(e.target.value)}
             placeholder="姓名、電話、地址、物件"
             className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
           />
