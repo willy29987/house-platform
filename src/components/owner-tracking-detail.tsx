@@ -52,7 +52,6 @@ export function OwnerTrackingDetail({ caseId, currentUsername, isSuperAdmin = fa
   const [status, setStatus] = useState<OwnerTrackingStatus>("持續聯繫");
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [confirmSubmit, setConfirmSubmit] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
   const [nextContactDate, setNextContactDate] = useState("");
 
@@ -91,11 +90,7 @@ export function OwnerTrackingDetail({ caseId, currentUsername, isSuperAdmin = fa
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!ownerCase) return;
-    if (!confirmSubmit) {
-      setConfirmSubmit(true);
-      return;
-    }
+    if (!ownerCase || submitting) return;
     setSubmitting(true);
     const entry: OwnerFollowUpPreview = {
       id: newId("fu"),
@@ -111,7 +106,6 @@ export function OwnerTrackingDetail({ caseId, currentUsername, isSuperAdmin = fa
     };
     persist(patchOwnerCaseNextContact(withFollowUp, caseId, nextContactDate));
     setNote("");
-    setConfirmSubmit(false);
     setFlash("已記錄本次追蹤");
     setSubmitting(false);
     window.setTimeout(() => setFlash(null), 2500);
@@ -263,10 +257,7 @@ export function OwnerTrackingDetail({ caseId, currentUsername, isSuperAdmin = fa
         <div className="mb-4 max-sm:max-h-[40vh] max-sm:overflow-y-auto">
           <OwnerTrackingNextContactField
             value={nextContactDate}
-            onChange={(ymd) => {
-              setConfirmSubmit(false);
-              setNextContactDate(normalizeNextContactDate(ymd));
-            }}
+            onChange={(ymd) => setNextContactDate(normalizeNextContactDate(ymd))}
             compact
           />
         </div>
@@ -275,10 +266,7 @@ export function OwnerTrackingDetail({ caseId, currentUsername, isSuperAdmin = fa
             <span className="mb-1 block text-xs font-medium text-zinc-600">狀態</span>
             <select
               value={status}
-              onChange={(e) => {
-                setConfirmSubmit(false);
-                setStatus(e.target.value as OwnerTrackingStatus);
-              }}
+              onChange={(e) => setStatus(e.target.value as OwnerTrackingStatus)}
               className="w-full rounded-lg border border-zinc-300 px-3 py-2.5 text-sm"
             >
               {OWNER_TRACKING_STATUS_OPTIONS.map((s) => (
@@ -293,42 +281,17 @@ export function OwnerTrackingDetail({ caseId, currentUsername, isSuperAdmin = fa
             <input
               type="text"
               value={note}
-              onChange={(e) => {
-                setConfirmSubmit(false);
-                setNote(e.target.value);
-              }}
+              onChange={(e) => setNote(e.target.value)}
               className="w-full rounded-lg border border-zinc-300 px-3 py-2.5 text-sm"
             />
           </label>
-          <div className="flex flex-col gap-2 sm:items-end">
-            {confirmSubmit ? (
-              <>
-                <button
-                  type="button"
-                  disabled={submitting}
-                  onClick={() => setConfirmSubmit(false)}
-                  className="h-[42px] rounded-lg border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 hover:bg-zinc-50 disabled:opacity-60 sm:h-auto sm:py-2.5"
-                >
-                  取消
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="h-[42px] rounded-lg bg-[#0b2545] px-6 text-sm font-semibold text-white hover:bg-[#1e3a8a] disabled:opacity-60 sm:h-auto sm:py-2.5"
-                >
-                  確認送出
-                </button>
-              </>
-            ) : (
-              <button
-                type="submit"
-                disabled={submitting}
-                className="h-[42px] rounded-lg bg-[#0b2545] px-6 text-sm font-semibold text-white hover:bg-[#1e3a8a] disabled:opacity-60 sm:h-auto sm:py-2.5"
-              >
-                送出
-              </button>
-            )}
-          </div>
+          <button
+            type="submit"
+            disabled={submitting}
+            className="h-[42px] rounded-lg bg-[#0b2545] px-6 text-sm font-semibold text-white hover:bg-[#1e3a8a] disabled:opacity-60 sm:h-auto sm:py-2.5"
+          >
+            {submitting ? "送出中…" : "送出"}
+          </button>
         </div>
       </form>
 
