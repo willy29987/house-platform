@@ -13,7 +13,35 @@ import {
   str,
 } from "./spreadsheet-import-shared.mjs";
 
-function mapRentalProgressToStatus(row) {
+/** 試算表「591」欄：O＝同意委託，X＝只可帶看 */
+export function pick591Cell(row) {
+  return pickRow(row, ["591", "591廣告", "591 廣告", "591广告"]);
+}
+
+export function statusFrom591Cell(raw591) {
+  const token = str(raw591)
+    .toUpperCase()
+    .split(/[\/／、,，\s]+/)[0];
+  if (!token) return null;
+  if (token === "O" || token === "○" || token === "〇" || token === "是" || token === "Y") {
+    return "同意委託";
+  }
+  if (token === "X" || token === "×" || token === "否" || token === "N") {
+    return "只可帶看";
+  }
+  return null;
+}
+
+/** 從案件備註「591：O」等匯入痕跡還原 591 欄 */
+export function extract591FromCaseNote(caseNote) {
+  const m = str(caseNote).match(/591[：:]\s*([^；\n]+)/);
+  return m ? m[1].trim() : "";
+}
+
+export function mapRentalProgressToStatus(row) {
+  const from591 = statusFrom591Cell(pick591Cell(row));
+  if (from591) return from591;
+
   const progress = pickRow(row, ["進度", "Progress"]);
   const rentOut = pickRow(row, ["出租日期"]);
   const cb2 = pickRow(row, ["二次回撥", "三次回撥"]);
@@ -91,7 +119,7 @@ export function parseRentalTrackingFromWorkbook(workbook, defaultAssignee = "R00
       const createdAt = parseDateCell(pickRow(row, ["開發日期", "建立時間"]));
 
       const metaBits = [
-        pickRow(row, ["591廣告"]) ? `591：${pickRow(row, ["591廣告"])}` : "",
+        pick591Cell(row) ? `591：${pick591Cell(row)}` : "",
         pickRow(row, ["公司內網"]) ? `內網：${pickRow(row, ["公司內網"])}` : "",
         pickRow(row, ["帶看"]) ? `帶看：${pickRow(row, ["帶看"])}` : "",
         sheet.name !== "總表" ? `分頁：${sheet.name}` : "",

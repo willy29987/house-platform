@@ -10,6 +10,7 @@
     "push:local-admin-data": "node scripts/push-local-admin-data-to-cloud.mjs",
     "import:spreadsheet:templates": "node scripts/generate-spreadsheet-import-templates.mjs",
     "import:spreadsheet": "node scripts/import-spreadsheet-to-cloud.mjs",
+    "import:owner-tracking:calibrate-591": "node scripts/recalibrate-owner-tracking-591-status.mjs",
     "sync:rental-sheet-r002": "node scripts/sync-rental-sheet-to-r002.mjs",
     "dev:fix": "P3000=$(lsof -ti:3000 -sTCP:LISTEN 2>/dev/null); if [ -n \"$P3000\" ]; then kill -9 $P3000; fi; P3001=$(lsof -ti:3001 -sTCP:LISTEN 2>/dev/null); if [ -n \"$P3001\" ]; then kill -9 $P3001; fi; npm run dev",
     "postinstall": "prisma generate",

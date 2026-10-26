@@ -62,6 +62,14 @@ npm run import:spreadsheet -- --type listings --file exports/listings.xlsx --cre
 
 狀態允許值：`未接`、`持續聯繫`、`只可帶看`、`同意委託`、`已出租結案`、`無效／重複`（舊名稱會自動轉換）。
 
+**Google「租賃追蹤表」591 欄**：`O` → **同意委託**；`X` → **只可帶看**（優先於「進度」文字）。若已匯入但狀態不對，可執行：
+
+```bash
+node scripts/recalibrate-owner-tracking-591-status.mjs --dry-run
+node scripts/recalibrate-owner-tracking-591-status.mjs
+# 或指定最新 xlsx：--file exports/owner-tracking.xlsx
+```
+
 ### 服務費
 
 | 試算表標題 | 系統欄位 |
