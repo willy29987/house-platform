@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 /**
- * 依試算表 591 欄（O＝同意委託、X＝只可帶看）校準屋主追蹤「目前狀態」（最新一筆追蹤）。
+ * 校準屋主追蹤「目前狀態」：
+ * - 同意委託：總表等案件備註 591＝O
+ * - 只可帶看：僅「可帶看總表」分頁列出的案件（不用總表 591＝X）
  *
- *   node scripts/recalibrate-owner-tracking-591-status.mjs --dry-run
- *   node scripts/recalibrate-owner-tracking-591-status.mjs
- *   node scripts/recalibrate-owner-tracking-591-status.mjs --file exports/owner-tracking.xlsx
+ *   node scripts/recalibrate-owner-tracking-591-status.mjs --file ~/Downloads/00-租賃追蹤表.xlsx
+ *   node scripts/recalibrate-owner-tracking-591-status.mjs --file ... --dry-run
  */
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
@@ -19,13 +21,14 @@ import {
   upsertCloudPayload,
 } from "./lib/spreadsheet-import-shared.mjs";
 import {
+  collectViewOnlyDedupeKeysFromWorkbook,
   extract591FromCaseNote,
-  parseRentalTrackingFromWorkbook,
   statusFrom591Cell,
 } from "./lib/rental-tracking-xlsx.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SKIP_STATUSES = new Set(["已出租結案", "無效／重複"]);
+const DEFAULT_XLSX = path.join(process.env.HOME ?? "", "Downloads", "00-租賃追蹤表.xlsx");
 
 function parseArgs(argv) {
   const out = { dryRun: false, file: "" };
@@ -51,74 +54,76 @@ function latestFollowUpIndex(followUps, caseId) {
   return best;
 }
 
-function build591MapFromWorkbook(workbook, defaultAssignee) {
-  const incoming = parseRentalTrackingFromWorkbook(workbook, defaultAssignee);
-  const map = new Map();
-  for (const c of incoming.cases) {
-    const raw = extract591FromCaseNote(c.caseNote);
-    const status = statusFrom591Cell(raw);
-    if (!status) continue;
-    map.set(ownerCaseDedupeKey(c), status);
-  }
-  return map;
+/** @returns {string | null} 目標狀態；null 表示不必改 */
+function resolveTargetStatus(c, viewOnlyKeys) {
+  const dk = ownerCaseDedupeKey(c);
+  if (viewOnlyKeys.has(dk)) return "只可帶看";
+  const entrust = statusFrom591Cell(extract591FromCaseNote(c.caseNote));
+  if (entrust === "同意委託") return "同意委託";
+  return null;
 }
 
-function targetStatusForCase(c, mapFromFile) {
-  if (mapFromFile?.size) {
-    const fromFile = mapFromFile.get(ownerCaseDedupeKey(c));
-    if (fromFile) return fromFile;
-  }
-  const raw = extract591FromCaseNote(c.caseNote);
-  return statusFrom591Cell(raw);
-}
-
-function applyCalibration(store, mapFromFile) {
+function applyCalibration(store, viewOnlyKeys) {
   const followUps = [...(store.followUps ?? [])];
   let updated = 0;
   let skippedFinal = 0;
-  let no591 = 0;
+  let clearedWrongViewOnly = 0;
+  let setViewOnly = 0;
+  let setEntrust = 0;
 
   for (const c of store.cases ?? []) {
-    const rawTarget = targetStatusForCase(c, mapFromFile);
-    if (!rawTarget) {
-      no591 += 1;
-      continue;
-    }
-    const target = normalizeFollowUpStatus(rawTarget);
-
+    let target = resolveTargetStatus(c, viewOnlyKeys);
     const idx = latestFollowUpIndex(followUps, c.id);
+
     if (idx >= 0) {
       const fu = followUps[idx];
       if (SKIP_STATUSES.has(fu.status)) {
         skippedFinal += 1;
         continue;
       }
+      if (!target && fu.status === "只可帶看") {
+        target = "持續聯繫";
+        clearedWrongViewOnly += 1;
+      }
+      if (!target) continue;
+      target = normalizeFollowUpStatus(target);
       if (fu.status === target) continue;
       followUps[idx] = {
         ...fu,
         status: target,
-        note: fu.note?.includes("591") ? fu.note : [fu.note, "依 591 欄校準"].filter(Boolean).join(" · "),
+        note: fu.note?.includes("591") || fu.note?.includes("可帶看總表")
+          ? fu.note
+          : [fu.note, target === "只可帶看" ? "依可帶看總表校準" : "依 591 欄校準"].filter(Boolean).join(" · "),
       };
       updated += 1;
+      if (target === "只可帶看") setViewOnly += 1;
+      if (target === "同意委託") setEntrust += 1;
       continue;
     }
 
+    if (!target) continue;
+    target = normalizeFollowUpStatus(target);
     followUps.push({
       id: newImportId("fu"),
       caseId: c.id,
       status: target,
-      note: "依 591 欄校準",
+      note: target === "只可帶看" ? "依可帶看總表校準" : "依 591 欄校準",
       createdBy: c.assignee || "—",
       createdAt: new Date().toISOString(),
     });
     updated += 1;
+    if (target === "只可帶看") setViewOnly += 1;
+    if (target === "同意委託") setEntrust += 1;
   }
 
   return {
     store: normalizeOwnerTrackingStore({ cases: store.cases ?? [], followUps }),
     updated,
     skippedFinal,
-    no591,
+    clearedWrongViewOnly,
+    setViewOnly,
+    setEntrust,
+    viewOnlyKeyCount: viewOnlyKeys.size,
   };
 }
 
@@ -130,22 +135,27 @@ async function main() {
     process.exit(1);
   }
 
-  let mapFromFile = null;
-  if (args.file) {
-    const filePath = path.isAbsolute(args.file) ? args.file : path.join(ROOT, args.file);
-    const workbook = await loadWorkbook(filePath);
-    mapFromFile = build591MapFromWorkbook(workbook, "R002");
-    console.log(`檔案 591 對照：${mapFromFile.size} 筆`);
+  const filePath = path.resolve(
+    args.file || (fs.existsSync(DEFAULT_XLSX) ? DEFAULT_XLSX : ""),
+  );
+  if (!filePath || !fs.existsSync(filePath)) {
+    console.error("請指定 --file（例如 Downloads/00-租賃追蹤表.xlsx）");
+    process.exit(1);
   }
+
+  const workbook = await loadWorkbook(filePath);
+  const viewOnlyKeys = collectViewOnlyDedupeKeysFromWorkbook(workbook);
+  console.log(`可帶看總表：${viewOnlyKeys.size} 案（${path.basename(filePath)}）`);
 
   const prisma = new PrismaClient();
   try {
     const row = await prisma.adminCloudData.findUnique({ where: { key: CLOUD_KEYS.ownerTracking } });
     const store = normalizeOwnerTrackingStore(row?.payload ?? { cases: [], followUps: [] });
-    const { store: next, updated, skippedFinal, no591 } = applyCalibration(store, mapFromFile);
+    const { store: next, updated, skippedFinal, clearedWrongViewOnly, setViewOnly, setEntrust } =
+      applyCalibration(store, viewOnlyKeys);
 
     console.log(
-      `案件 ${next.cases.length} · 追蹤 ${next.followUps.length} · 校準 ${updated} 筆 · 略過結案 ${skippedFinal} · 無 591 ${no591}`,
+      `案件 ${next.cases.length} · 追蹤 ${next.followUps.length} · 更新 ${updated} 筆（只可帶看 ${setViewOnly}、同意委託 ${setEntrust}、移除誤標只可帶看 ${clearedWrongViewOnly}）· 略過結案 ${skippedFinal}`,
     );
 
     if (!args.dryRun) {

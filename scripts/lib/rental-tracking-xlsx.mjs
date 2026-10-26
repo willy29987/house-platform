@@ -26,9 +26,6 @@ export function statusFrom591Cell(raw591) {
   if (token === "O" || token === "○" || token === "〇" || token === "是" || token === "Y") {
     return "同意委託";
   }
-  if (token === "X" || token === "×" || token === "否" || token === "N") {
-    return "只可帶看";
-  }
   return null;
 }
 
@@ -38,9 +35,19 @@ export function extract591FromCaseNote(caseNote) {
   return m ? m[1].trim() : "";
 }
 
-export function mapRentalProgressToStatus(row) {
+export function mapRentalProgressToStatus(row, sheetName = "") {
+  if (sheetName === "可帶看總表") {
+    const progress = pickRow(row, ["進度", "Progress"]);
+    const rentOut = pickRow(row, ["出租日期"]);
+    const cb2 = pickRow(row, ["二次回撥", "三次回撥"]);
+    const combined = `${progress} ${cb2}`;
+    if (rentOut || /已出租|結案|已租/.test(combined)) return "已出租結案";
+    if (/無效|重複/.test(combined)) return "無效／重複";
+    return "只可帶看";
+  }
+
   const from591 = statusFrom591Cell(pick591Cell(row));
-  if (from591) return from591;
+  if (from591 === "同意委託") return from591;
 
   const progress = pickRow(row, ["進度", "Progress"]);
   const rentOut = pickRow(row, ["出租日期"]);
@@ -77,6 +84,23 @@ export function parseDateCell(raw) {
     return d.toISOString();
   }
   return new Date().toISOString();
+}
+
+/** 「可帶看總表」列出的案件 dedupe key（只可帶看僅以此為準） */
+export function collectViewOnlyDedupeKeysFromWorkbook(workbook) {
+  const sheet = workbook.getWorksheet("可帶看總表");
+  if (!sheet || !isRentalTrackingSheet(sheet)) return new Set();
+  const { rows } = sheetToRecords(sheet);
+  const keys = new Set();
+  for (const row of rows) {
+    const fullAddr = pickRow(row, ["物件地址", "地址"]);
+    if (!fullAddr || fullAddr.includes("範例")) continue;
+    const { city, district, address } = parseTaiwanAddress(fullAddr);
+    const ownerName = pickRow(row, ["姓名", "屋主"]);
+    const phone = pickRow(row, ["電話", "Phone"]);
+    keys.add(ownerCaseDedupeKey({ city, district, address, ownerName, phone }));
+  }
+  return keys;
 }
 
 /** Google「00-租賃追蹤表」→ OwnerTrackingStore */
@@ -156,7 +180,7 @@ export function parseRentalTrackingFromWorkbook(workbook, defaultAssignee = "R00
         caseNote: [pickRow(row, ["案件備註"]), metaBits.join("；")].filter(Boolean).join("\n"),
       });
 
-      const status = mapRentalProgressToStatus(row);
+      const status = mapRentalProgressToStatus(row, sheet.name);
       const noteParts = [
         pickRow(row, ["進度"]),
         pickRow(row, ["二次回撥"]),
