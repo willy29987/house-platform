@@ -32,6 +32,7 @@ import {
   refreshOwnerTrackingFromCloud,
 } from "@/lib/admin-cloud-sync-client";
 import { OwnerTrackingUpcomingRelease } from "@/components/owner-tracking-upcoming-release";
+import { resolveOwnerCaseEffectiveStatus } from "@/lib/owner-tracking-case-status";
 import { isOwnerCaseUpcomingRelease } from "@/lib/owner-tracking-release";
 import { formatRocDate, getDaysUntilRelease } from "@/lib/listing-internal-meta";
 import {
@@ -581,6 +582,7 @@ function OwnerTrackingListInner({
                 key={c.id}
                 item={c}
                 last={last}
+                effectiveStatus={resolveOwnerCaseEffectiveStatus(store, c)}
                 contactCount={contactCount}
                 isSuperAdmin={isSuperAdmin}
                 listQuery={listQuery}
@@ -872,6 +874,7 @@ function TrashIcon({ className }: { className?: string }) {
 function CaseRow({
   item,
   last,
+  effectiveStatus,
   contactCount,
   isSuperAdmin,
   listQuery,
@@ -882,6 +885,7 @@ function CaseRow({
 }: {
   item: OwnerCasePreview;
   last: OwnerFollowUpPreview | null;
+  effectiveStatus: string;
   contactCount: number;
   isSuperAdmin: boolean;
   listQuery: string;
@@ -949,9 +953,9 @@ function CaseRow({
         <div className="min-w-0 overflow-hidden">
           {last ? (
             <span
-              className={`inline-block max-w-full truncate rounded-full px-2 py-0.5 text-[11px] font-medium leading-tight sm:text-xs ${statusBadgeClass(last.status)}`}
+              className={`inline-block max-w-full truncate rounded-full px-2 py-0.5 text-[11px] font-medium leading-tight sm:text-xs ${statusBadgeClass(effectiveStatus)}`}
             >
-              {last.status}
+              {effectiveStatus}
             </span>
           ) : (
             <span className="text-xs text-zinc-400">尚未追蹤</span>

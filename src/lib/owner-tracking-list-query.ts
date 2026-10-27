@@ -4,11 +4,11 @@ import {
   type Listing591CheckEntry,
   type OwnerTrackingListing591Filter,
 } from "@/lib/owner-tracking-listing-checks";
+import { matchesOwnerCaseStatusFilter, resolveOwnerCaseEffectiveStatus } from "@/lib/owner-tracking-case-status";
 import {
   canViewOwnerTrackingCase,
   formatOwnerCaseAddress,
   lastFollowUp,
-  normalizeFollowUpStatus,
   ownerCaseContactCount,
   type OwnerCasePreview,
   type OwnerFollowUpPreview,
@@ -71,11 +71,7 @@ export function buildOwnerTrackingListRows(
     .filter(({ case: c, last }) => {
       if (visibility && !canViewOwnerTrackingCase(c, visibility)) return false;
       if (filters.assigneeFilter !== "ALL" && c.assignee !== filters.assigneeFilter) return false;
-      if (filters.statusFilter !== "ALL") {
-        const want = normalizeFollowUpStatus(filters.statusFilter);
-        const got = last ? normalizeFollowUpStatus(last.status) : null;
-        if (got !== want) return false;
-      }
+      if (!matchesOwnerCaseStatusFilter(store, c, filters.statusFilter)) return false;
       if (filters.propertyTypeFilter !== "ALL" && c.propertyType !== filters.propertyTypeFilter) {
         return false;
       }
