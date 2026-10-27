@@ -6,21 +6,23 @@ import { normalizeNextContactDate } from "@/lib/owner-tracking-next-contact";
 export { formatOwnerCaseAddress } from "@/lib/taiwan-address";
 
 export const OWNER_TRACKING_STATUS_OPTIONS = [
-  "未接",
   "持續聯繫",
   "只可帶看",
-  "同意委託",
-  "已出租結案",
-  "無效／重複",
+  "可上591",
+  "屋主已出租",
 ] as const;
 
-/** 舊追蹤狀態 → 現行選項（讀取 localStorage 時套用） */
+/** 舊追蹤狀態 → 現行選項（讀取 localStorage／雲端／URL 篩選時套用） */
 export function normalizeFollowUpStatus(status: string): OwnerTrackingStatus {
   const legacy: Record<string, OwnerTrackingStatus> = {
     "已接／再聯絡": "持續聯繫",
     已約看: "只可帶看",
     考慮中: "持續聯繫",
     暫停追蹤: "持續聯繫",
+    未接: "持續聯繫",
+    同意委託: "可上591",
+    已出租結案: "屋主已出租",
+    "無效／重複": "持續聯繫",
   };
   const t = status.trim();
   if (legacy[t]) return legacy[t];
@@ -75,6 +77,8 @@ export type OwnerCasePreview = {
   caseNote: string;
   /** 下次應聯繫日（Asia/Taipei YYYY-MM-DD；空 = 未設定） */
   nextContactDate: string;
+  /** 591 下架等情況下預計可再開發日（YYYY-MM-DD） */
+  expectedReleaseDate: string;
 };
 
 export type OwnerCaseInput = Omit<OwnerCasePreview, "id" | "assignee" | "createdAt">;
@@ -139,6 +143,7 @@ export function normalizeCase(raw: Record<string, unknown>, fallbackAssignee = "
     specialMatters: String(raw.specialMatters ?? ""),
     caseNote: String(raw.caseNote ?? ""),
     nextContactDate: normalizeNextContactDate(String(raw.nextContactDate ?? "")),
+    expectedReleaseDate: normalizeNextContactDate(String(raw.expectedReleaseDate ?? "")),
   };
 }
 
@@ -237,9 +242,12 @@ function ensureInitialFollowUps(store: OwnerTrackingStore): OwnerTrackingStore {
 export function saveOwnerTrackingStore(store: OwnerTrackingStore) {
   persistOwnerTrackingStoreLocal(store);
   if (typeof window === "undefined") return;
-  void import("@/lib/admin-cloud-sync-client").then(({ schedulePushOwnerTrackingFromLocal }) => {
-    schedulePushOwnerTrackingFromLocal();
-  });
+  void import("@/lib/admin-cloud-sync-client").then(
+    ({ invalidateOwnerTrackingHydrateCache, pushOwnerTrackingFromLocalNow }) => {
+      invalidateOwnerTrackingHydrateCache();
+      pushOwnerTrackingFromLocalNow();
+    },
+  );
 }
 
 /** 合併雲端寫入：以 id 聯集，避免舊版 localStorage 覆蓋整庫 */
@@ -278,7 +286,11 @@ export function lastFollowUp(
 ): OwnerFollowUpPreview | null {
   const list = store.followUps.filter((f) => f.caseId === caseId);
   if (!list.length) return null;
-  return list.sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]!;
+  return list.sort((a, b) => {
+    const byTime = b.createdAt.localeCompare(a.createdAt);
+    if (byTime !== 0) return byTime;
+    return b.id.localeCompare(a.id);
+  })[0]!;
 }
 
 export function formatFollowUpWhen(iso: string): string {
@@ -295,18 +307,15 @@ export function formatFollowUpWhen(iso: string): string {
 }
 
 export function statusBadgeClass(status: string): string {
-  switch (status) {
-    case "同意委託":
-    case "已出租結案":
+  const normalized = normalizeFollowUpStatus(status);
+  switch (normalized) {
+    case "可上591":
+    case "屋主已出租":
       return "bg-emerald-100 text-emerald-800";
     case "持續聯繫":
       return "bg-violet-100 text-violet-800";
     case "只可帶看":
       return "bg-sky-100 text-sky-800";
-    case "未接":
-      return "bg-amber-100 text-amber-900";
-    case "無效／重複":
-      return "bg-zinc-100 text-zinc-600";
     default:
       return "bg-violet-100 text-violet-800";
   }
@@ -407,6 +416,7 @@ export function ownerCaseToInput(c: OwnerCasePreview): OwnerCaseInput {
     specialMatters: c.specialMatters,
     caseNote: c.caseNote,
     nextContactDate: c.nextContactDate,
+    expectedReleaseDate: c.expectedReleaseDate,
   };
 }
 
@@ -450,6 +460,7 @@ function trimOwnerCaseInput(input: OwnerCaseInput): OwnerCaseInput {
     specialMatters: input.specialMatters.trim(),
     caseNote: input.caseNote.trim(),
     nextContactDate: normalizeNextContactDate(input.nextContactDate),
+    expectedReleaseDate: normalizeNextContactDate(input.expectedReleaseDate),
   };
 }
 

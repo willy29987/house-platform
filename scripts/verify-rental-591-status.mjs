@@ -1,11 +1,11 @@
 import { mapRentalProgressToStatus, statusFrom591Cell } from "./lib/rental-tracking-xlsx.mjs";
 
 const cases = [
-  ["O", "同意委託"],
+  ["O", "可上591"],
   ["X", null],
-  ["o", "同意委託"],
+  ["o", "可上591"],
   ["x", null],
-  ["O/X", "同意委託"],
+  ["O/X", "可上591"],
   ["", null],
 ];
 for (const [raw, expected] of cases) {

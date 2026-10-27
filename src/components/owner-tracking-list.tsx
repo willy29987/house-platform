@@ -31,6 +31,9 @@ import {
   pushCloudPayload,
   refreshOwnerTrackingFromCloud,
 } from "@/lib/admin-cloud-sync-client";
+import { OwnerTrackingUpcomingRelease } from "@/components/owner-tracking-upcoming-release";
+import { isOwnerCaseUpcomingRelease } from "@/lib/owner-tracking-release";
+import { formatRocDate, getDaysUntilRelease } from "@/lib/listing-internal-meta";
 import {
   appendOwnerTrackingListContext,
   buildOwnerTrackingListQuery,
@@ -197,6 +200,7 @@ function OwnerTrackingListInner({
           message?: string;
           results?: Record<string, Listing591CheckEntry>;
           cloudPersisted?: boolean;
+          ownerTrackingUpdated?: boolean;
         };
         let json: Listing591CheckApiResponse | null = null;
         try {
@@ -213,6 +217,14 @@ function OwnerTrackingListInner({
             persistOwnerTrackingListingChecksLocal(merged);
             return merged;
           });
+        }
+        if (json.ownerTrackingUpdated) {
+          invalidateOwnerTrackingHydrateCache();
+          const refreshed = await refreshOwnerTrackingFromCloud(
+            loadOwnerTrackingStoreLocal,
+            persistOwnerTrackingStoreLocal,
+          );
+          setStore(refreshed);
         }
         if (json.cloudPersisted === false) {
           setCheck591Error("檢查結果已顯示於本機；雲端未寫入（請確認 DATABASE_URL 與 prisma generate）");
@@ -387,6 +399,12 @@ function OwnerTrackingListInner({
           </div>
         ) : null}
       </div>
+      <OwnerTrackingUpcomingRelease
+        store={store}
+        listQuery={listQuery}
+        currentUsername={currentUsername}
+        isSuperAdmin={isSuperAdmin}
+      />
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
         <label className="block min-w-[12rem] flex-1">
           <span className="mb-1 block text-xs font-medium text-zinc-600">搜尋</span>
@@ -568,6 +586,7 @@ function OwnerTrackingListInner({
                 listQuery={listQuery}
                 checkEntry={checkStore.byCaseId[c.id]}
                 checking591={checking591Ids.has(c.id)}
+                upcomingRelease={isOwnerCaseUpcomingRelease(store, c)}
                 onDelete={() => handleDeleteCase(c.id)}
               />
             ))
@@ -858,6 +877,7 @@ function CaseRow({
   listQuery,
   checkEntry,
   checking591,
+  upcomingRelease,
   onDelete,
 }: {
   item: OwnerCasePreview;
@@ -867,6 +887,7 @@ function CaseRow({
   listQuery: string;
   checkEntry: Listing591CheckEntry | undefined;
   checking591: boolean;
+  upcomingRelease?: boolean;
   onDelete: () => void;
 }) {
   const caseHref = appendOwnerTrackingListContext(`/admin/owner-tracking/${item.id}`, listQuery);
@@ -877,8 +898,12 @@ function CaseRow({
   const urlHref = normalizeListingUrl(item.listingUrl);
   const urlLabel = formatListUrl(item.listingUrl);
 
+  const releaseDays = upcomingRelease ? getDaysUntilRelease(item.expectedReleaseDate) : null;
+
   return (
-    <li className="relative transition hover:bg-zinc-50">
+    <li
+      className={`relative transition hover:bg-zinc-50 ${upcomingRelease ? "border-l-4 border-l-amber-400 bg-amber-50/40 hover:bg-amber-50/70" : ""}`}
+    >
       <Link
         href={caseHref}
         className="absolute inset-0 z-0"
@@ -933,8 +958,14 @@ function CaseRow({
           )}
         </div>
 
-        <div className="min-w-0 overflow-hidden">
+        <div className="min-w-0 overflow-hidden space-y-0.5">
           <NextContactBadge nextContactDate={item.nextContactDate} />
+          {upcomingRelease && item.expectedReleaseDate ? (
+            <span className="inline-block max-w-full truncate rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-950 sm:text-[11px]">
+              即將釋出 {formatRocDate(item.expectedReleaseDate)}
+              {releaseDays != null && releaseDays > 0 ? `（${releaseDays} 天）` : releaseDays === 0 ? "（今日）" : ""}
+            </span>
+          ) : null}
         </div>
 
         <p

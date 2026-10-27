@@ -90,6 +90,7 @@ const emptyForm = (): OwnerCaseInput => ({
   specialMatters: "",
   caseNote: "",
   nextContactDate: "",
+  expectedReleaseDate: "",
 });
 
 function FormField({

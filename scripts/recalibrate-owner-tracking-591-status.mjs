@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * 校準屋主追蹤「目前狀態」：
- * - 同意委託：總表等案件備註 591＝O
+ * - 可上591：總表等案件備註 591＝O
  * - 只可帶看：僅「可帶看總表」分頁列出的案件（不用總表 591＝X）
  *
  *   node scripts/recalibrate-owner-tracking-591-status.mjs --file ~/Downloads/00-租賃追蹤表.xlsx
@@ -27,7 +27,7 @@ import {
 } from "./lib/rental-tracking-xlsx.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const SKIP_STATUSES = new Set(["已出租結案", "無效／重複"]);
+const SKIP_STATUSES = new Set(["屋主已出租", "已出租結案"]);
 const DEFAULT_XLSX = path.join(process.env.HOME ?? "", "Downloads", "00-租賃追蹤表.xlsx");
 
 function parseArgs(argv) {
@@ -59,7 +59,7 @@ function resolveTargetStatus(c, viewOnlyKeys) {
   const dk = ownerCaseDedupeKey(c);
   if (viewOnlyKeys.has(dk)) return "只可帶看";
   const entrust = statusFrom591Cell(extract591FromCaseNote(c.caseNote));
-  if (entrust === "同意委託") return "同意委託";
+  if (entrust === "可上591") return "可上591";
   return null;
 }
 
@@ -97,7 +97,7 @@ function applyCalibration(store, viewOnlyKeys) {
       };
       updated += 1;
       if (target === "只可帶看") setViewOnly += 1;
-      if (target === "同意委託") setEntrust += 1;
+      if (target === "可上591") setEntrust += 1;
       continue;
     }
 
@@ -113,7 +113,7 @@ function applyCalibration(store, viewOnlyKeys) {
     });
     updated += 1;
     if (target === "只可帶看") setViewOnly += 1;
-    if (target === "同意委託") setEntrust += 1;
+    if (target === "可上591") setEntrust += 1;
   }
 
   return {
@@ -155,7 +155,7 @@ async function main() {
       applyCalibration(store, viewOnlyKeys);
 
     console.log(
-      `案件 ${next.cases.length} · 追蹤 ${next.followUps.length} · 更新 ${updated} 筆（只可帶看 ${setViewOnly}、同意委託 ${setEntrust}、移除誤標只可帶看 ${clearedWrongViewOnly}）· 略過結案 ${skippedFinal}`,
+      `案件 ${next.cases.length} · 追蹤 ${next.followUps.length} · 更新 ${updated} 筆（只可帶看 ${setViewOnly}、可上591 ${setEntrust}、移除誤標只可帶看 ${clearedWrongViewOnly}）· 略過結案 ${skippedFinal}`,
     );
 
     if (!args.dryRun) {

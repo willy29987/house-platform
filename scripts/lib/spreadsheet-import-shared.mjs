@@ -20,20 +20,17 @@ export const PROPERTY_TYPE_LABEL = {
   SHOP: "店面",
 };
 
-const OWNER_TRACKING_STATUS = [
-  "未接",
-  "持續聯繫",
-  "只可帶看",
-  "同意委託",
-  "已出租結案",
-  "無效／重複",
-];
+const OWNER_TRACKING_STATUS = ["持續聯繫", "只可帶看", "可上591", "屋主已出租"];
 
 const LEGACY_STATUS = {
   "已接／再聯絡": "持續聯繫",
   已約看: "只可帶看",
   考慮中: "持續聯繫",
   暫停追蹤: "持續聯繫",
+  未接: "持續聯繫",
+  同意委託: "可上591",
+  已出租結案: "屋主已出租",
+  "無效／重複": "持續聯繫",
 };
 
 export function str(v, fallback = "") {

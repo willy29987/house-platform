@@ -8,6 +8,7 @@ import {
   emptyOwnerTrackingStore,
   getOwnerTrackingLocalPersistedAt,
   loadOwnerTrackingStoreLocal,
+  mergeOwnerTrackingStores,
   normalizeOwnerTrackingStore,
   type OwnerTrackingStore,
 } from "@/lib/owner-tracking-preview";
@@ -63,6 +64,13 @@ export function schedulePushOwnerTrackingFromLocal(delayMs = 400): void {
   );
 }
 
+/** 立即上傳屋主追蹤（狀態／追蹤送出後用，避免雲端 refresh 蓋掉尚未 sync 的紀錄） */
+export function pushOwnerTrackingFromLocalNow(): void {
+  const key = ADMIN_CLOUD_DATA_KEYS.ownerTracking;
+  cancelScheduledPushCloudPayload(key);
+  void pushCloudPayload(key, loadOwnerTrackingStoreLocal());
+}
+
 const LOCAL_DELETE_TRUST_MS = 15_000;
 
 function pickOwnerTrackingAfterCloudFetch(
@@ -81,7 +89,8 @@ function pickOwnerTrackingAfterCloudFetch(
   if (recentlyPersistedLocally && cloudHasExtraCases && local.cases.length < cloud.cases.length) {
     return local;
   }
-  return cloud;
+  // 以 id 聯集合併：本機新追蹤不會被舊雲端整包覆蓋（「目前狀態」看最新一筆 follow-up）
+  return mergeOwnerTrackingStores(cloud, local);
 }
 
 function hasOwnerTrackingData(store: OwnerTrackingStore): boolean {

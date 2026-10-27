@@ -31,6 +31,8 @@ import {
 } from "@/lib/owner-tracking-list-url";
 import { OwnerTrackingNextContactField } from "@/components/owner-tracking-next-contact-field";
 import { formatNextContactLabel, normalizeNextContactDate } from "@/lib/owner-tracking-next-contact";
+import { formatRocDate, getDaysUntilRelease } from "@/lib/listing-internal-meta";
+import { isOwnerCaseUpcomingRelease } from "@/lib/owner-tracking-release";
 
 type Props = {
   caseId: string;
@@ -144,8 +146,30 @@ export function OwnerTrackingDetail({ caseId, currentUsername, isSuperAdmin = fa
     );
   }
 
+  const releaseYmd = normalizeNextContactDate(ownerCase.expectedReleaseDate);
+  const upcomingRelease = isOwnerCaseUpcomingRelease(store, ownerCase);
+  const releaseDays = releaseYmd ? getDaysUntilRelease(releaseYmd) : null;
+
   return (
     <div className="space-y-6 pb-32 lg:pb-8">
+      {upcomingRelease ? (
+        <div className="rounded-xl border-2 border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <p className="font-semibold">⏰ 即將可再開發</p>
+          <p className="mt-1 text-amber-900/90">
+            591 曾下架；預計{" "}
+            <span className="font-bold">{formatRocDate(releaseYmd)}</span>
+            {releaseDays != null && releaseDays > 0
+              ? `（約 ${releaseDays} 天後）`
+              : releaseDays === 0
+                ? "（今日起可再聯繫）"
+                : ""}
+          </p>
+        </div>
+      ) : releaseYmd ? (
+        <p className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
+          預計釋出可再開發：<span className="font-semibold">{formatRocDate(releaseYmd)}</span>
+        </p>
+      ) : null}
       <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>

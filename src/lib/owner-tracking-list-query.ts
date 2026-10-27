@@ -8,6 +8,7 @@ import {
   canViewOwnerTrackingCase,
   formatOwnerCaseAddress,
   lastFollowUp,
+  normalizeFollowUpStatus,
   ownerCaseContactCount,
   type OwnerCasePreview,
   type OwnerFollowUpPreview,
@@ -70,7 +71,11 @@ export function buildOwnerTrackingListRows(
     .filter(({ case: c, last }) => {
       if (visibility && !canViewOwnerTrackingCase(c, visibility)) return false;
       if (filters.assigneeFilter !== "ALL" && c.assignee !== filters.assigneeFilter) return false;
-      if (filters.statusFilter !== "ALL" && last?.status !== filters.statusFilter) return false;
+      if (filters.statusFilter !== "ALL") {
+        const want = normalizeFollowUpStatus(filters.statusFilter);
+        const got = last ? normalizeFollowUpStatus(last.status) : null;
+        if (got !== want) return false;
+      }
       if (filters.propertyTypeFilter !== "ALL" && c.propertyType !== filters.propertyTypeFilter) {
         return false;
       }

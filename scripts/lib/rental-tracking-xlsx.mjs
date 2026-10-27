@@ -13,7 +13,7 @@ import {
   str,
 } from "./spreadsheet-import-shared.mjs";
 
-/** 試算表「591」欄：O＝同意委託，X＝只可帶看 */
+/** 試算表「591」欄：O＝可上591，X＝只可帶看 */
 export function pick591Cell(row) {
   return pickRow(row, ["591", "591廣告", "591 廣告", "591广告"]);
 }
@@ -24,7 +24,7 @@ export function statusFrom591Cell(raw591) {
     .split(/[\/／、,，\s]+/)[0];
   if (!token) return null;
   if (token === "O" || token === "○" || token === "〇" || token === "是" || token === "Y") {
-    return "同意委託";
+    return "可上591";
   }
   return null;
 }
@@ -41,24 +41,21 @@ export function mapRentalProgressToStatus(row, sheetName = "") {
     const rentOut = pickRow(row, ["出租日期"]);
     const cb2 = pickRow(row, ["二次回撥", "三次回撥"]);
     const combined = `${progress} ${cb2}`;
-    if (rentOut || /已出租|結案|已租/.test(combined)) return "已出租結案";
-    if (/無效|重複/.test(combined)) return "無效／重複";
+    if (rentOut || /已出租|結案|已租/.test(combined)) return "屋主已出租";
     return "只可帶看";
   }
 
   const from591 = statusFrom591Cell(pick591Cell(row));
-  if (from591 === "同意委託") return from591;
+  if (from591 === "可上591") return from591;
 
   const progress = pickRow(row, ["進度", "Progress"]);
   const rentOut = pickRow(row, ["出租日期"]);
   const cb2 = pickRow(row, ["二次回撥", "三次回撥"]);
   const combined = `${progress} ${cb2}`;
-  if (rentOut || /已出租|結案|已租/.test(combined)) return "已出租結案";
+  if (rentOut || /已出租|結案|已租/.test(combined)) return "屋主已出租";
   if (/可帶看|只可帶看/.test(combined)) return "只可帶看";
-  if (/未接/.test(progress)) return "未接";
   if (/未同意/.test(progress)) return "持續聯繫";
-  if (/無效|重複/.test(combined)) return "無效／重複";
-  if (/同意|委託/.test(combined)) return "同意委託";
+  if (/同意|委託|可上591/.test(combined)) return "可上591";
   return "持續聯繫";
 }
 
