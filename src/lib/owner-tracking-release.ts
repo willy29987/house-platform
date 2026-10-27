@@ -31,9 +31,8 @@ export function isOwnerCaseMarked591ReleaseTrack(
 ): boolean {
   const last = lastFollowUp(store, caseId);
   if (!last) return false;
-  if (normalizeFollowUpStatus(last.status) === "持續聯繫" && last.note.includes("591") && last.note.includes("下架")) {
-    return true;
-  }
+  if (last.note.includes("591") && last.note.includes("下架")) return true;
+  if (last.note.includes("可再開發") && last.note.includes("591")) return true;
   const raw = last.status.trim();
   return raw === "無效／重複";
 }

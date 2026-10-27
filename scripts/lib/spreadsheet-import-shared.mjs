@@ -30,7 +30,7 @@ const LEGACY_STATUS = {
   未接: "持續聯繫",
   同意委託: "可上591",
   已出租結案: "屋主已出租",
-  "無效／重複": "持續聯繫",
+  "無效／重複": "屋主已出租",
 };
 
 export function str(v, fallback = "") {
