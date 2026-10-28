@@ -1,84 +1,121 @@
 #!/usr/bin/env node
 /**
- * 依案件備註 591:O 將「目前應為可上591」的案件，最新追蹤狀態改寫為可上591
- * （略過最新已是只可帶看／屋主已出租／可上591）
+ * 將「可上591」篩選涵蓋的案件（最新狀態可上591，或備註 591:O、且非屋主已出租）
+ * 若目前狀態不是可上591，追加一筆追蹤把狀態改成可上591。
  *
- *   node scripts/sync-owner-tracking-591-entrust-status.mjs
- *   node scripts/sync-owner-tracking-591-entrust-status.mjs --dry-run
+ * 用法：node scripts/sync-owner-tracking-591-entrust-status.mjs
+ * 預覽：node scripts/sync-owner-tracking-591-entrust-status.mjs --dry-run
  */
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
-import {
-  CLOUD_KEYS,
-  normalizeFollowUpStatus,
-  normalizeOwnerTrackingStore,
-  upsertCloudPayload,
-} from "./lib/spreadsheet-import-shared.mjs";
-import { statusFrom591Cell, extract591FromCaseNote } from "./lib/rental-tracking-xlsx.mjs";
+import { normalizeOwnerTrackingStore } from "./lib/spreadsheet-import-shared.mjs";
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const SKIP = new Set(["只可帶看", "屋主已出租", "可上591"]);
+const KEY = "owner_tracking";
+const dryRun = process.argv.includes("--dry-run");
 
-function latestFollowUpIndex(followUps, caseId) {
-  let best = -1;
-  let bestAt = "";
-  for (let i = 0; i < followUps.length; i++) {
-    const f = followUps[i];
-    if (f.caseId !== caseId) continue;
-    if (!bestAt || f.createdAt.localeCompare(bestAt) > 0) {
-      bestAt = f.createdAt;
-      best = i;
-    }
-  }
-  return best;
+function extract591FromCaseNote(caseNote) {
+  const m = String(caseNote ?? "").match(/591[：:]\s*([^；\n]+)/);
+  return m ? m[1].trim() : "";
 }
 
-function apply(store) {
-  const followUps = [...(store.followUps ?? [])];
-  let updated = 0;
-  for (const c of store.cases ?? []) {
-    if (statusFrom591Cell(extract591FromCaseNote(c.caseNote)) !== "可上591") continue;
-    const idx = latestFollowUpIndex(followUps, c.id);
-    if (idx < 0) continue;
-    const fu = followUps[idx];
-    const cur = normalizeFollowUpStatus(fu.status);
-    if (SKIP.has(cur)) continue;
-    followUps[idx] = {
-      ...fu,
+function is591EntrustCaseNote(caseNote) {
+  const token = extract591FromCaseNote(caseNote).toUpperCase().split(/[\/／、,，\s]+/)[0];
+  if (!token) return false;
+  return token === "O" || token === "○" || token === "〇" || token === "是" || token === "Y";
+}
+
+function normalizeFollowUpStatus(status) {
+  const legacy = {
+    同意委託: "可上591",
+    已出租結案: "屋主已出租",
+    "無效／重複": "屋主已出租",
+    無效: "屋主已出租",
+    待上591: "可上591",
+    已上591: "可上591",
+  };
+  const t = String(status ?? "").trim();
+  if (legacy[t]) return legacy[t];
+  if (["持續聯繫", "只可帶看", "可上591", "屋主已出租"].includes(t)) return t;
+  return "持續聯繫";
+}
+
+function lastFollowUp(followUps, caseId) {
+  const list = followUps.filter((f) => f.caseId === caseId);
+  if (!list.length) return null;
+  return list.sort((a, b) => {
+    const byTime = b.createdAt.localeCompare(a.createdAt);
+    if (byTime !== 0) return byTime;
+    return b.id.localeCompare(a.id);
+  })[0];
+}
+
+function effectiveStatus(c, followUps) {
+  const last = lastFollowUp(followUps, c.id);
+  if (last) return normalizeFollowUpStatus(last.status);
+  if (is591EntrustCaseNote(c.caseNote)) return "可上591";
+  return "持續聯繫";
+}
+
+function matches可上591Filter(c, followUps) {
+  const eff = effectiveStatus(c, followUps);
+  if (eff === "可上591") return true;
+  if (eff !== "屋主已出租" && is591EntrustCaseNote(c.caseNote)) return true;
+  return false;
+}
+
+function newId(prefix) {
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+const p = new PrismaClient();
+try {
+  const row = await p.adminCloudData.findUnique({ where: { key: KEY } });
+  const raw = typeof row?.payload === "string" ? JSON.parse(row.payload) : row?.payload;
+  const store = normalizeOwnerTrackingStore(raw);
+  const followUps = [...store.followUps];
+  const nowIso = new Date().toISOString();
+  const updated = [];
+
+  for (const c of store.cases) {
+    if (!matches可上591Filter(c, followUps)) continue;
+    const from = effectiveStatus(c, followUps);
+    if (from === "可上591") continue;
+    followUps.push({
+      id: newId("fu"),
+      caseId: c.id,
       status: "可上591",
-      note: fu.note?.includes("591") ? fu.note : [fu.note, "依 591:O 同步為可上591"].filter(Boolean).join(" · "),
-    };
-    updated += 1;
+      note: "系統：依備註 591:O／可上591 清單同步狀態",
+      createdBy: "system",
+      createdAt: nowIso,
+    });
+    updated.push({
+      id: c.id.slice(-10),
+      owner: c.ownerName,
+      assignee: c.assignee,
+      from,
+    });
   }
-  return { store: normalizeOwnerTrackingStore({ cases: store.cases ?? [], followUps }), updated };
-}
 
-async function main() {
-  process.chdir(ROOT);
-  const dryRun = process.argv.includes("--dry-run");
-  if (!process.env.DATABASE_URL) {
-    console.error("需要 DATABASE_URL");
-    process.exit(1);
-  }
-  const prisma = new PrismaClient();
-  try {
-    const row = await prisma.adminCloudData.findUnique({ where: { key: CLOUD_KEYS.ownerTracking } });
-    const store = row?.payload ?? { cases: [], followUps: [] };
-    const { store: next, updated } = apply(store);
-    console.log(`案件 ${next.cases.length} · 更新最新追蹤為可上591：${updated} 筆`);
-    if (updated > 0 && !dryRun) {
-      await upsertCloudPayload(prisma, CLOUD_KEYS.ownerTracking, next);
-      console.log("✓ 已寫入 Supabase owner_tracking");
-    } else if (dryRun) {
-      console.log("（dry-run，未寫入）");
-    }
-  } finally {
-    await prisma.$disconnect();
-  }
-}
+  console.log(
+    JSON.stringify(
+      {
+        dryRun,
+        matchedNeedingUpdate: updated.length,
+        updated,
+      },
+      null,
+      2,
+    ),
+  );
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+  if (!dryRun && updated.length > 0) {
+    const next = normalizeOwnerTrackingStore({ cases: store.cases, followUps });
+    await p.adminCloudData.upsert({
+      where: { key: KEY },
+      create: { key: KEY, payload: next },
+      update: { payload: next },
+    });
+    console.log(`wrote ${updated.length} follow-up(s) to cloud`);
+  }
+} finally {
+  await p.$disconnect();
+}
