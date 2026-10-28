@@ -84,7 +84,10 @@ export type Apply591RemovedResult = {
 
 const SKIP_AUTO_591_RELEASE: OwnerTrackingStatus[] = ["屋主已出租"];
 
-/** 591 判定下架時：追加追蹤並設定一年後釋出日 */
+/**
+ * 591 判定下架時：首次進入釋出軌道時設定一年後釋出日並清空下次聯繫；
+ * 已有釋出日的再檢查、或狀態為「屋主已出租」時不改動案件欄位／不清聯繫日。
+ */
 export function apply591RemovedToOwnerStore(
   store: OwnerTrackingStore,
   removedCaseIds: string[],
@@ -101,15 +104,17 @@ export function apply591RemovedToOwnerStore(
   let casesChanged = false;
   const cases = store.cases.map((c) => {
     if (!idSet.has(c.id)) return c;
+    const last = lastFollowUp(store, c.id);
+    if (last && SKIP_AUTO_591_RELEASE.includes(normalizeFollowUpStatus(last.status))) {
+      return c;
+    }
     const existing = normalizeExpectedReleaseDate(c.expectedReleaseDate);
-    const nextRelease = existing || releaseYmd;
-    const needsUpdate =
-      normalizeExpectedReleaseDate(c.expectedReleaseDate) !== nextRelease || (c.nextContactDate ?? "") !== "";
-    if (!needsUpdate) return c;
+    // 已在釋出軌道：再檢查不得清空同事後來重設的下次聯繫日
+    if (existing) return c;
     casesChanged = true;
     return {
       ...c,
-      expectedReleaseDate: nextRelease,
+      expectedReleaseDate: releaseYmd,
       nextContactDate: "",
     };
   });
