@@ -250,7 +250,7 @@ export function saveOwnerTrackingStore(store: OwnerTrackingStore) {
   );
 }
 
-/** 合併雲端寫入：以 id 聯集，避免舊版 localStorage 覆蓋整庫 */
+/** 合併雲端寫入：以 id 聯集，overlay 整筆覆蓋（本機 push 前合併用） */
 export function mergeOwnerTrackingStores(
   base: OwnerTrackingStore,
   overlay: OwnerTrackingStore,
@@ -263,6 +263,66 @@ export function mergeOwnerTrackingStores(
   for (const f of overlay.followUps) {
     followById.set(f.id, f);
   }
+  return normalizeOwnerTrackingStore({
+    cases: [...casesById.values()],
+    followUps: [...followById.values()],
+  });
+}
+
+const OWNER_TRACKING_HYDRATE_LOCAL_TRUST_MS = 15_000;
+
+function pickMergedYmd(cloudYmd: string, localYmd: string, preferLocal: boolean): string {
+  if (preferLocal) return localYmd || cloudYmd;
+  if (cloudYmd && localYmd && cloudYmd !== localYmd) return cloudYmd;
+  return cloudYmd || localYmd;
+}
+
+function mergeOwnerCaseForCloudHydrate(
+  cloud: OwnerCasePreview,
+  local: OwnerCasePreview,
+  preferLocal: boolean,
+): OwnerCasePreview {
+  const base = preferLocal ? { ...cloud, ...local } : { ...local, ...cloud };
+  return {
+    ...base,
+    nextContactDate: pickMergedYmd(
+      normalizeNextContactDate(cloud.nextContactDate),
+      normalizeNextContactDate(local.nextContactDate),
+      preferLocal,
+    ),
+    expectedReleaseDate: pickMergedYmd(
+      normalizeNextContactDate(cloud.expectedReleaseDate),
+      normalizeNextContactDate(local.expectedReleaseDate),
+      preferLocal,
+    ),
+  };
+}
+
+/** 雲端 hydrate：避免舊本機快取整筆蓋掉他人更新的下次聯繫日 */
+export function mergeOwnerTrackingStoresForHydrate(
+  cloud: OwnerTrackingStore,
+  local: OwnerTrackingStore,
+  now = Date.now(),
+): OwnerTrackingStore {
+  const preferLocal = now - getOwnerTrackingLocalPersistedAt() < OWNER_TRACKING_HYDRATE_LOCAL_TRUST_MS;
+
+  const casesById = new Map<string, OwnerCasePreview>();
+  for (const c of cloud.cases) {
+    casesById.set(c.id, c);
+  }
+  for (const c of local.cases) {
+    const existing = casesById.get(c.id);
+    casesById.set(c.id, existing ? mergeOwnerCaseForCloudHydrate(existing, c, preferLocal) : c);
+  }
+
+  const followById = new Map<string, OwnerFollowUpPreview>();
+  for (const f of cloud.followUps) {
+    followById.set(f.id, f);
+  }
+  for (const f of local.followUps) {
+    followById.set(f.id, f);
+  }
+
   return normalizeOwnerTrackingStore({
     cases: [...casesById.values()],
     followUps: [...followById.values()],

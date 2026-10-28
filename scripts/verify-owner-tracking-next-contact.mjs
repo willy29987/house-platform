@@ -63,6 +63,20 @@ const checks = [
   [matchesOwnerTrackingAssigneeFilter("R002", "R001"), false],
 ];
 
+function pickMergedYmd(cloudYmd, localYmd, preferLocal) {
+  if (preferLocal) return localYmd || cloudYmd;
+  if (cloudYmd && localYmd && cloudYmd !== localYmd) return cloudYmd;
+  return cloudYmd || localYmd;
+}
+
+checks.push(
+  [pickMergedYmd("2026-10-28", "", false), "2026-10-28"],
+  [pickMergedYmd("", "2026-10-28", false), "2026-10-28"],
+  [pickMergedYmd("2026-10-30", "2026-10-28", false), "2026-10-30"],
+  [pickMergedYmd("2026-10-30", "", true), "2026-10-30"],
+  [pickMergedYmd("", "2026-10-28", true), "2026-10-28"],
+);
+
 let failed = 0;
 for (const [got, expected] of checks) {
   if (got !== expected) {

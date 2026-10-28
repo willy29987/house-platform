@@ -302,6 +302,15 @@ function OwnerTrackingListInner({
     return () => window.removeEventListener("storage", onStorage);
   }, [hydrated]);
 
+  /** 多人協作：進「今日待聯繫」時拉最新雲端，避免本機舊快取看不到他人剛存的日期 */
+  useEffect(() => {
+    if (!hydrated || !isContactDueTodayView(contactFilter)) return;
+    if (Date.now() - getOwnerTrackingLocalPersistedAt() < 3000) return;
+    void refreshOwnerTrackingFromCloud(loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreLocal).then(
+      setStore,
+    );
+  }, [contactFilter, hydrated]);
+
   const rows = useMemo(
     () =>
       buildOwnerTrackingListRows(store, {

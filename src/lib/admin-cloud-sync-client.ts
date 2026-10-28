@@ -8,7 +8,7 @@ import {
   emptyOwnerTrackingStore,
   getOwnerTrackingLocalPersistedAt,
   loadOwnerTrackingStoreLocal,
-  mergeOwnerTrackingStores,
+  mergeOwnerTrackingStoresForHydrate,
   normalizeOwnerTrackingStore,
   type OwnerTrackingStore,
 } from "@/lib/owner-tracking-preview";
@@ -93,7 +93,7 @@ function pickOwnerTrackingAfterCloudFetch(
     return local;
   }
   // 以 id 聯集合併：本機新追蹤不會被舊雲端整包覆蓋（「目前狀態」看最新一筆 follow-up）
-  return mergeOwnerTrackingStores(cloud, local);
+  return mergeOwnerTrackingStoresForHydrate(cloud, local);
 }
 
 function hasOwnerTrackingData(store: OwnerTrackingStore): boolean {
