@@ -111,18 +111,31 @@ function OwnerTrackingListInner({
     [urlState, pathname, router],
   );
 
-  /** 搜尋：本地即時輸入，延遲寫入 URL，避免每鍵 router.replace 造成卡頓 */
+  /** 搜尋：本地即時篩選；URL 延遲更新，避免每鍵 router.replace 造成卡頓 */
+  const searchComposingRef = useRef(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [keywordInput, setKeywordInput] = useState(keyword);
+
+  const commitSearchToUrl = useCallback(
+    (value: string) => {
+      const nextKeyword = value.trim();
+      if (nextKeyword === keyword.trim()) return;
+      patchListUrl({ keyword: nextKeyword, page: 1 });
+    },
+    [keyword, patchListUrl],
+  );
+
   useEffect(() => {
     setKeywordInput(keyword);
   }, [keyword]);
   useEffect(() => {
-    if (keywordInput === keyword) return;
+    if (searchComposingRef.current) return;
+    if (keywordInput.trim() === keyword.trim()) return;
     const handle = window.setTimeout(() => {
-      patchListUrl({ keyword: keywordInput, page: 1 });
-    }, 350);
+      commitSearchToUrl(keywordInput);
+    }, 550);
     return () => window.clearTimeout(handle);
-  }, [keywordInput, keyword, patchListUrl]);
+  }, [keywordInput, keyword, commitSearchToUrl]);
 
   const [store, setStore] = useState<OwnerTrackingStore>(emptyOwnerTrackingStore);
   const [hydrated, setHydrated] = useState(false);
@@ -409,13 +422,61 @@ function OwnerTrackingListInner({
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
         <label className="block min-w-[12rem] flex-1">
           <span className="mb-1 block text-xs font-medium text-zinc-600">搜尋</span>
-          <input
-            type="search"
-            value={keywordInput}
-            onChange={(e) => setKeywordInput(e.target.value)}
-            placeholder="姓名、電話、地址、物件"
-            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
-          />
+          <div className="relative">
+            <input
+              ref={searchInputRef}
+              type="search"
+              lang="zh-Hant"
+              enterKeyHint="search"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              inputMode="search"
+              value={keywordInput}
+              onChange={(e) => setKeywordInput(e.target.value)}
+              onCompositionStart={() => {
+                searchComposingRef.current = true;
+              }}
+              onCompositionEnd={(e) => {
+                searchComposingRef.current = false;
+                setKeywordInput(e.currentTarget.value);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  commitSearchToUrl(keywordInput);
+                }
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  setKeywordInput("");
+                  commitSearchToUrl("");
+                  searchInputRef.current?.blur();
+                }
+              }}
+              onBlur={() => {
+                if (searchComposingRef.current) return;
+                commitSearchToUrl(keywordInput);
+              }}
+              placeholder="姓名、電話、地址、社區、備註…（空白分隔多條件）"
+              className="w-full rounded-lg border border-zinc-300 py-2 pl-3 pr-9 text-sm"
+              aria-label="搜尋屋主案件"
+            />
+            {keywordInput.trim() ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setKeywordInput("");
+                  commitSearchToUrl("");
+                  searchInputRef.current?.focus();
+                }}
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
+                aria-label="清除搜尋"
+              >
+                ×
+              </button>
+            ) : null}
+          </div>
         </label>
         <label className={COMPACT_FILTER_LABEL}>
           <span className="mb-1 block text-xs font-medium text-zinc-600">目前狀態</span>

@@ -7,7 +7,6 @@ import {
 import { matchesOwnerCaseStatusFilter, resolveOwnerCaseEffectiveStatus } from "@/lib/owner-tracking-case-status";
 import {
   canViewOwnerTrackingCase,
-  formatOwnerCaseAddress,
   lastFollowUp,
   ownerCaseContactCount,
   type OwnerCasePreview,
@@ -21,6 +20,7 @@ import {
   type OwnerTrackingContactFilter,
 } from "@/lib/owner-tracking-next-contact";
 import { COMMUNITY_PROPERTY_TYPES } from "@/lib/owner-tracking-form-ui";
+import { matchesOwnerCaseSearch } from "@/lib/owner-tracking-list-search";
 import { propertyTypeLabel } from "@/lib/property-type-label";
 
 export type OwnerTrackingListRow = {
@@ -57,7 +57,6 @@ export function buildOwnerTrackingListRows(
   const listing591Filter = filters.listing591Filter ?? "ALL";
   const contactFilter = filters.contactFilter ?? "ALL";
   const checks = filters.listingChecksByCaseId ?? {};
-  const q = filters.keyword.trim().toLowerCase();
   const visibility =
     filters.isSuperAdmin === false && filters.currentUsername
       ? { currentUsername: filters.currentUsername, isSuperAdmin: false as const }
@@ -82,22 +81,8 @@ export function buildOwnerTrackingListRows(
       if (contactFilter !== "ALL" && !matchesContactFilter(c.nextContactDate, contactFilter)) {
         return false;
       }
-      if (!q) return true;
-      const hay = [
-        c.ownerName,
-        c.phone,
-        formatOwnerCaseAddress(c),
-        c.city,
-        c.district,
-        c.community,
-        c.layout,
-        c.rent,
-        c.propertyType,
-        c.caseNote,
-      ]
-        .join(" ")
-        .toLowerCase();
-      return hay.includes(q);
+      if (!matchesOwnerCaseSearch(store, c, last, filters.keyword)) return false;
+      return true;
     })
     .sort((a, b) => {
       if (contactFilter === "DUE") {
