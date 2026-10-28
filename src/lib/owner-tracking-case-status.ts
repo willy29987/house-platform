@@ -22,25 +22,21 @@ export function is591EntrustCaseNote(caseNote: string): boolean {
 
 /**
  * 列表「目前狀態」與狀態篩選用。
- * - 最新追蹤為只可帶看／屋主已出租／可上591 → 直接用
- * - 備註 591:O 且非上述結案／帶看 → 可上591（與試算表同意委託桶一致）
+ * - 有追蹤紀錄 → 一律以最新一筆為準（手動改狀態才會反映）
+ * - 尚無追蹤 → 備註 591:O 推為可上591（匯入案）
  */
 export function resolveOwnerCaseEffectiveStatus(
   store: OwnerTrackingStore,
   ownerCase: OwnerCasePreview,
 ): OwnerTrackingStatus {
   const last = lastFollowUp(store, ownerCase.id);
-  const lastNorm = last ? normalizeFollowUpStatus(last.status) : "持續聯繫";
-
-  if (lastNorm === "只可帶看" || lastNorm === "屋主已出租" || lastNorm === "可上591") {
-    return lastNorm;
+  if (last) {
+    return normalizeFollowUpStatus(last.status);
   }
-
   if (is591EntrustCaseNote(ownerCase.caseNote)) {
     return "可上591";
   }
-
-  return lastNorm;
+  return "持續聯繫";
 }
 
 export function matchesOwnerCaseStatusFilter(

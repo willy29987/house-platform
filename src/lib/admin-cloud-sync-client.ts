@@ -65,10 +65,13 @@ export function schedulePushOwnerTrackingFromLocal(delayMs = 400): void {
 }
 
 /** 立即上傳屋主追蹤（狀態／追蹤送出後用，避免雲端 refresh 蓋掉尚未 sync 的紀錄） */
-export function pushOwnerTrackingFromLocalNow(): void {
+export async function pushOwnerTrackingFromLocalNow(): Promise<void> {
   const key = ADMIN_CLOUD_DATA_KEYS.ownerTracking;
   cancelScheduledPushCloudPayload(key);
-  void pushCloudPayload(key, loadOwnerTrackingStoreLocal());
+  const res = await pushCloudPayload(key, loadOwnerTrackingStoreLocal());
+  if (!res.ok) {
+    throw new Error(`owner tracking cloud push failed (${res.status})`);
+  }
 }
 
 const LOCAL_DELETE_TRUST_MS = 15_000;

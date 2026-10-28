@@ -16,6 +16,8 @@ import {
   patchOwnerCaseNextContact,
   saveOwnerTrackingStore,
   statusBadgeClass,
+  lastFollowUp,
+  normalizeFollowUpStatus,
   type OwnerFollowUpPreview,
   type OwnerTrackingStatus,
   type OwnerCasePreview,
@@ -24,7 +26,8 @@ import {
 import { COMMUNITY_PROPERTY_TYPES, PARKING_PRICE_INCLUDED_LABEL } from "@/lib/owner-tracking-form-ui";
 import { formatParkingTypeLabel } from "@/lib/parking-type-label";
 import { propertyTypeLabel } from "@/lib/property-type-label";
-import { hydrateOwnerTrackingStoreOnce } from "@/lib/admin-cloud-sync-client";
+import { hydrateOwnerTrackingStoreOnce, pushOwnerTrackingFromLocalNow } from "@/lib/admin-cloud-sync-client";
+import { resolveOwnerCaseEffectiveStatus } from "@/lib/owner-tracking-case-status";
 import {
   appendOwnerTrackingListContext,
   ownerTrackingListHrefFromListParam,
@@ -77,6 +80,14 @@ export function OwnerTrackingDetail({ caseId, currentUsername, isSuperAdmin = fa
     }
   }, [ownerCase?.id, ownerCase?.nextContactDate]);
 
+  useEffect(() => {
+    if (!hydrated) return;
+    const last = lastFollowUp(store, caseId);
+    if (last) {
+      setStatus(normalizeFollowUpStatus(last.status));
+    }
+  }, [hydrated, store, caseId]);
+
   const timeline = useMemo(
     () =>
       store.followUps
@@ -90,7 +101,7 @@ export function OwnerTrackingDetail({ caseId, currentUsername, isSuperAdmin = fa
     setStore(next);
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!ownerCase || submitting) return;
     setSubmitting(true);
@@ -106,7 +117,38 @@ export function OwnerTrackingDetail({ caseId, currentUsername, isSuperAdmin = fa
       ...store,
       followUps: [...store.followUps, entry],
     };
-    persist(patchOwnerCaseNextContact(withFollowUp, caseId, nextContactDate));
+    const nextStore = patchOwnerCaseNextContact(withFollowUp, caseId, nextContactDate);
+    persist(nextStore);
+    try {
+      await pushOwnerTrackingFromLocalNow();
+    } catch {
+      setFlash("已記錄於本機；雲端同步失敗，請稍後重新整理");
+      setSubmitting(false);
+      window.setTimeout(() => setFlash(null), 4000);
+      return;
+    }
+    // #region agent log
+    const last = lastFollowUp(nextStore, caseId);
+    const listStatus = resolveOwnerCaseEffectiveStatus(nextStore, ownerCase);
+    fetch("http://127.0.0.1:7749/ingest/c721804b-59fc-4ec2-a5c9-49b629f2510d", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "8e3c3f" },
+      body: JSON.stringify({
+        sessionId: "8e3c3f",
+        runId: "status-change",
+        hypothesisId: "H6",
+        location: "owner-tracking-detail.tsx:handleSubmit",
+        message: "follow-up saved",
+        data: {
+          submittedStatus: status,
+          lastStatusNorm: last ? normalizeFollowUpStatus(last.status) : null,
+          listEffectiveStatus: listStatus,
+          statusMatches: last ? normalizeFollowUpStatus(last.status) === listStatus : false,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
     setNote("");
     setFlash("已記錄本次追蹤");
     setSubmitting(false);
@@ -149,6 +191,7 @@ export function OwnerTrackingDetail({ caseId, currentUsername, isSuperAdmin = fa
   const releaseYmd = normalizeNextContactDate(ownerCase.expectedReleaseDate);
   const upcomingRelease = isOwnerCaseUpcomingRelease(store, ownerCase);
   const releaseDays = releaseYmd ? getDaysUntilRelease(releaseYmd) : null;
+  const displayStatus = resolveOwnerCaseEffectiveStatus(store, ownerCase);
 
   return (
     <div className="space-y-6 pb-32 lg:pb-8">
@@ -179,6 +222,11 @@ export function OwnerTrackingDetail({ caseId, currentUsername, isSuperAdmin = fa
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-700">
               負責 {ownerCase.assignee}
+            </span>
+            <span
+              className={`rounded-full px-3 py-1 text-xs font-medium ${statusBadgeClass(displayStatus)}`}
+            >
+              目前狀態：{displayStatus}
             </span>
             <span className="rounded-full bg-zinc-50 px-3 py-1 text-xs text-zinc-600">
               下次聯繫：{formatNextContactLabel(ownerCase.nextContactDate)}
