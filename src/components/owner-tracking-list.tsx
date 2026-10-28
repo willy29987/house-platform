@@ -75,9 +75,17 @@ const COMPACT_FILTER_LABEL = "block shrink-0";
 const COMPACT_FILTER_SELECT =
   "w-fit max-w-full rounded-lg border border-zinc-300 px-2 py-2 text-sm";
 
-/** 表頭與資料列共用（無負責人欄；上次備註加寬） */
+/** 表頭與資料列共用（上次備註加寬） */
 const LIST_ROW_GRID =
   "sm:grid sm:grid-cols-[minmax(0,3.5fr)_5.5rem_8rem_6rem_6.5rem_5.5rem_minmax(0,2fr)_5.5rem_2.5rem_4.5rem] sm:items-center sm:gap-x-3";
+
+/** 最高管理員：加負責人欄，方便對照各業務的下次聯繫日 */
+const LIST_ROW_GRID_SUPER =
+  "sm:grid sm:grid-cols-[minmax(0,3.2fr)_5.5rem_8rem_6rem_6.5rem_4rem_5.5rem_minmax(0,2fr)_5.5rem_2.5rem_4.5rem] sm:items-center sm:gap-x-3";
+
+function ownerTrackingListRowGrid(isSuperAdmin: boolean) {
+  return isSuperAdmin ? LIST_ROW_GRID_SUPER : LIST_ROW_GRID;
+}
 
 function formatListWhen(iso: string): string {
   const d = new Date(iso);
@@ -672,15 +680,16 @@ function OwnerTrackingListInner({
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white shadow-sm">
-        <div className="min-w-[68rem]">
+        <div className={isSuperAdmin ? "min-w-[72rem]" : "min-w-[68rem]"}>
         <div
-          className={`hidden border-b border-zinc-100 bg-zinc-50 px-4 py-2.5 text-xs font-semibold text-zinc-500 ${LIST_ROW_GRID}`}
+          className={`hidden border-b border-zinc-100 bg-zinc-50 px-4 py-2.5 text-xs font-semibold text-zinc-500 ${ownerTrackingListRowGrid(isSuperAdmin)}`}
         >
           <span className="min-w-0 truncate">地址</span>
           <span className="min-w-0 truncate">社區</span>
           <span className="min-w-0 truncate">屋主</span>
           <span className="min-w-0 truncate">網址</span>
           <span className="min-w-0 truncate">目前狀態</span>
+          {isSuperAdmin ? <span className="min-w-0 truncate">負責人</span> : null}
           <span className="min-w-0 truncate">下次聯繫</span>
           <span className="min-w-0 truncate">上次備註</span>
           <span className="min-w-0 leading-snug tabular-nums">
@@ -847,6 +856,8 @@ function PageButton({
 function NextContactBadge({ nextContactDate }: { nextContactDate: string }) {
   const category = contactDueCategory(nextContactDate);
   const label = formatNextContactLabel(nextContactDate);
+  const ymd = (nextContactDate ?? "").trim();
+  const title = ymd && category === "upcoming" ? `排程：${ymd}` : undefined;
   if (category === "none") {
     return <span className="text-[11px] text-zinc-400 sm:text-xs">未排程</span>;
   }
@@ -865,7 +876,10 @@ function NextContactBadge({ nextContactDate }: { nextContactDate: string }) {
     );
   }
   return (
-    <span className="inline-block max-w-full truncate text-[10px] font-medium text-sky-800 sm:text-[11px]">
+    <span
+      title={title}
+      className="inline-block max-w-full truncate text-[10px] font-medium text-sky-800 sm:text-[11px]"
+    >
       {label}
     </span>
   );
@@ -1049,7 +1063,7 @@ function CaseRow({
         className="absolute inset-0 z-0"
         aria-label={`查看案件：${item.address || item.ownerName}`}
       />
-      <div className={`pointer-events-none relative z-10 px-4 py-2.5 text-sm ${LIST_ROW_GRID}`}>
+      <div className={`pointer-events-none relative z-10 px-4 py-2.5 text-sm ${ownerTrackingListRowGrid(isSuperAdmin)}`}>
         <p
           className="min-w-0 truncate text-sm font-medium leading-snug text-zinc-900"
           title={formatOwnerCaseAddress(item)}
@@ -1097,6 +1111,15 @@ function CaseRow({
             <span className="text-xs text-zinc-400">尚未追蹤</span>
           )}
         </div>
+
+        {isSuperAdmin ? (
+          <p
+            className="min-w-0 truncate text-xs font-medium text-zinc-700"
+            title={item.assignee || undefined}
+          >
+            {item.assignee?.trim() || "—"}
+          </p>
+        ) : null}
 
         <div className="min-w-0 overflow-hidden space-y-0.5">
           <NextContactBadge nextContactDate={item.nextContactDate} />
