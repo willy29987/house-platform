@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   formatFollowUpWhen,
   formatOwnerCaseAddress,
@@ -26,7 +26,11 @@ import {
 import { COMMUNITY_PROPERTY_TYPES, PARKING_PRICE_INCLUDED_LABEL } from "@/lib/owner-tracking-form-ui";
 import { formatParkingTypeLabel } from "@/lib/parking-type-label";
 import { propertyTypeLabel } from "@/lib/property-type-label";
-import { hydrateOwnerTrackingStoreOnce, pushOwnerTrackingFromLocalNow } from "@/lib/admin-cloud-sync-client";
+import {
+  hydrateOwnerTrackingStoreOnce,
+  invalidateOwnerTrackingHydrateCache,
+  pushOwnerTrackingFromLocalNow,
+} from "@/lib/admin-cloud-sync-client";
 import { resolveOwnerCaseEffectiveStatus } from "@/lib/owner-tracking-case-status";
 import {
   appendOwnerTrackingListContext,
@@ -59,6 +63,8 @@ export function OwnerTrackingDetail({ caseId, currentUsername, isSuperAdmin = fa
   const [submitting, setSubmitting] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
   const [nextContactDate, setNextContactDate] = useState("");
+  const nextContactEditedByUser = useRef(false);
+  const nextContactSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     void hydrateOwnerTrackingStoreOnce(loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreLocal).then(
@@ -75,9 +81,14 @@ export function OwnerTrackingDetail({ caseId, currentUsername, isSuperAdmin = fa
   );
 
   useEffect(() => {
-    if (ownerCase) {
-      setNextContactDate(normalizeNextContactDate(ownerCase.nextContactDate));
-    }
+    if (!ownerCase) return;
+    const fromCase = normalizeNextContactDate(ownerCase.nextContactDate);
+    setNextContactDate((prev) => {
+      const prevNorm = normalizeNextContactDate(prev);
+      if (nextContactEditedByUser.current && prevNorm !== fromCase) return prev;
+      nextContactEditedByUser.current = false;
+      return fromCase;
+    });
   }, [ownerCase?.id, ownerCase?.nextContactDate]);
 
   useEffect(() => {
@@ -96,9 +107,58 @@ export function OwnerTrackingDetail({ caseId, currentUsername, isSuperAdmin = fa
     [store, caseId],
   );
 
+  function persistLocalOnly(next: OwnerTrackingStore) {
+    persistOwnerTrackingStoreLocal(next);
+    invalidateOwnerTrackingHydrateCache();
+    setStore(next);
+  }
+
   function persist(next: OwnerTrackingStore) {
     saveOwnerTrackingStore(next);
     setStore(next);
+  }
+
+  useEffect(
+    () => () => {
+      if (nextContactSaveTimer.current) clearTimeout(nextContactSaveTimer.current);
+    },
+    [],
+  );
+
+  function flushNextContactSave(ymd: string) {
+    if (!hydrated || submitting) return;
+    const local = loadOwnerTrackingStoreLocal();
+    const current = local.cases.find((c) => c.id === caseId);
+    if (!current) return;
+    const formYmd = normalizeNextContactDate(ymd);
+    const caseYmd = normalizeNextContactDate(current.nextContactDate);
+    if (formYmd === caseYmd) {
+      nextContactEditedByUser.current = false;
+      return;
+    }
+    const next = patchOwnerCaseNextContact(local, caseId, ymd);
+    persistLocalOnly(next);
+    void pushOwnerTrackingFromLocalNow()
+      .then(() => {
+        nextContactEditedByUser.current = false;
+        setFlash("已更新下次聯繫");
+        window.setTimeout(() => setFlash(null), 2200);
+      })
+      .catch(() => {
+        setFlash("聯繫日已存本機；雲端同步失敗，請稍後重新整理");
+        window.setTimeout(() => setFlash(null), 4000);
+      });
+  }
+
+  function handleNextContactChange(ymd: string) {
+    const normalized = normalizeNextContactDate(ymd);
+    nextContactEditedByUser.current = true;
+    setNextContactDate(normalized);
+    if (nextContactSaveTimer.current) clearTimeout(nextContactSaveTimer.current);
+    nextContactSaveTimer.current = setTimeout(() => {
+      nextContactSaveTimer.current = null;
+      flushNextContactSave(normalized);
+    }, 500);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -117,7 +177,12 @@ export function OwnerTrackingDetail({ caseId, currentUsername, isSuperAdmin = fa
       ...store,
       followUps: [...store.followUps, entry],
     };
-    const nextStore = patchOwnerCaseNextContact(withFollowUp, caseId, nextContactDate);
+    const caseYmd = normalizeNextContactDate(ownerCase.nextContactDate);
+    const formYmd = normalizeNextContactDate(nextContactDate);
+    const nextStore =
+      formYmd !== caseYmd
+        ? patchOwnerCaseNextContact(withFollowUp, caseId, nextContactDate)
+        : withFollowUp;
     persist(nextStore);
     try {
       await pushOwnerTrackingFromLocalNow();
@@ -307,7 +372,7 @@ export function OwnerTrackingDetail({ caseId, currentUsername, isSuperAdmin = fa
         <div className="mb-4 max-sm:max-h-[40vh] max-sm:overflow-y-auto">
           <OwnerTrackingNextContactField
             value={nextContactDate}
-            onChange={(ymd) => setNextContactDate(normalizeNextContactDate(ymd))}
+            onChange={handleNextContactChange}
             compact
           />
         </div>

@@ -16,6 +16,7 @@ import {
   updateOwnerCase,
   type OwnerCaseInput,
 } from "@/lib/owner-tracking-preview";
+import { pushOwnerTrackingFromLocalNow } from "@/lib/admin-cloud-sync-client";
 import {
   CHOICE_OTHER,
   inferChoice,
@@ -209,7 +210,7 @@ export function OwnerTrackingNewForm({
     };
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     const payload = buildPayload();
@@ -256,6 +257,13 @@ export function OwnerTrackingNewForm({
         return;
       }
       saveOwnerTrackingStore(next);
+      try {
+        await pushOwnerTrackingFromLocalNow();
+      } catch {
+        setError("已存本機；雲端同步失敗，請稍後再試");
+        setSubmitting(false);
+        return;
+      }
       router.push(returnListHref ?? "/admin/owner-tracking");
       return;
     }
@@ -266,6 +274,13 @@ export function OwnerTrackingNewForm({
       initialStatus,
     );
     saveOwnerTrackingStore(next);
+    try {
+      await pushOwnerTrackingFromLocalNow();
+    } catch {
+      setError("已存本機；雲端同步失敗，請稍後再試");
+      setSubmitting(false);
+      return;
+    }
     router.push(`/admin/owner-tracking/${newCaseId}`);
   }
 

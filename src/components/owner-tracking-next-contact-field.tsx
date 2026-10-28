@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
   addDaysYmd,
   normalizeNextContactDate,
@@ -16,7 +16,7 @@ type Props = {
 };
 
 export function OwnerTrackingNextContactField({ value, onChange, compact: _compact = false }: Props) {
-  const today = useMemo(() => taipeiTodayYmd(), []);
+  const today = taipeiTodayYmd();
   const normalized = normalizeNextContactDate(value);
   const [showDate, setShowDate] = useState(false);
 
@@ -24,6 +24,11 @@ export function OwnerTrackingNextContactField({ value, onChange, compact: _compa
     !!normalized && DAY_PRESETS.some((d) => normalized === addDaysYmd(today, d));
   const isCustom = !!normalized && !isPreset;
   const showPicker = showDate || isCustom || isPreset;
+
+  function pickToday() {
+    onChange(today);
+    setShowDate(false);
+  }
 
   function pickDays(days: number) {
     onChange(addDaysYmd(today, days));
@@ -54,6 +59,17 @@ export function OwnerTrackingNextContactField({ value, onChange, compact: _compa
           }`}
         >
           不設定
+        </button>
+        <button
+          type="button"
+          onClick={pickToday}
+          className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium ${
+            normalized === today
+              ? "border-[#0b2545] bg-[#0b2545] text-white"
+              : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50"
+          }`}
+        >
+          今天
         </button>
         {DAY_PRESETS.map((d) => (
           <button

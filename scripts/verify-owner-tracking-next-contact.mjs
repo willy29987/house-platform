@@ -3,6 +3,10 @@
  * node scripts/verify-owner-tracking-next-contact.mjs
  */
 
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 const TAIPEI_TZ = "Asia/Taipei";
 const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -24,6 +28,13 @@ function contactDueCategory(nextContactDate, now = new Date()) {
   if (ymd < today) return "overdue";
   if (ymd === today) return "today";
   return "upcoming";
+}
+
+function matchesOwnerTrackingAssigneeFilter(assignee, assigneeFilter) {
+  if (assigneeFilter === "ALL") return true;
+  const a = String(assignee ?? "").trim();
+  if (!a || a === "—") return true;
+  return a === assigneeFilter.trim();
 }
 
 function matchesContactFilter(nextContactDate, filter, now = new Date()) {
@@ -52,6 +63,8 @@ const checks = [
   [matchesContactFilter(yesterday, "DUE", fixedNow), true],
   [matchesContactFilter(today, "DUE", fixedNow), true],
   [matchesContactFilter(tomorrow, "DUE", fixedNow), false],
+  [matchesOwnerTrackingAssigneeFilter("—", "R001"), true],
+  [matchesOwnerTrackingAssigneeFilter("R002", "R001"), false],
 ];
 
 let failed = 0;
@@ -62,4 +75,25 @@ for (const [got, expected] of checks) {
   }
 }
 if (failed > 0) process.exit(1);
-console.log("verify-owner-tracking-next-contact: ok", { today, tomorrow, yesterday });
+
+const logPath = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", ".cursor", "debug-8e3c3f.log");
+const liveToday = taipeiTodayYmd();
+const dueTodayCheck = matchesContactFilter(liveToday, "DUE");
+try {
+  fs.appendFileSync(
+    logPath,
+    `${JSON.stringify({
+      sessionId: "8e3c3f",
+      runId: "post-fix-unit",
+      hypothesisId: "H2-H5",
+      location: "verify-owner-tracking-next-contact.mjs",
+      message: "offline due filter checks ok",
+      data: { liveTaipeiToday: liveToday, dueTodayCheck, fixedFixtureToday: today },
+      timestamp: Date.now(),
+    })}\n`,
+  );
+} catch {
+  /* ignore */
+}
+
+console.log("verify-owner-tracking-next-contact: ok", { today, tomorrow, yesterday, liveToday });

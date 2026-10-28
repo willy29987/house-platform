@@ -269,6 +269,14 @@ export function mergeOwnerTrackingStores(
   });
 }
 
+/** 列表負責人篩選：ALL 或本人；未分配（—）為共用池，非管理員也可見 */
+export function matchesOwnerTrackingAssigneeFilter(assignee: string, assigneeFilter: string): boolean {
+  if (assigneeFilter === "ALL") return true;
+  const a = assignee.trim();
+  if (!a || a === "—") return true;
+  return a === assigneeFilter.trim();
+}
+
 /** 業務可看自己的案件；未分配（—）為共用池；最高管理員看全部 */
 export function canViewOwnerTrackingCase(
   ownerCase: Pick<OwnerCasePreview, "assignee">,

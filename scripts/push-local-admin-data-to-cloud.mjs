@@ -10,6 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
+import { normalizeOwnerTrackingStore } from "./lib/spreadsheet-import-shared.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const HOME = process.env.HOME ?? "";
@@ -139,54 +140,6 @@ function parseJsonSafe(raw) {
   } catch {
     return null;
   }
-}
-
-function str(v, fallback = "") {
-  return v == null ? fallback : String(v);
-}
-
-/** 與 src/lib/owner-tracking-preview.ts normalizeOwnerTrackingStore 對齊 */
-function normalizeOwnerTrackingStore(store) {
-  if (!store || typeof store !== "object") return { cases: [], followUps: [] };
-  const cases = (store.cases ?? []).map((raw) => ({
-    id: str(raw.id, `case-${Date.now()}`),
-    assignee: str(raw.assignee, "—"),
-    createdAt: str(raw.createdAt, new Date().toISOString()),
-    address: str(raw.address),
-    city: str(raw.city),
-    district: str(raw.district),
-    floor: str(raw.floor),
-    totalFloors: str(raw.totalFloors),
-    propertyType: str(raw.propertyType),
-    community: str(raw.community),
-    ownerName: str(raw.ownerName),
-    phone: str(raw.phone),
-    listingUrl: str(raw.listingUrl ?? raw.listingTitle),
-    rent: str(raw.rent),
-    layout: str(raw.layout),
-    areaPing: str(raw.areaPing),
-    managementFee: str(raw.managementFee),
-    otherFees: str(raw.otherFees),
-    parking: str(raw.parking),
-    parkingNumber: str(raw.parkingNumber),
-    parkingPrice: str(raw.parkingPrice),
-    pets: str(raw.pets),
-    rentSubsidy: str(raw.rentSubsidy),
-    taxFiling: str(raw.taxFiling),
-    householdRegistration: str(raw.householdRegistration),
-    serviceFee: str(raw.serviceFee),
-    specialMatters: str(raw.specialMatters),
-    caseNote: str(raw.caseNote),
-  }));
-  const followUps = (store.followUps ?? []).map((f) => ({
-    id: str(f.id),
-    caseId: str(f.caseId),
-    status: str(f.status, "持續聯繫"),
-    note: str(f.note),
-    createdBy: str(f.createdBy),
-    createdAt: str(f.createdAt, new Date().toISOString()),
-  }));
-  return { cases, followUps };
 }
 
 function mergeOwnerTracking(...stores) {

@@ -7,6 +7,7 @@ import {
 import { matchesOwnerCaseStatusFilter, resolveOwnerCaseEffectiveStatus } from "@/lib/owner-tracking-case-status";
 import {
   canViewOwnerTrackingCase,
+  matchesOwnerTrackingAssigneeFilter,
   lastFollowUp,
   ownerCaseContactCount,
   type OwnerCasePreview,
@@ -69,7 +70,7 @@ export function buildOwnerTrackingListRows(
     }))
     .filter(({ case: c, last }) => {
       if (visibility && !canViewOwnerTrackingCase(c, visibility)) return false;
-      if (filters.assigneeFilter !== "ALL" && c.assignee !== filters.assigneeFilter) return false;
+      if (!matchesOwnerTrackingAssigneeFilter(c.assignee, filters.assigneeFilter)) return false;
       if (!matchesOwnerCaseStatusFilter(store, c, filters.statusFilter)) return false;
       if (filters.propertyTypeFilter !== "ALL" && c.propertyType !== filters.propertyTypeFilter) {
         return false;
@@ -102,4 +103,22 @@ export function buildOwnerTrackingListRows(
       return b.case.createdAt.localeCompare(a.case.createdAt);
     });
   return rows;
+}
+
+/** 列表「今日待聯繫」可見筆數（今日 + 已逾期，與列表篩選一致） */
+export function countContactDueCases(
+  store: OwnerTrackingStore,
+  opts: { assigneeFilter: string; isSuperAdmin: boolean; currentUsername: string },
+  now = new Date(),
+): number {
+  const assigneeFilter = opts.isSuperAdmin ? opts.assigneeFilter : opts.currentUsername;
+  const visibility =
+    !opts.isSuperAdmin && opts.currentUsername
+      ? { currentUsername: opts.currentUsername, isSuperAdmin: false as const }
+      : null;
+  return store.cases.filter((c) => {
+    if (visibility && !canViewOwnerTrackingCase(c, visibility)) return false;
+    if (!matchesOwnerTrackingAssigneeFilter(c.assignee, assigneeFilter)) return false;
+    return matchesContactFilter(c.nextContactDate, "DUE", now);
+  }).length;
 }

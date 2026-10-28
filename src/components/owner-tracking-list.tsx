@@ -20,6 +20,7 @@ import {
 } from "@/lib/owner-tracking-preview";
 import {
   buildOwnerTrackingListRows,
+  countContactDueCases,
   listCommunityCell,
 } from "@/lib/owner-tracking-list-query";
 import { PROPERTY_TYPE_OPTIONS, propertyTypeLabel } from "@/lib/property-type-label";
@@ -319,6 +320,16 @@ function OwnerTrackingListInner({
     ],
   );
 
+  const contactDueCount = useMemo(
+    () =>
+      countContactDueCases(store, {
+        assigneeFilter: isSuperAdmin ? assigneeFilter : currentUsername,
+        isSuperAdmin,
+        currentUsername,
+      }),
+    [store, isSuperAdmin, assigneeFilter, currentUsername],
+  );
+
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
 
@@ -433,6 +444,22 @@ function OwnerTrackingListInner({
         currentUsername={currentUsername}
         isSuperAdmin={isSuperAdmin}
       />
+      {contactDueCount > 0 && !isContactDueTodayView(contactFilter) ? (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <p>
+            你有{" "}
+            <span className="font-bold tabular-nums">{contactDueCount}</span>{" "}
+            件屋主案今日待聯繫或已逾期。
+            <button
+              type="button"
+              className="ml-2 font-semibold text-[#0b2545] underline hover:no-underline"
+              onClick={() => patchListUrl({ contactFilter: "DUE", page: 1 })}
+            >
+              查看列表
+            </button>
+          </p>
+        </div>
+      ) : null}
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
         <label className="block min-w-[12rem] flex-1">
           <span className="mb-1 block text-xs font-medium text-zinc-600">搜尋</span>
@@ -593,6 +620,11 @@ function OwnerTrackingListInner({
           }
         >
           今日待聯繫
+          {contactDueCount > 0 ? (
+            <span className="ml-1.5 inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-amber-500 px-1.5 py-0.5 text-[11px] font-bold text-white">
+              {contactDueCount > 99 ? "99+" : contactDueCount}
+            </span>
+          ) : null}
         </button>
         {rows.length > 0 ? (
           <p className="text-sm text-zinc-600">

@@ -118,6 +118,16 @@ export function newImportId(prefix) {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/** 與 src/lib/owner-tracking-next-contact.ts normalizeNextContactDate 對齊 */
+export function normalizeNextContactDate(raw) {
+  const t = str(raw);
+  if (!t) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+  const d = new Date(t);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-CA", { timeZone: "Asia/Taipei" });
+}
+
 export function normalizeOwnerTrackingStore(store) {
   if (!store || typeof store !== "object") return { cases: [], followUps: [] };
   const cases = (store.cases ?? []).map((raw) => ({
@@ -149,6 +159,8 @@ export function normalizeOwnerTrackingStore(store) {
     serviceFee: str(raw.serviceFee),
     specialMatters: str(raw.specialMatters),
     caseNote: str(raw.caseNote),
+    nextContactDate: normalizeNextContactDate(raw.nextContactDate),
+    expectedReleaseDate: normalizeNextContactDate(raw.expectedReleaseDate),
   }));
   const followUps = (store.followUps ?? []).map((f) => ({
     id: str(f.id, newImportId("fu")),
