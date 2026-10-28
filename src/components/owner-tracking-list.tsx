@@ -40,6 +40,7 @@ import { formatRocDate, getDaysUntilRelease } from "@/lib/listing-internal-meta"
 import {
   appendOwnerTrackingListContext,
   buildOwnerTrackingListQuery,
+  ownerTrackingListHref,
   parseOwnerTrackingListSearch,
   type OwnerTrackingListUrlState,
 } from "@/lib/owner-tracking-list-url";
@@ -358,6 +359,21 @@ function OwnerTrackingListInner({
     [store, isSuperAdmin, assigneeFilter, currentUsername],
   );
 
+  /** 今日待聯繫：新分頁開啟（僅保留負責人範圍） */
+  const contactDueHref = useMemo(
+    () =>
+      ownerTrackingListHref({
+        keyword: "",
+        statusFilter: "ALL",
+        propertyTypeFilter: "ALL",
+        assigneeFilter: isSuperAdmin ? assigneeFilter : currentUsername,
+        listing591Filter: "ALL",
+        contactFilter: "DUE",
+        page: 1,
+      }),
+    [isSuperAdmin, assigneeFilter, currentUsername],
+  );
+
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
 
@@ -478,13 +494,14 @@ function OwnerTrackingListInner({
             你有{" "}
             <span className="font-bold tabular-nums">{contactDueCount}</span>{" "}
             件屋主案今日待聯繫或已逾期。
-            <button
-              type="button"
+            <Link
+              href={contactDueHref}
+              target="_blank"
+              rel="noopener noreferrer"
               className="ml-2 font-semibold text-[#0b2545] underline hover:no-underline"
-              onClick={() => patchListUrl({ contactFilter: "DUE", page: 1 })}
             >
               查看列表
-            </button>
+            </Link>
           </p>
         </div>
       ) : null}
@@ -633,14 +650,10 @@ function OwnerTrackingListInner({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={() =>
-            patchListUrl({
-              contactFilter: isContactDueTodayView(contactFilter) ? "ALL" : "DUE",
-              page: 1,
-            })
-          }
+        <Link
+          href={contactDueHref}
+          target="_blank"
+          rel="noopener noreferrer"
           className={
             isContactDueTodayView(contactFilter)
               ? "inline-flex shrink-0 items-center rounded-lg border border-amber-400 bg-amber-50 px-3 py-1.5 text-sm font-semibold text-amber-950 shadow-sm"
@@ -653,7 +666,7 @@ function OwnerTrackingListInner({
               {contactDueCount > 99 ? "99+" : contactDueCount}
             </span>
           ) : null}
-        </button>
+        </Link>
         {rows.length > 0 ? (
           <p className="text-sm text-zinc-600">
             共{" "}
