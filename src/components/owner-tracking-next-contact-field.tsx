@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useRef } from "react";
 import {
   addDaysYmd,
   normalizeNextContactDate,
   taipeiTodayYmd,
 } from "@/lib/owner-tracking-next-contact";
 
-const DAY_PRESETS = [2, 7] as const;
+const DAY_PRESETS = [2, 4] as const;
 
 type Props = {
   value: string;
@@ -18,31 +18,28 @@ type Props = {
 export function OwnerTrackingNextContactField({ value, onChange, compact: _compact = false }: Props) {
   const today = taipeiTodayYmd();
   const normalized = normalizeNextContactDate(value);
-  const [showDate, setShowDate] = useState(false);
+  const dateInputRef = useRef<HTMLInputElement>(null);
 
-  const isPreset =
-    !!normalized && DAY_PRESETS.some((d) => normalized === addDaysYmd(today, d));
-  const isCustom = !!normalized && !isPreset;
-  const showPicker = showDate || isCustom || isPreset;
+  function openDatePicker() {
+    const el = dateInputRef.current;
+    if (!el) return;
+    try {
+      el.showPicker();
+    } catch {
+      el.focus();
+    }
+  }
 
   function pickToday() {
     onChange(today);
-    setShowDate(false);
   }
 
   function pickDays(days: number) {
     onChange(addDaysYmd(today, days));
-    setShowDate(false);
   }
 
   function pickNone() {
     onChange("");
-    setShowDate(false);
-  }
-
-  function openCustomDate() {
-    setShowDate(true);
-    if (!normalized) onChange(today);
   }
 
   return (
@@ -85,32 +82,23 @@ export function OwnerTrackingNextContactField({ value, onChange, compact: _compa
             {d} 天後
           </button>
         ))}
-        <button
-          type="button"
-          onClick={openCustomDate}
-          className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium ${
-            showDate || isCustom
-              ? "border-[#1e3a8a] bg-[#1e3a8a]/10 text-[#1e3a8a]"
-              : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50"
-          }`}
+        <label
+          className="block max-w-[11rem] min-w-[9.5rem] shrink-0 cursor-pointer"
+          onClick={(e) => {
+            e.preventDefault();
+            openDatePicker();
+          }}
         >
-          指定日期
-        </button>
-        {showPicker ? (
-          <label className="block max-w-[11rem] min-w-[9.5rem] shrink-0">
-            <span className="sr-only">指定下次聯繫日期</span>
-            <input
-              type="date"
-              min={today}
-              value={normalized || ""}
-              onChange={(e) => {
-                setShowDate(true);
-                onChange(normalizeNextContactDate(e.target.value));
-              }}
-              className="h-[34px] w-full rounded-lg border border-zinc-300 px-2 py-1 text-sm"
-            />
-          </label>
-        ) : null}
+          <span className="sr-only">指定下次聯繫日期</span>
+          <input
+            ref={dateInputRef}
+            type="date"
+            min={today}
+            value={normalized || ""}
+            onChange={(e) => onChange(normalizeNextContactDate(e.target.value))}
+            className="h-[34px] w-full cursor-pointer rounded-lg border border-zinc-300 px-2 py-1 text-sm"
+          />
+        </label>
       </div>
     </div>
   );
