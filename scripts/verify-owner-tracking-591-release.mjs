@@ -2,12 +2,8 @@
  * 驗證 591 下架：首次清空聯繫日；再檢查／屋主已出租 不清聯繫日
  * node scripts/verify-owner-tracking-591-release.mjs
  */
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 
 const SKIP = ["屋主已出租"];
-const LOG = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", ".cursor", "debug-8e3c3f.log");
 
 function apply591RemovedSim(store, removedCaseIds) {
   const idSet = new Set(removedCaseIds);
@@ -64,27 +60,9 @@ for (const [got, expected] of checks) {
   }
 }
 
-const data = {
+if (failed > 0) process.exit(1);
+console.log("verify-owner-tracking-591-release: ok", {
   recheckKeptContact: byId.recheck.nextContactDate === "2026-10-28",
   firstClearedContact: byId.first.nextContactDate === "",
   rentedKeptContact: byId.rented.nextContactDate === "2026-10-28",
-};
-try {
-  fs.appendFileSync(
-    LOG,
-    `${JSON.stringify({
-      sessionId: "8e3c3f",
-      runId: "post-fix",
-      hypothesisId: "H1-H2",
-      location: "verify-owner-tracking-591-release.mjs",
-      message: "591 release clear-contact rules",
-      data,
-      timestamp: Date.now(),
-    })}\n`,
-  );
-} catch {
-  /* ignore */
-}
-
-if (failed > 0) process.exit(1);
-console.log("verify-owner-tracking-591-release: ok", data);
+});

@@ -72,54 +72,11 @@ export async function POST(request: Request) {
       const ownerStore = normalizeOwnerTrackingStore(
         (ownerRaw as Parameters<typeof normalizeOwnerTrackingStore>[0]) ?? { cases: [], followUps: [] },
       );
-      const beforeById = Object.fromEntries(
-        ownerStore.cases
-          .filter((c) => removedCaseIds.includes(c.id))
-          .map((c) => [
-            c.id.slice(-8),
-            { next: c.nextContactDate || "", release: c.expectedReleaseDate || "" },
-          ]),
-      );
       const { store: nextOwner, changed, updatedCaseIds } = apply591RemovedToOwnerStore(
         ownerStore,
         removedCaseIds,
         { createdBy: current?.username ?? "system" },
       );
-      const afterById = Object.fromEntries(
-        nextOwner.cases
-          .filter((c) => removedCaseIds.includes(c.id))
-          .map((c) => [
-            c.id.slice(-8),
-            { next: c.nextContactDate || "", release: c.expectedReleaseDate || "" },
-          ]),
-      );
-      // #region agent log
-      try {
-        if (process.env.NODE_ENV === "development") {
-          const fs = await import("node:fs");
-          fs.appendFileSync(
-            "/Users/zhangyouwei/Documents/house-platform/.cursor/debug-8e3c3f.log",
-            `${JSON.stringify({
-              sessionId: "8e3c3f",
-              runId: "post-fix",
-              hypothesisId: "H1-H2",
-              location: "listing-url-check/route.ts:apply591Removed",
-              message: "591 removed apply snapshot",
-              data: {
-                removedCount: removedCaseIds.length,
-                changed,
-                updatedCaseIds: updatedCaseIds.map((id) => id.slice(-8)),
-                beforeById,
-                afterById,
-              },
-              timestamp: Date.now(),
-            })}\n`,
-          );
-        }
-      } catch {
-        /* ignore */
-      }
-      // #endregion
       if (changed) {
         await writeAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.ownerTracking, nextOwner);
         ownerTrackingUpdated = true;
