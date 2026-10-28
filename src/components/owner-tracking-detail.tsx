@@ -127,28 +127,6 @@ export function OwnerTrackingDetail({ caseId, currentUsername, isSuperAdmin = fa
       window.setTimeout(() => setFlash(null), 4000);
       return;
     }
-    // #region agent log
-    const last = lastFollowUp(nextStore, caseId);
-    const listStatus = resolveOwnerCaseEffectiveStatus(nextStore, ownerCase);
-    fetch("http://127.0.0.1:7749/ingest/c721804b-59fc-4ec2-a5c9-49b629f2510d", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "8e3c3f" },
-      body: JSON.stringify({
-        sessionId: "8e3c3f",
-        runId: "status-change",
-        hypothesisId: "H6",
-        location: "owner-tracking-detail.tsx:handleSubmit",
-        message: "follow-up saved",
-        data: {
-          submittedStatus: status,
-          lastStatusNorm: last ? normalizeFollowUpStatus(last.status) : null,
-          listEffectiveStatus: listStatus,
-          statusMatches: last ? normalizeFollowUpStatus(last.status) === listStatus : false,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
     setNote("");
     setFlash("已記錄本次追蹤");
     setSubmitting(false);
