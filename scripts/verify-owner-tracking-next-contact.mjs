@@ -3,10 +3,6 @@
  * node scripts/verify-owner-tracking-next-contact.mjs
  */
 
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
 const TAIPEI_TZ = "Asia/Taipei";
 const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -75,25 +71,4 @@ for (const [got, expected] of checks) {
   }
 }
 if (failed > 0) process.exit(1);
-
-const logPath = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", ".cursor", "debug-8e3c3f.log");
-const liveToday = taipeiTodayYmd();
-const dueTodayCheck = matchesContactFilter(liveToday, "DUE");
-try {
-  fs.appendFileSync(
-    logPath,
-    `${JSON.stringify({
-      sessionId: "8e3c3f",
-      runId: "post-fix-unit",
-      hypothesisId: "H2-H5",
-      location: "verify-owner-tracking-next-contact.mjs",
-      message: "offline due filter checks ok",
-      data: { liveTaipeiToday: liveToday, dueTodayCheck, fixedFixtureToday: today },
-      timestamp: Date.now(),
-    })}\n`,
-  );
-} catch {
-  /* ignore */
-}
-
-console.log("verify-owner-tracking-next-contact: ok", { today, tomorrow, yesterday, liveToday });
+console.log("verify-owner-tracking-next-contact: ok", { today, tomorrow, yesterday });
