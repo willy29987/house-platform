@@ -102,19 +102,29 @@ function OwnerTrackingListInner({
   const { keyword, statusFilter, propertyTypeFilter, assigneeFilter, listing591Filter, contactFilter, page } =
     urlState;
 
-  const patchListUrl = useCallback(
-    (patch: Partial<OwnerTrackingListUrlState>) => {
-      const next = { ...urlState, ...patch };
-      const qs = buildOwnerTrackingListQuery(next);
-      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-    },
-    [urlState, pathname, router],
-  );
-
   /** 搜尋：本地即時篩選；URL 延遲更新，避免每鍵 router.replace 造成卡頓 */
   const searchComposingRef = useRef(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const keywordInputRef = useRef(keyword);
   const [keywordInput, setKeywordInput] = useState(keyword);
+  keywordInputRef.current = keywordInput;
+
+  const patchListUrl = useCallback(
+    (patch: Partial<OwnerTrackingListUrlState>) => {
+      const pendingKeyword =
+        !("keyword" in patch) && keywordInput.trim() !== urlState.keyword.trim()
+          ? keywordInput.trim()
+          : undefined;
+      const next = {
+        ...urlState,
+        ...patch,
+        ...(pendingKeyword !== undefined ? { keyword: pendingKeyword } : {}),
+      };
+      const qs = buildOwnerTrackingListQuery(next);
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    },
+    [urlState, pathname, router, keywordInput],
+  );
 
   const commitSearchToUrl = useCallback(
     (value: string) => {
@@ -126,6 +136,10 @@ function OwnerTrackingListInner({
   );
 
   useEffect(() => {
+    if (searchComposingRef.current) return;
+    const inputFocused = document.activeElement === searchInputRef.current;
+    const inputAhead = keywordInputRef.current.trim() !== keyword.trim();
+    if (inputFocused && inputAhead) return;
     setKeywordInput(keyword);
   }, [keyword]);
   useEffect(() => {

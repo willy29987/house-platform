@@ -61,7 +61,7 @@ export function buildOwnerTrackingListRows(
     filters.isSuperAdmin === false && filters.currentUsername
       ? { currentUsername: filters.currentUsername, isSuperAdmin: false as const }
       : null;
-  return store.cases
+  const rows = store.cases
     .map((c) => ({
       case: c,
       last: lastFollowUp(store, c.id),
@@ -101,4 +101,5 @@ export function buildOwnerTrackingListRows(
       }
       return b.case.createdAt.localeCompare(a.case.createdAt);
     });
+  return rows;
 }

@@ -8,6 +8,7 @@ import {
   parseOwnerTrackingContactFilter,
   type OwnerTrackingContactFilter,
 } from "@/lib/owner-tracking-next-contact";
+import { normalizeFollowUpStatus } from "@/lib/owner-tracking-preview";
 
 export const OWNER_TRACKING_LIST_PATH = "/admin/owner-tracking";
 
@@ -32,9 +33,13 @@ export function parseOwnerTrackingListSearch(
     assigneeFilter = opts.isSuperAdmin ? "ALL" : opts.currentUsername;
   }
 
+  const statusRaw = params.get("status") ?? "ALL";
+  const statusFilter =
+    statusRaw === "ALL" ? "ALL" : normalizeFollowUpStatus(statusRaw);
+
   return {
     keyword: params.get("q") ?? "",
-    statusFilter: params.get("status") ?? "ALL",
+    statusFilter,
     propertyTypeFilter: params.get("ptype") ?? "ALL",
     assigneeFilter,
     listing591Filter: parseOwnerTrackingListing591Filter(params.get("l591")),
