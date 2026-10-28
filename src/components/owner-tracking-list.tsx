@@ -21,6 +21,7 @@ import {
 import {
   buildOwnerTrackingListRows,
   countContactDueCases,
+  countContactUpcomingCases,
   listCommunityCell,
 } from "@/lib/owner-tracking-list-query";
 import { PROPERTY_TYPE_OPTIONS, propertyTypeLabel } from "@/lib/property-type-label";
@@ -323,6 +324,16 @@ function OwnerTrackingListInner({
   const contactDueCount = useMemo(
     () =>
       countContactDueCases(store, {
+        assigneeFilter: isSuperAdmin ? assigneeFilter : currentUsername,
+        isSuperAdmin,
+        currentUsername,
+      }),
+    [store, isSuperAdmin, assigneeFilter, currentUsername],
+  );
+
+  const contactUpcomingCount = useMemo(
+    () =>
+      countContactUpcomingCases(store, {
         assigneeFilter: isSuperAdmin ? assigneeFilter : currentUsername,
         isSuperAdmin,
         currentUsername,
@@ -650,7 +661,9 @@ function OwnerTrackingListInner({
         ) : hydrated ? (
           <p className="text-sm text-zinc-600">
             {isContactDueTodayView(contactFilter)
-              ? "目前沒有今日待聯繫或已逾期的案件"
+              ? contactUpcomingCount > 0
+                ? `目前沒有今日待聯繫或已逾期的案件（另有 ${contactUpcomingCount} 件已排程在未來日期，到期當天會出現在此；若要今天跟進請在詳情按「今天」）`
+                : "目前沒有今日待聯繫或已逾期的案件"
               : store.cases.length === 0
                 ? null
                 : "沒有符合條件的案件"}
@@ -681,7 +694,23 @@ function OwnerTrackingListInner({
         <ul className="divide-y divide-zinc-100">
           {rows.length === 0 ? (
             <li className="px-4 py-10 text-center text-sm text-zinc-500">
-              {store.cases.length === 0 ? "尚無案件，請按「新增案件」建立" : "沒有符合條件的案件"}
+              {store.cases.length === 0 ? (
+                "尚無案件，請按「新增案件」建立"
+              ) : isContactDueTodayView(contactFilter) ? (
+                contactUpcomingCount > 0 ? (
+                  <>
+                    目前沒有今日待聯繫或已逾期的案件。
+                    <br />
+                    另有 {contactUpcomingCount} 件已排程在未來日期，到期當天會出現在此。
+                    <br />
+                    若要今天跟進，請到案件詳情 → 下次聯繫 →「今天」。
+                  </>
+                ) : (
+                  "目前沒有今日待聯繫或已逾期的案件"
+                )
+              ) : (
+                "沒有符合條件的案件"
+              )}
             </li>
           ) : (
             pageRows.map(({ case: c, last, contactCount }) => (

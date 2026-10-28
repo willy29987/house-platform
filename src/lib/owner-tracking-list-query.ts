@@ -122,3 +122,21 @@ export function countContactDueCases(
     return matchesContactFilter(c.nextContactDate, "DUE", now);
   }).length;
 }
+
+/** 列表可見、已排程「之後日期」聯繫（非今日／逾期） */
+export function countContactUpcomingCases(
+  store: OwnerTrackingStore,
+  opts: { assigneeFilter: string; isSuperAdmin: boolean; currentUsername: string },
+  now = new Date(),
+): number {
+  const assigneeFilter = opts.isSuperAdmin ? opts.assigneeFilter : opts.currentUsername;
+  const visibility =
+    !opts.isSuperAdmin && opts.currentUsername
+      ? { currentUsername: opts.currentUsername, isSuperAdmin: false as const }
+      : null;
+  return store.cases.filter((c) => {
+    if (visibility && !canViewOwnerTrackingCase(c, visibility)) return false;
+    if (!matchesOwnerTrackingAssigneeFilter(c.assignee, assigneeFilter)) return false;
+    return matchesContactFilter(c.nextContactDate, "LATER", now);
+  }).length;
+}
