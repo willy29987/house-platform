@@ -30,6 +30,7 @@ import {
   hydrateOwnerTrackingStoreOnce,
   invalidateOwnerTrackingHydrateCache,
   pushOwnerTrackingFromLocalNow,
+  pushOwnerTrackingStoreNow,
 } from "@/lib/admin-cloud-sync-client";
 import { resolveOwnerCaseEffectiveStatus } from "@/lib/owner-tracking-case-status";
 import {
@@ -145,7 +146,9 @@ export function OwnerTrackingDetail({
     }
     const next = patchOwnerCaseNextContact(local, caseId, ymd);
     persistLocalOnly(next);
-    void pushOwnerTrackingFromLocalNow()
+    invalidateOwnerTrackingHydrateCache();
+    // 直接推送已 patch 的 store，避免期間 hydrate 把舊聯繫日寫回本機後再被讀去上雲
+    void pushOwnerTrackingStoreNow(next)
       .then(() => {
         nextContactEditedByUser.current = false;
         setFlash("已更新下次聯繫");
