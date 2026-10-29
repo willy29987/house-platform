@@ -75,9 +75,10 @@ type Props = {
 const PAGE_SIZE = 100;
 const MAX_591_CHECK_BATCH = 30;
 
-const COMPACT_FILTER_LABEL = "block shrink-0";
+const COMPACT_FILTER_LABEL = "block min-w-0";
+/** 桌機等寬、剛好容納最長選項（屋主已出租／River（我））；不再撐滿整排 */
 const COMPACT_FILTER_SELECT =
-  "w-fit max-w-full rounded-lg border border-zinc-300 px-2 py-2 text-sm";
+  "w-full min-w-0 rounded-lg border border-zinc-300 px-2 py-2 text-sm sm:w-[7.125rem]";
 
 /** 表頭與資料列共用：上次備註減半，寬度補給地址／社區；電訪／操作加寬以免直書 */
 const LIST_ROW_GRID =
@@ -586,74 +587,82 @@ function OwnerTrackingListInner({
             ) : null}
           </div>
         </label>
-        <label className={COMPACT_FILTER_LABEL}>
-          <span className="mb-1 block text-xs font-medium text-zinc-600">目前狀態</span>
-          <select
-            value={statusFilter}
-            onChange={(e) => patchListUrl({ statusFilter: e.target.value, page: 1 })}
-            className={COMPACT_FILTER_SELECT}
-          >
-            <option value="ALL">全部</option>
-            {OWNER_TRACKING_STATUS_OPTIONS.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className={COMPACT_FILTER_LABEL}>
-          <span className="mb-1 block text-xs font-medium text-zinc-600">物件類別</span>
-          <select
-            value={propertyTypeFilter}
-            onChange={(e) => patchListUrl({ propertyTypeFilter: e.target.value, page: 1 })}
-            className={COMPACT_FILTER_SELECT}
-          >
-            <option value="ALL">全部</option>
-            {PROPERTY_TYPE_OPTIONS.map((code) => (
-              <option key={code} value={code}>
-                {propertyTypeLabel(code)}
-              </option>
-            ))}
-          </select>
-        </label>
-        {isSuperAdmin ? (
+        <div
+          className={
+            isSuperAdmin
+              ? "grid w-full grid-cols-2 gap-3 sm:inline-grid sm:w-auto sm:grid-cols-4"
+              : "grid w-full grid-cols-2 gap-3 sm:inline-grid sm:w-auto sm:grid-cols-3"
+          }
+        >
           <label className={COMPACT_FILTER_LABEL}>
-            <span className="mb-1 block text-xs font-medium text-zinc-600">負責人</span>
+            <span className="mb-1 block text-xs font-medium text-zinc-600">目前狀態</span>
             <select
-              value={assigneeFilter}
-              onChange={(e) => patchListUrl({ assigneeFilter: e.target.value, page: 1 })}
+              value={statusFilter}
+              onChange={(e) => patchListUrl({ statusFilter: e.target.value, page: 1 })}
               className={COMPACT_FILTER_SELECT}
             >
               <option value="ALL">全部</option>
-              {assigneeOptions.map((name) => {
-                const label = formatAdminStaffLabel(name, staffLabels);
-                return (
-                  <option key={name} value={name}>
-                    {name === currentUsername ? `${label}（我）` : label}
-                  </option>
-                );
-              })}
+              {OWNER_TRACKING_STATUS_OPTIONS.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
             </select>
           </label>
-        ) : null}
-        <label className={COMPACT_FILTER_LABEL}>
-          <span className="mb-1 block text-xs font-medium text-zinc-600">591 狀態</span>
-          <select
-            value={listing591Filter}
-            onChange={(e) =>
-              patchListUrl({
-                listing591Filter: e.target.value as OwnerTrackingListUrlState["listing591Filter"],
-                page: 1,
-              })
-            }
-            className={COMPACT_FILTER_SELECT}
-          >
-            <option value="ALL">全部</option>
-            <option value="LIVE">在線</option>
-            <option value="REMOVED">已下架</option>
-            <option value="UNCHECKED">未檢查</option>
-          </select>
-        </label>
+          <label className={COMPACT_FILTER_LABEL}>
+            <span className="mb-1 block text-xs font-medium text-zinc-600">物件類別</span>
+            <select
+              value={propertyTypeFilter}
+              onChange={(e) => patchListUrl({ propertyTypeFilter: e.target.value, page: 1 })}
+              className={COMPACT_FILTER_SELECT}
+            >
+              <option value="ALL">全部</option>
+              {PROPERTY_TYPE_OPTIONS.map((code) => (
+                <option key={code} value={code}>
+                  {propertyTypeLabel(code)}
+                </option>
+              ))}
+            </select>
+          </label>
+          {isSuperAdmin ? (
+            <label className={COMPACT_FILTER_LABEL}>
+              <span className="mb-1 block text-xs font-medium text-zinc-600">負責人</span>
+              <select
+                value={assigneeFilter}
+                onChange={(e) => patchListUrl({ assigneeFilter: e.target.value, page: 1 })}
+                className={COMPACT_FILTER_SELECT}
+              >
+                <option value="ALL">全部</option>
+                {assigneeOptions.map((name) => {
+                  const label = formatAdminStaffLabel(name, staffLabels);
+                  return (
+                    <option key={name} value={name}>
+                      {name === currentUsername ? `${label}（我）` : label}
+                    </option>
+                  );
+                })}
+              </select>
+            </label>
+          ) : null}
+          <label className={COMPACT_FILTER_LABEL}>
+            <span className="mb-1 block text-xs font-medium text-zinc-600">591 狀態</span>
+            <select
+              value={listing591Filter}
+              onChange={(e) =>
+                patchListUrl({
+                  listing591Filter: e.target.value as OwnerTrackingListUrlState["listing591Filter"],
+                  page: 1,
+                })
+              }
+              className={COMPACT_FILTER_SELECT}
+            >
+              <option value="ALL">全部</option>
+              <option value="LIVE">在線</option>
+              <option value="REMOVED">已下架</option>
+              <option value="UNCHECKED">未檢查</option>
+            </select>
+          </label>
+        </div>
         <button
           type="button"
           disabled={checking591 || check591OnPageCount === 0}
