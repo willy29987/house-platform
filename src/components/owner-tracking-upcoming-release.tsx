@@ -6,12 +6,14 @@ import { formatOwnerCaseAddress } from "@/lib/owner-tracking-preview";
 import { filterUpcomingOwnerCases, sortOwnerCasesByReleaseSoonest } from "@/lib/owner-tracking-release";
 import type { OwnerTrackingStore } from "@/lib/owner-tracking-preview";
 import { appendOwnerTrackingListContext } from "@/lib/owner-tracking-list-url";
+import { formatAdminStaffLabel } from "@/lib/admin-staff-labels";
 
 type Props = {
   store: OwnerTrackingStore;
   listQuery: string;
   currentUsername: string;
   isSuperAdmin: boolean;
+  staffLabels?: Record<string, string>;
 };
 
 export function OwnerTrackingUpcomingRelease({
@@ -19,6 +21,7 @@ export function OwnerTrackingUpcomingRelease({
   listQuery,
   currentUsername,
   isSuperAdmin,
+  staffLabels = {},
 }: Props) {
   const upcoming = sortOwnerCasesByReleaseSoonest(
     store,
@@ -68,7 +71,9 @@ export function OwnerTrackingUpcomingRelease({
                 預計 <span className="font-semibold text-amber-900">{formatRocDate(c.expectedReleaseDate)}</span>
               </span>
               {isSuperAdmin ? (
-                <span className="ml-auto text-[11px] font-semibold text-zinc-600">{c.assignee}</span>
+                <span className="ml-auto text-[11px] font-semibold text-zinc-600" title={c.assignee}>
+                  {formatAdminStaffLabel(c.assignee, staffLabels)}
+                </span>
               ) : null}
             </li>
           );

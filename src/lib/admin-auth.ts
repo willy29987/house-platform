@@ -8,6 +8,8 @@ export type AdminRole = "SUPER_ADMIN" | "OPERATOR";
 
 export type CurrentAdmin = {
   username: string;
+  /** 帳號管理設定的顯示姓名；無則前端退回 username */
+  displayName?: string | null;
   role: AdminRole;
   source: "env" | "db";
   id?: string;
@@ -45,22 +47,43 @@ export async function getCurrentAdmin(): Promise<CurrentAdmin | null> {
   const username = cookieStore.get(ADMIN_USERNAME_COOKIE)?.value;
   if (!username) return null;
 
-  if (process.env.ADMIN_USERNAME && username === process.env.ADMIN_USERNAME) {
-    return { username, role: "SUPER_ADMIN", source: "env" };
+  if (!process.env.DATABASE_URL) {
+    if (process.env.ADMIN_USERNAME && username === process.env.ADMIN_USERNAME) {
+      return { username, role: "SUPER_ADMIN", source: "env", displayName: null };
+    }
+    return null;
   }
-
-  if (!process.env.DATABASE_URL) return null;
 
   try {
     const { prisma } = await import("@/lib/prisma");
     const user = await prisma.adminUser.findUnique({
       where: { username },
-      select: { id: true, username: true, role: true },
+      select: { id: true, username: true, displayName: true, role: true },
     });
+
+    if (process.env.ADMIN_USERNAME && username === process.env.ADMIN_USERNAME) {
+      return {
+        username,
+        role: "SUPER_ADMIN",
+        source: "env",
+        id: user?.id,
+        displayName: user?.displayName ?? null,
+      };
+    }
+
     if (!user) return null;
-    return { id: user.id, username: user.username, role: user.role as AdminRole, source: "db" };
+    return {
+      id: user.id,
+      username: user.username,
+      displayName: user.displayName,
+      role: user.role as AdminRole,
+      source: "db",
+    };
   } catch (error) {
     console.error("[db] getCurrentAdmin 查詢失敗，已降級：", error instanceof Error ? error.message.trim().split("\n").pop() : error);
+    if (process.env.ADMIN_USERNAME && username === process.env.ADMIN_USERNAME) {
+      return { username, role: "SUPER_ADMIN", source: "env", displayName: null };
+    }
     return null;
   }
 }

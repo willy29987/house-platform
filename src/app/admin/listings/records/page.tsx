@@ -4,11 +4,16 @@ import { getAdminListingRecords } from "@/lib/listings";
 import { AdminListingRecords } from "@/components/admin-listing-records";
 import { GoPublicSiteButton } from "@/components/go-public-site-button";
 import { getCurrentAdmin } from "@/lib/admin-auth";
+import { loadAdminStaffLabelMap } from "@/lib/admin-staff-labels";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminRecordsPage() {
-  const [records, current] = await Promise.all([getAdminListingRecords(), getCurrentAdmin()]);
+  const [records, current, staffLabels] = await Promise.all([
+    getAdminListingRecords(),
+    getCurrentAdmin(),
+    loadAdminStaffLabelMap(),
+  ]);
   if (!current) redirect("/admin/login");
   if (current.role !== "SUPER_ADMIN") redirect("/admin");
 
@@ -34,7 +39,7 @@ export default async function AdminRecordsPage() {
       </div>
 
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200">
-        <AdminListingRecords records={records} />
+        <AdminListingRecords records={records} staffLabels={staffLabels} />
       </section>
     </main>
   );

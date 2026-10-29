@@ -13,8 +13,9 @@ import {
   isUpcomingRelease as computeIsUpcomingRelease,
   unpublishCategoryLabel,
 } from "@/lib/listing-internal-meta";
+import { formatAdminStaffLabel } from "@/lib/admin-staff-labels";
 
-type Props = { records: AdminListingRecord[] };
+type Props = { records: AdminListingRecord[]; staffLabels?: Record<string, string> };
 
 function formatPrice(price: number, type: "RENT" | "SALE") {
   if (type === "RENT") return `NT$ ${price.toLocaleString("zh-TW")} / 月`;
@@ -73,7 +74,7 @@ function DetailRow({ label, value }: { label: string; value: string | null | und
   );
 }
 
-export function AdminListingRecords({ records }: Props) {
+export function AdminListingRecords({ records, staffLabels = {} }: Props) {
   const [type, setType] = useState<"RENT" | "SALE">("RENT");
   const [status, setStatus] = useState<"ALL" | "PUBLISHED" | "UNPUBLISHED">("ALL");
   const [keyword, setKeyword] = useState("");
@@ -294,7 +295,7 @@ export function AdminListingRecords({ records }: Props) {
                   </div>
                   <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
                     <span className="max-w-[7rem] truncate text-xs text-zinc-600" title={r.createdByUsername ?? undefined}>
-                      業務 {r.createdByUsername ?? "—"}
+                      業務 {formatAdminStaffLabel(r.createdByUsername, staffLabels)}
                     </span>
                     <span className="whitespace-nowrap text-xs text-zinc-600">
                       上架 {new Intl.DateTimeFormat("zh-TW").format(r.createdAt)}

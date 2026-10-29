@@ -19,6 +19,7 @@ import {
   sortUpcomingRentListingsNewestFirst,
   unpublishCategoryLabel,
 } from "@/lib/listing-internal-meta";
+import { formatAdminStaffLabel } from "@/lib/admin-staff-labels";
 
 const desktopCardActionBtn =
   "whitespace-nowrap rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm font-semibold text-zinc-800 hover:bg-zinc-50 disabled:opacity-60";
@@ -102,6 +103,8 @@ type AdminListingTableProps = {
   listingType: "RENT" | "SALE";
   currentUsername: string;
   isSuperAdmin: boolean;
+  /** username → 顯示姓名 */
+  staffLabels?: Record<string, string>;
   /** 手機版：在表頭顯示「租賃/買賣物件」與篩選按鈕 */
   showMobileSectionTitle?: boolean;
 };
@@ -141,6 +144,7 @@ export function AdminListingTable({
   listingType,
   currentUsername,
   isSuperAdmin,
+  staffLabels = {},
   showMobileSectionTitle = false,
 }: AdminListingTableProps) {
   const router = useRouter();
@@ -570,7 +574,13 @@ export function AdminListingTable({
                       </div>
                       <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 text-sm">
                         <span className="whitespace-nowrap text-zinc-600">
-                          業務 <span className="font-semibold text-zinc-900">{l.createdByUsername ?? "—"}</span>
+                          業務{" "}
+                          <span
+                            className="font-semibold text-zinc-900"
+                            title={l.createdByUsername ?? undefined}
+                          >
+                            {formatAdminStaffLabel(l.createdByUsername, staffLabels)}
+                          </span>
                         </span>
                         <span className="whitespace-nowrap text-zinc-600">
                           上架 <span className="font-semibold text-zinc-900">{listedDate}</span>
@@ -637,7 +647,13 @@ export function AdminListingTable({
                     </div>
                     <div className="flex items-center gap-2">
                       <p className="min-w-0 flex-1 truncate text-[11px] leading-tight text-zinc-500">
-                        業務 <span className="font-semibold text-zinc-700">{l.createdByUsername ?? "—"}</span>
+                        業務{" "}
+                        <span
+                          className="font-semibold text-zinc-700"
+                          title={l.createdByUsername ?? undefined}
+                        >
+                          {formatAdminStaffLabel(l.createdByUsername, staffLabels)}
+                        </span>
                         {" · 上架 "}
                         <span className="font-semibold text-zinc-700">{new Intl.DateTimeFormat("zh-TW").format(l.createdAt)}</span>
                       </p>

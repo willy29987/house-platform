@@ -3,6 +3,7 @@ import { getAdminListings, getAdminStats, getInquiries } from "@/lib/listings";
 import { AdminListingTable } from "@/components/admin-listing-table";
 import { AdminUpcomingRelease } from "@/components/admin-upcoming-release";
 import { getCurrentAdmin } from "@/lib/admin-auth";
+import { formatAdminStaffLabel, loadAdminStaffLabelMap } from "@/lib/admin-staff-labels";
 
 function formatDateTime(d: Date) {
   return new Intl.DateTimeFormat("zh-TW", {
@@ -20,20 +21,28 @@ type AdminPageProps = {
 export default async function AdminPage({ searchParams }: AdminPageProps) {
   const { type } = await searchParams;
   const activeType = type === "sale" ? "SALE" : "RENT";
-  const [listings, current, stats, inquiries] = await Promise.all([
+  const [listings, current, stats, inquiries, staffLabels] = await Promise.all([
     getAdminListings(),
     getCurrentAdmin(),
     getAdminStats(),
     getInquiries(),
+    loadAdminStaffLabelMap(),
   ]);
   const isSuperAdmin = current?.role === "SUPER_ADMIN";
   const pendingInquiries = inquiries.filter((i) => !i.isHandled).slice(0, 5);
+  const currentLabel = current
+    ? formatAdminStaffLabel(current.username, {
+        ...staffLabels,
+        [current.username]: (current.displayName ?? "").trim() || staffLabels[current.username] || "",
+      })
+    : "";
 
   const tableProps = {
     listings,
     listingType: activeType as "RENT" | "SALE",
     currentUsername: current?.username ?? "",
     isSuperAdmin: Boolean(isSuperAdmin),
+    staffLabels,
   };
 
   return (
@@ -42,7 +51,9 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
       <div className="space-y-5 md:hidden">
         {current ? (
           <p className="rounded-xl bg-white px-4 py-3 text-sm text-zinc-600 shadow-sm ring-1 ring-zinc-200">
-            <span className="font-semibold text-zinc-900">{current.username}</span>
+            <span className="font-semibold text-zinc-900" title={current.username}>
+              {currentLabel}
+            </span>
             <span
               className={`ml-2 rounded-full px-2 py-0.5 text-[10px] font-semibold text-white ${
                 isSuperAdmin ? "bg-[#0b2545]" : "bg-zinc-500"
@@ -131,7 +142,10 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
       <div className="hidden space-y-6 md:block">
         {current ? (
           <p className="text-sm text-zinc-600">
-            登入：<span className="font-medium text-zinc-900">{current.username}</span>
+            登入：
+            <span className="font-medium text-zinc-900" title={current.username}>
+              {currentLabel}
+            </span>
             <span
               className={`ml-2 rounded-full px-2 py-0.5 text-xs font-semibold text-white ${
                 isSuperAdmin ? "bg-[#0b2545]" : "bg-zinc-500"

@@ -38,6 +38,7 @@ import {
 } from "@/lib/owner-tracking-list-url";
 import { OwnerTrackingNextContactField } from "@/components/owner-tracking-next-contact-field";
 import { formatNextContactLabel, normalizeNextContactDate } from "@/lib/owner-tracking-next-contact";
+import { formatAdminStaffLabel } from "@/lib/admin-staff-labels";
 import { formatRocDate, getDaysUntilRelease } from "@/lib/listing-internal-meta";
 import { isOwnerCaseUpcomingRelease } from "@/lib/owner-tracking-release";
 
@@ -45,9 +46,15 @@ type Props = {
   caseId: string;
   currentUsername: string;
   isSuperAdmin?: boolean;
+  staffLabels?: Record<string, string>;
 };
 
-export function OwnerTrackingDetail({ caseId, currentUsername, isSuperAdmin = false }: Props) {
+export function OwnerTrackingDetail({
+  caseId,
+  currentUsername,
+  isSuperAdmin = false,
+  staffLabels = {},
+}: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const listParam = searchParams.get("list");
@@ -264,7 +271,7 @@ export function OwnerTrackingDetail({ caseId, currentUsername, isSuperAdmin = fa
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-700">
-              負責 {ownerCase.assignee}
+              負責 {formatAdminStaffLabel(ownerCase.assignee, staffLabels)}
             </span>
             <span
               className={`rounded-full px-3 py-1 text-xs font-medium ${statusBadgeClass(displayStatus)}`}
@@ -317,7 +324,9 @@ export function OwnerTrackingDetail({ caseId, currentUsername, isSuperAdmin = fa
                       <time className="text-xs tabular-nums text-zinc-500">
                         {formatFollowUpWhen(item.createdAt)}
                       </time>
-                      <span className="text-xs text-zinc-400">{item.createdBy}</span>
+                      <span className="text-xs text-zinc-400">
+                        {formatAdminStaffLabel(item.createdBy, staffLabels)}
+                      </span>
                       <span
                         className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusBadgeClass(item.status)}`}
                       >

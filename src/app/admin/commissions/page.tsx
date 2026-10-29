@@ -2,11 +2,13 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { CommissionManager } from "@/components/commission-manager";
 import { getCurrentAdmin } from "@/lib/admin-auth";
+import { loadAdminStaffLabelMap } from "@/lib/admin-staff-labels";
 
 export default async function AdminCommissionsPage() {
   const current = await getCurrentAdmin();
   if (!current) redirect("/admin/login");
   if (current.role !== "SUPER_ADMIN") redirect("/admin");
+  const staffLabels = await loadAdminStaffLabelMap();
 
   return (
     <main className="mx-auto w-full max-w-6xl">
@@ -33,6 +35,7 @@ export default async function AdminCommissionsPage() {
       <CommissionManager
         currentUsername={current.username}
         isSuperAdmin={current.role === "SUPER_ADMIN"}
+        staffLabels={staffLabels}
       />
     </main>
   );

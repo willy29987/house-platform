@@ -6,9 +6,11 @@ import { useEffect, useState } from "react";
 import { AdminLogoutButton } from "@/components/admin-logout-button";
 import { BrandLogo } from "@/components/brand-logo";
 import { AdminCloudSyncBootstrap } from "@/components/admin-cloud-sync-bootstrap";
+import { formatAdminStaffLabel } from "@/lib/admin-staff-labels";
 
 export type AdminShellUser = {
   username: string;
+  displayName?: string | null;
   role: "SUPER_ADMIN" | "OPERATOR";
 } | null;
 
@@ -58,6 +60,11 @@ export function AdminShell({ current, children }: AdminShellProps) {
 
   const menuLinkCls =
     "block rounded-xl px-4 py-3 text-sm font-medium text-zinc-800 hover:bg-zinc-50 active:bg-zinc-100";
+  const currentLabel = current
+    ? formatAdminStaffLabel(current.username, {
+        [current.username]: (current.displayName ?? "").trim(),
+      })
+    : "";
 
   return (
     <div className="flex min-h-[100dvh] flex-col bg-[#f4f6f9]">
@@ -80,7 +87,9 @@ export function AdminShell({ current, children }: AdminShellProps) {
           </Link>
           {current ? (
             <div className="hidden shrink-0 items-center gap-2 sm:flex">
-              <span className="max-w-[6rem] truncate text-xs text-zinc-600">{current.username}</span>
+              <span className="max-w-[8rem] truncate text-xs text-zinc-600" title={current.username}>
+                {currentLabel}
+              </span>
               <span
                 className={`rounded-full px-2 py-0.5 text-[10px] font-semibold text-white ${
                   isSuperAdmin ? "bg-[#0b2545]" : "bg-zinc-500"
@@ -171,8 +180,8 @@ export function AdminShell({ current, children }: AdminShellProps) {
               <div>
                 <p className="text-xs font-semibold text-[#1e3a8a]">多功能選單</p>
                 {current ? (
-                  <p className="mt-0.5 text-sm text-zinc-600">
-                    {current.username}
+                  <p className="mt-0.5 text-sm text-zinc-600" title={current.username}>
+                    {currentLabel}
                     <span className="ml-1.5 text-xs text-zinc-400">
                       {isSuperAdmin ? "最高管理員" : "業務"}
                     </span>

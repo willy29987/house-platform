@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { OwnerTrackingDetail } from "@/components/owner-tracking-detail";
 import { getCurrentAdmin } from "@/lib/admin-auth";
+import { loadAdminStaffLabelMap } from "@/lib/admin-staff-labels";
 import { ownerTrackingListHrefFromListParam } from "@/lib/owner-tracking-list-url";
 
 type PageProps = {
@@ -21,6 +22,7 @@ export default async function AdminOwnerTrackingDetailPage({ params, searchParam
   const { id } = await params;
   const listParam = asText((await searchParams).list);
   const listHref = ownerTrackingListHrefFromListParam(listParam);
+  const staffLabels = await loadAdminStaffLabelMap();
 
   return (
     <main className="mx-auto w-full max-w-3xl">
@@ -34,6 +36,7 @@ export default async function AdminOwnerTrackingDetailPage({ params, searchParam
           caseId={id}
           currentUsername={current.username}
           isSuperAdmin={current.role === "SUPER_ADMIN"}
+          staffLabels={staffLabels}
         />
       </Suspense>
     </main>

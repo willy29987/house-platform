@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { AdminUsersManager } from "@/components/admin-users-manager";
 import { getCurrentAdmin } from "@/lib/admin-auth";
+import { formatAdminStaffLabel } from "@/lib/admin-staff-labels";
 
 type SettingsUser = {
   id: string;
@@ -56,7 +57,12 @@ export default async function AdminSettingsPage() {
         <p className="text-sm text-zinc-600">內部管理後台</p>
         <h1 className="text-2xl font-bold text-zinc-900">帳號管理</h1>
         <p className="mt-1 text-xs text-zinc-500">
-          目前登入：<span className="font-medium text-zinc-700">{current.username}</span>
+          目前登入：
+          <span className="font-medium text-zinc-700" title={current.username}>
+            {formatAdminStaffLabel(current.username, {
+              [current.username]: (current.displayName ?? "").trim(),
+            })}
+          </span>
           <span className="ml-2 rounded-full bg-[#0b2545] px-2 py-0.5 text-white">最高管理員</span>
         </p>
       </div>

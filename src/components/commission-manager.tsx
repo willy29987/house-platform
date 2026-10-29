@@ -13,6 +13,7 @@ import {
   type CommissionRecord,
 } from "@/lib/commission-stats";
 import { hydrateCommissionRecordsOnce } from "@/lib/admin-cloud-sync-client";
+import { formatAdminStaffLabel } from "@/lib/admin-staff-labels";
 
 function currentYear(): number {
   return new Date().getFullYear();
@@ -20,11 +21,13 @@ function currentYear(): number {
 
 type CommissionManagerProps = {
   currentUsername: string;
+  staffLabels?: Record<string, string>;
   isSuperAdmin?: boolean;
 };
 
 export function CommissionManager({
   currentUsername,
+  staffLabels = {},
   isSuperAdmin = false,
 }: CommissionManagerProps) {
   const [records, setRecords] = useState<CommissionRecord[]>([]);
@@ -128,7 +131,7 @@ export function CommissionManager({
     <div className="space-y-4">
       {!isSuperAdmin ? (
         <p className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600">
-          目前僅顯示承辦業務為「{currentUsername}」的紀錄。
+          目前僅顯示承辦業務為「{formatAdminStaffLabel(currentUsername, staffLabels)}」的紀錄。
         </p>
       ) : null}
       {/* 年度切換 + 新增 */}
@@ -218,6 +221,7 @@ export function CommissionManager({
                     month={g.month}
                     list={g.list}
                     subtotal={g.subtotal}
+                    staffLabels={staffLabels}
                     onToggle={toggleReceived}
                     onEdit={setEditing}
                   />
@@ -257,12 +261,14 @@ function MonthGroup({
   month,
   list,
   subtotal,
+  staffLabels = {},
   onToggle,
   onEdit,
 }: {
   month: string;
   list: CommissionRecord[];
   subtotal: number;
+  staffLabels?: Record<string, string>;
   onToggle: (id: string) => void;
   onEdit: (r: CommissionRecord) => void;
 }) {
@@ -285,7 +291,12 @@ function MonthGroup({
               {commissionTypeLabel[r.listingType]}
             </span>
           </td>
-          <td className="whitespace-nowrap px-3 py-2.5 text-zinc-700">{r.operator || "—"}</td>
+          <td
+            className="whitespace-nowrap px-3 py-2.5 text-zinc-700"
+            title={r.operator || undefined}
+          >
+            {formatAdminStaffLabel(r.operator, staffLabels)}
+          </td>
           <td className="whitespace-nowrap px-3 py-2.5 text-zinc-700">{r.client || "—"}</td>
           <td className="whitespace-nowrap px-3 py-2.5 text-right text-zinc-700">
             {r.dealAmount ? formatCommissionNtd(r.dealAmount) : "—"}

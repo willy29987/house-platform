@@ -61,12 +61,15 @@ import {
   formatNextContactLabel,
   isContactDueTodayView,
 } from "@/lib/owner-tracking-next-contact";
+import { formatAdminStaffLabel } from "@/lib/admin-staff-labels";
 
 type Props = {
   currentUsername: string;
   isSuperAdmin?: boolean;
   /** 後台帳號（含無案件的 R001 等），供負責人篩選 */
   staffUsernames?: string[];
+  /** username → 顯示姓名 */
+  staffLabels?: Record<string, string>;
 };
 
 const PAGE_SIZE = 100;
@@ -100,6 +103,7 @@ function OwnerTrackingListInner({
   currentUsername,
   isSuperAdmin = false,
   staffUsernames = [],
+  staffLabels = {},
 }: Props) {
   const router = useRouter();
   const pathname = usePathname();
@@ -437,7 +441,7 @@ function OwnerTrackingListInner({
       const { buildOwnerTrackingWorkbook, downloadOwnerTrackingExcel } = await import(
         "@/lib/owner-tracking-excel-export"
       );
-      const buffer = await buildOwnerTrackingWorkbook(store, rows);
+      const buffer = await buildOwnerTrackingWorkbook(store, rows, staffLabels);
       downloadOwnerTrackingExcel(buffer);
     } catch (e) {
       setExportError(e instanceof Error ? e.message : "匯出失敗");
@@ -487,6 +491,7 @@ function OwnerTrackingListInner({
         listQuery={listQuery}
         currentUsername={currentUsername}
         isSuperAdmin={isSuperAdmin}
+        staffLabels={staffLabels}
       />
       {contactDueCount > 0 && !isContactDueTodayView(contactFilter) ? (
         <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
@@ -603,11 +608,14 @@ function OwnerTrackingListInner({
               className={COMPACT_FILTER_SELECT}
             >
               <option value="ALL">全部</option>
-              {assigneeOptions.map((name) => (
-                <option key={name} value={name}>
-                  {name === currentUsername ? `${name}（我）` : name}
-                </option>
-              ))}
+              {assigneeOptions.map((name) => {
+                const label = formatAdminStaffLabel(name, staffLabels);
+                return (
+                  <option key={name} value={name}>
+                    {name === currentUsername ? `${label}（我）` : label}
+                  </option>
+                );
+              })}
             </select>
           </label>
         ) : null}
@@ -756,6 +764,7 @@ function OwnerTrackingListInner({
                 checkEntry={checkStore.byCaseId[c.id]}
                 checking591={checking591Ids.has(c.id)}
                 upcomingRelease={isOwnerCaseUpcomingRelease(store, c)}
+                staffLabels={staffLabels}
                 onDelete={() => handleDeleteCase(c.id)}
               />
             ))
@@ -1053,6 +1062,7 @@ function CaseRow({
   checkEntry,
   checking591,
   upcomingRelease,
+  staffLabels = {},
   onDelete,
 }: {
   item: OwnerCasePreview;
@@ -1064,6 +1074,7 @@ function CaseRow({
   checkEntry: Listing591CheckEntry | undefined;
   checking591: boolean;
   upcomingRelease?: boolean;
+  staffLabels?: Record<string, string>;
   onDelete: () => void;
 }) {
   const caseHref = appendOwnerTrackingListContext(`/admin/owner-tracking/${item.id}`, listQuery);
@@ -1137,9 +1148,9 @@ function CaseRow({
         {isSuperAdmin ? (
           <p
             className="min-w-0 truncate text-xs font-medium text-zinc-700"
-            title={item.assignee || undefined}
+            title={item.assignee?.trim() || undefined}
           >
-            {item.assignee?.trim() || "—"}
+            {formatAdminStaffLabel(item.assignee, staffLabels)}
           </p>
         ) : null}
 

@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs";
+import { formatAdminStaffLabel } from "@/lib/admin-staff-labels";
 import { formatFollowUpWhen, formatOwnerCaseAddress, type OwnerTrackingStore } from "@/lib/owner-tracking-preview";
 import { listCommunityCell, type OwnerTrackingListRow } from "@/lib/owner-tracking-list-query";
 import { formatParkingTypeLabel } from "@/lib/parking-type-label";
@@ -97,7 +98,10 @@ function setupSimpleSheet(sheet: ExcelJS.Worksheet, columns: ColumnSpec[], dataR
   }
 }
 
-function caseRow(row: OwnerTrackingListRow): ExcelJS.CellValue[] {
+function caseRow(
+  row: OwnerTrackingListRow,
+  staffLabels?: Record<string, string>,
+): ExcelJS.CellValue[] {
   const c = row.case;
   const url = normalizeUrl(c.listingUrl);
   const urlCell: ExcelJS.CellValue = url
@@ -114,7 +118,7 @@ function caseRow(row: OwnerTrackingListRow): ExcelJS.CellValue[] {
     c.ownerName,
     c.phone,
     urlCell,
-    c.assignee,
+    formatAdminStaffLabel(c.assignee, staffLabels),
     row.last?.status ?? "尚未追蹤",
     formatFollowUpWhen(c.createdAt),
     row.last ? formatFollowUpWhen(row.last.createdAt) : "",
@@ -139,7 +143,11 @@ function caseRow(row: OwnerTrackingListRow): ExcelJS.CellValue[] {
   ];
 }
 
-function followUpRows(store: OwnerTrackingStore, listRows: OwnerTrackingListRow[]): ExcelJS.CellValue[][] {
+function followUpRows(
+  store: OwnerTrackingStore,
+  listRows: OwnerTrackingListRow[],
+  staffLabels?: Record<string, string>,
+): ExcelJS.CellValue[][] {
   const caseIds = new Set(listRows.map((r) => r.case.id));
   const caseById = new Map(listRows.map((r) => [r.case.id, r.case]));
   return store.followUps
@@ -151,9 +159,9 @@ function followUpRows(store: OwnerTrackingStore, listRows: OwnerTrackingListRow[
         listCommunityCell(c),
         formatOwnerCaseAddress(c),
         c.ownerName,
-        c.assignee,
+        formatAdminStaffLabel(c.assignee, staffLabels),
         formatFollowUpWhen(f.createdAt),
-        f.createdBy,
+        formatAdminStaffLabel(f.createdBy, staffLabels),
         f.status,
         f.note,
       ];
@@ -163,6 +171,7 @@ function followUpRows(store: OwnerTrackingStore, listRows: OwnerTrackingListRow[
 export async function buildOwnerTrackingWorkbook(
   store: OwnerTrackingStore,
   listRows: OwnerTrackingListRow[],
+  staffLabels?: Record<string, string>,
 ): Promise<ArrayBuffer> {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "屋主追蹤";
@@ -172,11 +181,11 @@ export async function buildOwnerTrackingWorkbook(
   setupSimpleSheet(
     casesSheet,
     caseColumns,
-    listRows.map((r) => caseRow(r)),
+    listRows.map((r) => caseRow(r, staffLabels)),
   );
 
   const followSheet = workbook.addWorksheet("追蹤明細");
-  setupSimpleSheet(followSheet, followUpColumns, followUpRows(store, listRows));
+  setupSimpleSheet(followSheet, followUpColumns, followUpRows(store, listRows, staffLabels));
 
   // 網址欄超連結樣式（案件一覽第 10 欄）
   const urlCol = 10;

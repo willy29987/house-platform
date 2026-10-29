@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { OwnerTrackingList } from "@/components/owner-tracking-list";
 import { getCurrentAdmin } from "@/lib/admin-auth";
+import { loadAdminStaffLabelMap } from "@/lib/admin-staff-labels";
 import { prisma } from "@/lib/prisma";
 
 async function listStaffUsernamesForAssigneeFilter(): Promise<string[]> {
@@ -19,7 +20,10 @@ export default async function AdminOwnerTrackingPage() {
   const current = await getCurrentAdmin();
   if (!current) redirect("/admin/login");
 
-  const staffUsernames = await listStaffUsernamesForAssigneeFilter();
+  const [staffUsernames, staffLabels] = await Promise.all([
+    listStaffUsernamesForAssigneeFilter(),
+    loadAdminStaffLabelMap(),
+  ]);
 
   return (
     <main className="mx-auto w-full">
@@ -27,6 +31,7 @@ export default async function AdminOwnerTrackingPage() {
         currentUsername={current.username}
         isSuperAdmin={current.role === "SUPER_ADMIN"}
         staffUsernames={staffUsernames}
+        staffLabels={staffLabels}
       />
     </main>
   );
