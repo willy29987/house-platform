@@ -79,13 +79,13 @@ const COMPACT_FILTER_LABEL = "block shrink-0";
 const COMPACT_FILTER_SELECT =
   "w-fit max-w-full rounded-lg border border-zinc-300 px-2 py-2 text-sm";
 
-/** 表頭與資料列共用：上次備註減半，寬度補給地址／社區；欄間淺線分隔 */
+/** 表頭與資料列共用：上次備註減半，寬度補給地址／社區；電訪／操作加寬以免直書 */
 const LIST_ROW_GRID =
-  "sm:grid sm:grid-cols-[minmax(0,3.55fr)_minmax(6rem,0.9fr)_8rem_6.25rem_6.75rem_5.75rem_minmax(0,1fr)_5.75rem_2.75rem_4.75rem] sm:items-stretch sm:gap-x-0";
+  "sm:grid sm:grid-cols-[minmax(0,3.55fr)_minmax(6rem,0.9fr)_8rem_6.25rem_6.75rem_5.75rem_minmax(0,1fr)_5.75rem_3.5rem_5.5rem] sm:items-stretch sm:gap-x-0";
 
 /** 最高管理員：加負責人欄，方便對照各業務的下次聯繫日 */
 const LIST_ROW_GRID_SUPER =
-  "sm:grid sm:grid-cols-[minmax(0,3.35fr)_minmax(6rem,0.9fr)_8rem_6.25rem_6.75rem_4.25rem_5.75rem_minmax(0,1fr)_5.75rem_2.75rem_4.75rem] sm:items-stretch sm:gap-x-0";
+  "sm:grid sm:grid-cols-[minmax(0,3.35fr)_minmax(6rem,0.9fr)_8rem_6.25rem_6.75rem_4.25rem_5.75rem_minmax(0,1fr)_5.75rem_3.5rem_5.5rem] sm:items-stretch sm:gap-x-0";
 
 /** 欄位分隔：桌機每格左側淺線＋內距；首欄不加左線 */
 const LIST_CELL =
@@ -739,13 +739,13 @@ function OwnerTrackingListInner({
           {isSuperAdmin ? <span className={`${LIST_HEAD_CELL} truncate`}>負責人</span> : null}
           <span className={`${LIST_HEAD_CELL} truncate`}>下次聯繫</span>
           <span className={`${LIST_HEAD_CELL} truncate`}>上次備註</span>
-          <span className={`${LIST_HEAD_CELL} leading-snug tabular-nums`}>
-            建立時間
-            <br />
-            上次追蹤
+          <span className={`${LIST_HEAD_CELL} flex-col leading-snug tabular-nums`}>
+            <span>建立時間</span>
+            <span className="my-0.5 w-full border-t border-zinc-200/80" aria-hidden />
+            <span>上次追蹤</span>
           </span>
-          <span className={LIST_HEAD_CELL}>電訪</span>
-          <span className={LIST_HEAD_CELL}>操作</span>
+          <span className={`${LIST_HEAD_CELL} whitespace-nowrap`}>電訪</span>
+          <span className={`${LIST_HEAD_CELL} whitespace-nowrap`}>操作</span>
         </div>
         <ul className="divide-y divide-zinc-100">
           {rows.length === 0 ? (
@@ -1163,8 +1163,8 @@ function CaseRow({
           </p>
         ) : null}
 
-        <div className={`${LIST_CELL} overflow-hidden`}>
-          <div className="min-w-0 space-y-0.5 overflow-hidden">
+        <div className={`${LIST_CELL} justify-center overflow-hidden text-center`}>
+          <div className="flex min-w-0 flex-col items-center justify-center gap-0.5 overflow-hidden">
             <NextContactDateCell nextContactDate={item.nextContactDate} />
             {upcomingRelease && item.expectedReleaseDate ? (
               <span className="inline-block max-w-full truncate rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-950 sm:text-xs">
@@ -1182,13 +1182,14 @@ function CaseRow({
           {last?.note?.trim() ? last.note.trim() : "—"}
         </p>
 
-        <div className={`${LIST_CELL}`}>
-          <div className="min-w-0 space-y-0.5 text-xs leading-tight tabular-nums text-zinc-600 sm:text-sm">
-            <p className="truncate" title={formatListWhen(item.createdAt)}>
+        <div className={`${LIST_CELL} justify-center text-center`}>
+          <div className="flex w-full min-w-0 flex-col items-center text-xs leading-tight tabular-nums text-zinc-600 sm:text-sm">
+            <p className="w-full truncate text-center" title={formatListWhen(item.createdAt)}>
               {formatListDate(item.createdAt)}
             </p>
+            <span className="my-0.5 w-full border-t border-zinc-100" aria-hidden />
             <p
-              className={`truncate ${last ? "text-zinc-700" : "text-zinc-400"}`}
+              className={`w-full truncate text-center ${last ? "text-zinc-700" : "text-zinc-400"}`}
               title={last ? formatListWhen(last.createdAt) : undefined}
             >
               {last ? formatListDate(last.createdAt) : "—"}
@@ -1196,14 +1197,14 @@ function CaseRow({
           </div>
         </div>
 
-        <p className={`${LIST_CELL} justify-center text-center text-sm tabular-nums text-zinc-600`}>
+        <p className={`${LIST_CELL} justify-center text-center text-sm tabular-nums whitespace-nowrap text-zinc-600`}>
           {contactCount}
         </p>
 
-        <div className={`${LIST_CELL} pointer-events-auto relative z-20 flex justify-center gap-2`}>
+        <div className={`${LIST_CELL} pointer-events-auto relative z-20 flex justify-center gap-2 whitespace-nowrap`}>
           <Link
             href={editHref}
-            className="text-sm font-semibold text-[#1e3a8a] hover:underline"
+            className="whitespace-nowrap text-sm font-semibold text-[#1e3a8a] hover:underline"
             onClick={(e) => e.stopPropagation()}
           >
             修改
