@@ -79,13 +79,17 @@ const COMPACT_FILTER_LABEL = "block shrink-0";
 const COMPACT_FILTER_SELECT =
   "w-fit max-w-full rounded-lg border border-zinc-300 px-2 py-2 text-sm";
 
-/** 表頭與資料列共用（上次備註加寬） */
+/** 表頭與資料列共用（地址略縮、社區靠左；欄間以淺線分隔） */
 const LIST_ROW_GRID =
-  "sm:grid sm:grid-cols-[minmax(0,3.5fr)_5.5rem_8rem_6rem_6.5rem_5.5rem_minmax(0,2fr)_5.5rem_2.5rem_4.5rem] sm:items-center sm:gap-x-3";
+  "sm:grid sm:grid-cols-[minmax(0,3.05fr)_5.5rem_8rem_6.25rem_6.75rem_5.75rem_minmax(0,2fr)_5.75rem_2.75rem_4.75rem] sm:items-stretch sm:gap-x-0";
 
 /** 最高管理員：加負責人欄，方便對照各業務的下次聯繫日 */
 const LIST_ROW_GRID_SUPER =
-  "sm:grid sm:grid-cols-[minmax(0,3.2fr)_5.5rem_8rem_6rem_6.5rem_4rem_5.5rem_minmax(0,2fr)_5.5rem_2.5rem_4.5rem] sm:items-center sm:gap-x-3";
+  "sm:grid sm:grid-cols-[minmax(0,2.85fr)_5.5rem_8rem_6.25rem_6.75rem_4.25rem_5.75rem_minmax(0,2fr)_5.75rem_2.75rem_4.75rem] sm:items-stretch sm:gap-x-0";
+
+/** 欄位分隔：桌機每格左側淺線＋內距；首欄不加左線 */
+const LIST_CELL =
+  "min-w-0 sm:flex sm:items-center sm:border-l sm:border-zinc-100 sm:px-2.5 sm:py-0.5 sm:first:border-l-0 sm:first:pl-0";
 
 function ownerTrackingListRowGrid(isSuperAdmin: boolean) {
   return isSuperAdmin ? LIST_ROW_GRID_SUPER : LIST_ROW_GRID;
@@ -710,25 +714,25 @@ function OwnerTrackingListInner({
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white shadow-sm">
-        <div className={isSuperAdmin ? "min-w-[72rem]" : "min-w-[68rem]"}>
+        <div className={isSuperAdmin ? "min-w-[76rem]" : "min-w-[72rem]"}>
         <div
-          className={`hidden border-b border-zinc-100 bg-zinc-50 px-4 py-2.5 text-xs font-semibold text-zinc-500 ${ownerTrackingListRowGrid(isSuperAdmin)}`}
+          className={`hidden border-b border-zinc-100 bg-zinc-50 px-4 py-2.5 text-sm font-semibold text-zinc-500 ${ownerTrackingListRowGrid(isSuperAdmin)}`}
         >
-          <span className="min-w-0 truncate">地址</span>
-          <span className="min-w-0 truncate">社區</span>
-          <span className="min-w-0 truncate">屋主</span>
-          <span className="min-w-0 truncate">網址</span>
-          <span className="min-w-0 truncate">目前狀態</span>
-          {isSuperAdmin ? <span className="min-w-0 truncate">負責人</span> : null}
-          <span className="min-w-0 truncate">下次聯繫</span>
-          <span className="min-w-0 truncate">上次備註</span>
-          <span className="min-w-0 leading-snug tabular-nums">
+          <span className={`${LIST_CELL} truncate`}>地址</span>
+          <span className={`${LIST_CELL} -ml-1 truncate sm:-ml-1.5`}>社區</span>
+          <span className={`${LIST_CELL} truncate`}>屋主</span>
+          <span className={`${LIST_CELL} truncate`}>網址</span>
+          <span className={`${LIST_CELL} truncate`}>目前狀態</span>
+          {isSuperAdmin ? <span className={`${LIST_CELL} truncate`}>負責人</span> : null}
+          <span className={`${LIST_CELL} truncate`}>下次聯繫</span>
+          <span className={`${LIST_CELL} truncate`}>上次備註</span>
+          <span className={`${LIST_CELL} leading-snug tabular-nums`}>
             建立時間
             <br />
             上次追蹤
           </span>
-          <span className="min-w-0 text-center">電訪</span>
-          <span className="text-center">操作</span>
+          <span className={`${LIST_CELL} justify-center text-center`}>電訪</span>
+          <span className={`${LIST_CELL} justify-center text-center`}>操作</span>
         </div>
         <ul className="divide-y divide-zinc-100">
           {rows.length === 0 ? (
@@ -888,18 +892,18 @@ function NextContactBadge({ nextContactDate }: { nextContactDate: string }) {
   const ymd = (nextContactDate ?? "").trim();
   const title = ymd && category === "upcoming" ? `排程：${ymd}` : undefined;
   if (category === "none") {
-    return <span className="text-[11px] text-zinc-400 sm:text-xs">未排程</span>;
+    return <span className="text-xs text-zinc-400 sm:text-sm">未排程</span>;
   }
   if (category === "today") {
     return (
-      <span className="inline-block max-w-full truncate rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900 sm:text-[11px]">
+      <span className="inline-block max-w-full truncate rounded-full bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-900 sm:text-xs">
         {label}
       </span>
     );
   }
   if (category === "overdue") {
     return (
-      <span className="inline-block max-w-full truncate rounded-full bg-rose-50 px-1.5 py-0.5 text-[10px] font-semibold text-rose-800 sm:text-[11px]">
+      <span className="inline-block max-w-full truncate rounded-full bg-rose-50 px-1.5 py-0.5 text-[11px] font-semibold text-rose-800 sm:text-xs">
         {label}
       </span>
     );
@@ -907,7 +911,7 @@ function NextContactBadge({ nextContactDate }: { nextContactDate: string }) {
   return (
     <span
       title={title}
-      className="inline-block max-w-full truncate text-[10px] font-medium text-sky-800 sm:text-[11px]"
+      className="inline-block max-w-full truncate text-[11px] font-medium text-sky-800 sm:text-xs"
     >
       {label}
     </span>
@@ -942,21 +946,21 @@ function Listing591StatusBadge({
 }) {
   if (!is591ListingUrl(listingUrl)) {
     return (
-      <span className="inline-block max-w-full truncate text-[10px] text-zinc-400 sm:text-[11px]">
+      <span className="inline-block max-w-full truncate text-[11px] text-zinc-400 sm:text-xs">
         非591
       </span>
     );
   }
   if (checking) {
     return (
-      <span className="inline-block text-[10px] font-medium text-zinc-500 sm:text-[11px]">檢查中…</span>
+      <span className="inline-block text-[11px] font-medium text-zinc-500 sm:text-xs">檢查中…</span>
     );
   }
   const category = resolveListing591ListCategory(listingUrl, checkEntry);
   if (category === "live") {
     return (
       <span
-        className="inline-block rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800 sm:text-[11px]"
+        className="inline-block rounded-full bg-emerald-50 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-800 sm:text-xs"
         title={
           checkEntry?.checkedAt
             ? `上次檢查：${formatListWhen(checkEntry.checkedAt)}`
@@ -970,7 +974,7 @@ function Listing591StatusBadge({
   if (category === "removed") {
     return (
       <span
-        className="inline-block rounded-full bg-rose-50 px-1.5 py-0.5 text-[10px] font-semibold text-rose-800 sm:text-[11px]"
+        className="inline-block rounded-full bg-rose-50 px-1.5 py-0.5 text-[11px] font-semibold text-rose-800 sm:text-xs"
         title={
           checkEntry?.checkedAt
             ? `上次檢查：${formatListWhen(checkEntry.checkedAt)}`
@@ -991,7 +995,7 @@ function Listing591StatusBadge({
         : "591 可能阻擋自動檢查";
     return (
       <span
-        className="inline-block max-w-full truncate rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900 sm:text-[11px]"
+        className="inline-block max-w-full truncate rounded-full bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-900 sm:text-xs"
         title={`${detail} · 上次：${formatListWhen(checkEntry.checkedAt)}`}
       >
         無法確認
@@ -1000,7 +1004,7 @@ function Listing591StatusBadge({
   }
   return (
     <span
-      className="inline-block max-w-full truncate text-[10px] text-zinc-400 sm:text-[11px]"
+      className="inline-block max-w-full truncate text-[11px] text-zinc-400 sm:text-xs"
       title="尚未檢查或超過 24 小時"
     >
       未檢查
@@ -1094,99 +1098,109 @@ function CaseRow({
         className="absolute inset-0 z-0"
         aria-label={`查看案件：${item.address || item.ownerName}`}
       />
-      <div className={`pointer-events-none relative z-10 px-4 py-2.5 text-sm ${ownerTrackingListRowGrid(isSuperAdmin)}`}>
+      <div className={`pointer-events-none relative z-10 px-4 py-3 text-base ${ownerTrackingListRowGrid(isSuperAdmin)}`}>
         <p
-          className="min-w-0 truncate text-sm font-medium leading-snug text-zinc-900"
+          className={`${LIST_CELL} truncate text-base font-medium leading-snug text-zinc-900`}
           title={formatOwnerCaseAddress(item)}
         >
           {formatOwnerCaseAddress(item) || "—"}
         </p>
-        <p className="min-w-0 truncate text-sm font-semibold leading-snug text-zinc-800">
+        <p className={`${LIST_CELL} -ml-1 truncate text-base font-semibold leading-snug text-zinc-800 sm:-ml-1.5`}>
           {listCommunityCell(item)}
         </p>
-        <div className="min-w-0 overflow-hidden">
-          <p className="truncate font-semibold text-zinc-900">{item.ownerName || "—"}</p>
-          <p className="mt-0.5 truncate text-xs tabular-nums text-zinc-500">{item.phone || "—"}</p>
+        <div className={`${LIST_CELL} overflow-hidden`}>
+          <div className="min-w-0 overflow-hidden">
+            <p className="truncate text-base font-semibold text-zinc-900">{item.ownerName || "—"}</p>
+            <p className="mt-0.5 truncate text-sm tabular-nums text-zinc-500">{item.phone || "—"}</p>
+          </div>
         </div>
 
-        <div className="min-w-0 overflow-hidden space-y-0.5">
-          {urlHref ? (
-            <a
-              href={urlHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              title={(item.listingUrl ?? "").trim()}
-              className="pointer-events-auto relative z-20 block truncate text-xs text-[#1e3a8a] hover:underline"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {urlLabel}
-            </a>
-          ) : (
-            <span className="pointer-events-none text-xs text-zinc-300">—</span>
-          )}
-          <Listing591StatusBadge
-            listingUrl={item.listingUrl}
-            checkEntry={checkEntry}
-            checking={checking591}
-          />
+        <div className={`${LIST_CELL} overflow-hidden`}>
+          <div className="min-w-0 space-y-0.5 overflow-hidden">
+            {urlHref ? (
+              <a
+                href={urlHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={(item.listingUrl ?? "").trim()}
+                className="pointer-events-auto relative z-20 block truncate text-sm text-[#1e3a8a] hover:underline"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {urlLabel}
+              </a>
+            ) : (
+              <span className="pointer-events-none text-sm text-zinc-300">—</span>
+            )}
+            <Listing591StatusBadge
+              listingUrl={item.listingUrl}
+              checkEntry={checkEntry}
+              checking={checking591}
+            />
+          </div>
         </div>
 
-        <div className="min-w-0 overflow-hidden">
+        <div className={`${LIST_CELL} overflow-hidden`}>
           {last ? (
             <span
-              className={`inline-block max-w-full truncate rounded-full px-2 py-0.5 text-[11px] font-medium leading-tight sm:text-xs ${statusBadgeClass(effectiveStatus)}`}
+              className={`inline-block max-w-full truncate rounded-full px-2 py-0.5 text-xs font-medium leading-tight sm:text-sm ${statusBadgeClass(effectiveStatus)}`}
             >
               {effectiveStatus}
             </span>
           ) : (
-            <span className="text-xs text-zinc-400">尚未追蹤</span>
+            <span className="text-sm text-zinc-400">尚未追蹤</span>
           )}
         </div>
 
         {isSuperAdmin ? (
           <p
-            className="min-w-0 truncate text-xs font-medium text-zinc-700"
+            className={`${LIST_CELL} truncate text-sm font-medium text-zinc-700`}
             title={item.assignee?.trim() || undefined}
           >
             {formatAdminStaffLabel(item.assignee, staffLabels)}
           </p>
         ) : null}
 
-        <div className="min-w-0 overflow-hidden space-y-0.5">
-          <NextContactBadge nextContactDate={item.nextContactDate} />
-          {upcomingRelease && item.expectedReleaseDate ? (
-            <span className="inline-block max-w-full truncate rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-950 sm:text-[11px]">
-              即將釋出 {formatRocDate(item.expectedReleaseDate)}
-              {releaseDays != null && releaseDays > 0 ? `（${releaseDays} 天）` : releaseDays === 0 ? "（今日）" : ""}
-            </span>
-          ) : null}
+        <div className={`${LIST_CELL} overflow-hidden`}>
+          <div className="min-w-0 space-y-0.5 overflow-hidden">
+            <NextContactBadge nextContactDate={item.nextContactDate} />
+            {upcomingRelease && item.expectedReleaseDate ? (
+              <span className="inline-block max-w-full truncate rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-950 sm:text-xs">
+                即將釋出 {formatRocDate(item.expectedReleaseDate)}
+                {releaseDays != null && releaseDays > 0 ? `（${releaseDays} 天）` : releaseDays === 0 ? "（今日）" : ""}
+              </span>
+            ) : null}
+          </div>
         </div>
 
         <p
-          className="min-w-0 line-clamp-2 text-xs leading-snug text-zinc-600"
+          className={`${LIST_CELL} line-clamp-2 text-sm leading-snug text-zinc-600`}
           title={last?.note?.trim() || undefined}
         >
           {last?.note?.trim() ? last.note.trim() : "—"}
         </p>
 
-        <div className="min-w-0 space-y-0.5 text-[11px] leading-tight tabular-nums text-zinc-600 sm:text-xs">
-          <p className="truncate" title={formatListWhen(item.createdAt)}>
-            {formatListWhen(item.createdAt)}
-          </p>
-          <p
-            className={`truncate ${last ? "text-zinc-700" : "text-zinc-400"}`}
-            title={last ? formatListWhen(last.createdAt) : undefined}
-          >
-            {last ? formatListWhen(last.createdAt) : "—"}
-          </p>
+        <div className={`${LIST_CELL}`}>
+          <div className="min-w-0 space-y-0.5 text-xs leading-tight tabular-nums text-zinc-600 sm:text-sm">
+            <p className="truncate" title={formatListWhen(item.createdAt)}>
+              {formatListWhen(item.createdAt)}
+            </p>
+            <p
+              className={`truncate ${last ? "text-zinc-700" : "text-zinc-400"}`}
+              title={last ? formatListWhen(last.createdAt) : undefined}
+            >
+              {last ? formatListWhen(last.createdAt) : "—"}
+            </p>
+          </div>
         </div>
 
-        <p className="min-w-0 text-center text-xs tabular-nums text-zinc-600">{contactCount}</p>
+        <p className={`${LIST_CELL} justify-center text-center text-sm tabular-nums text-zinc-600`}>
+          {contactCount}
+        </p>
 
-        <div className="pointer-events-auto relative z-20 flex min-w-0 items-center justify-center gap-2">
+        <div className={`${LIST_CELL} pointer-events-auto relative z-20 flex justify-center gap-2`}>
           <Link
             href={editHref}
-            className="text-xs font-semibold text-[#1e3a8a] hover:underline"
+            className="text-sm font-semibold text-[#1e3a8a] hover:underline"
             onClick={(e) => e.stopPropagation()}
           >
             修改
