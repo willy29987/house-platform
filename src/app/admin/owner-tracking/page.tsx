@@ -22,7 +22,7 @@ export default async function AdminOwnerTrackingPage() {
   const staffUsernames = await listStaffUsernamesForAssigneeFilter();
 
   return (
-    <main className="mx-auto w-full max-w-6xl">
+    <main className="mx-auto w-full">
       <OwnerTrackingList
         currentUsername={current.username}
         isSuperAdmin={current.role === "SUPER_ADMIN"}

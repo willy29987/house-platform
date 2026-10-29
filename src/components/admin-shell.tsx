@@ -63,7 +63,7 @@ export function AdminShell({ current, children }: AdminShellProps) {
     <div className="flex min-h-[100dvh] flex-col bg-[#f4f6f9]">
       {current ? <AdminCloudSyncBootstrap /> : null}
       <header className="sticky top-0 z-40 border-b border-[#0b2545]/10 bg-white/95 shadow-sm backdrop-blur-md">
-        <div className="mx-auto flex h-14 max-w-screen-2xl items-center gap-3 px-3 sm:h-16 sm:px-4 lg:px-6">
+        <div className="mx-auto flex h-14 max-w-[1800px] items-center gap-3 px-3 sm:h-16 sm:px-4 lg:px-6">
           <button
             type="button"
             onClick={() => setMenuOpen(true)}
@@ -102,6 +102,12 @@ export function AdminShell({ current, children }: AdminShellProps) {
               className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
             >
               屋主追蹤
+            </Link>
+            <Link
+              href="/admin/line-assistant"
+              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+            >
+              客服試做
             </Link>
             {isSuperAdmin ? (
               <>
@@ -203,6 +209,9 @@ export function AdminShell({ current, children }: AdminShellProps) {
                 <Link href="/admin/owner-tracking" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
                   屋主追蹤
                 </Link>
+                <Link href="/admin/line-assistant" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
+                  客服試做
+                </Link>
                 {isSuperAdmin ? (
                   <>
                     <Link href="/admin/commissions" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
@@ -246,7 +255,7 @@ export function AdminShell({ current, children }: AdminShellProps) {
         </div>
       ) : null}
 
-      <main className="mx-auto w-full max-w-screen-2xl flex-1 px-3 py-4 sm:px-4 sm:py-6 lg:px-6">{children}</main>
+      <main className="mx-auto w-full max-w-[1800px] flex-1 px-3 py-4 sm:px-4 sm:py-6 lg:px-6">{children}</main>
     </div>
   );
 }
