@@ -30,10 +30,6 @@ export function OwnerTrackingNextContactField({ value, onChange, compact: _compa
     }
   }
 
-  function pickToday() {
-    onChange(today);
-  }
-
   function pickDays(days: number) {
     onChange(addDaysYmd(today, days));
   }
@@ -56,17 +52,6 @@ export function OwnerTrackingNextContactField({ value, onChange, compact: _compa
           }`}
         >
           不設定
-        </button>
-        <button
-          type="button"
-          onClick={pickToday}
-          className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium ${
-            normalized === today
-              ? "border-[#0b2545] bg-[#0b2545] text-white"
-              : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50"
-          }`}
-        >
-          今天
         </button>
         {DAY_PRESETS.map((d) => (
           <button

@@ -272,7 +272,8 @@ export function mergeOwnerTrackingStores(
 const OWNER_TRACKING_HYDRATE_LOCAL_TRUST_MS = 15_000;
 
 function pickMergedYmd(cloudYmd: string, localYmd: string, preferLocal: boolean): string {
-  if (preferLocal) return localYmd || cloudYmd;
+  // preferLocal 信任視窗內必須保留本機值（含空字串＝使用者「不設定」），不可再用 || 回填雲端
+  if (preferLocal) return localYmd;
   if (cloudYmd && localYmd && cloudYmd !== localYmd) return cloudYmd;
   return cloudYmd || localYmd;
 }

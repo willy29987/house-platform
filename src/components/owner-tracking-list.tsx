@@ -700,7 +700,7 @@ function OwnerTrackingListInner({
           <p className="text-sm text-zinc-600">
             {isContactDueTodayView(contactFilter)
               ? contactUpcomingCount > 0
-                ? `目前沒有今日待聯繫或已逾期的案件（另有 ${contactUpcomingCount} 件已排程在未來日期，到期當天會出現在此；若要今天跟進請在詳情按「今天」）`
+                ? `目前沒有今日待聯繫或已逾期的案件（另有 ${contactUpcomingCount} 件已排程在未來日期，到期當天會出現在此）`
                 : "目前沒有今日待聯繫或已逾期的案件"
               : store.cases.length === 0
                 ? null
@@ -741,8 +741,6 @@ function OwnerTrackingListInner({
                     目前沒有今日待聯繫或已逾期的案件。
                     <br />
                     另有 {contactUpcomingCount} 件已排程在未來日期，到期當天會出現在此。
-                    <br />
-                    若要今天跟進，請到案件詳情 → 下次聯繫 →「今天」。
                   </>
                 ) : (
                   "目前沒有今日待聯繫或已逾期的案件"
