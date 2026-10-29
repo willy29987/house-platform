@@ -58,8 +58,8 @@ import {
 } from "@/lib/owner-tracking-listing-checks";
 import {
   contactDueCategory,
-  formatNextContactLabel,
   isContactDueTodayView,
+  normalizeNextContactDate,
 } from "@/lib/owner-tracking-next-contact";
 import { formatAdminStaffLabel } from "@/lib/admin-staff-labels";
 
@@ -79,22 +79,36 @@ const COMPACT_FILTER_LABEL = "block shrink-0";
 const COMPACT_FILTER_SELECT =
   "w-fit max-w-full rounded-lg border border-zinc-300 px-2 py-2 text-sm";
 
-/** 表頭與資料列共用（地址略縮、社區靠左；欄間以淺線分隔） */
+/** 表頭與資料列共用：上次備註減半，寬度補給地址／社區；欄間淺線分隔 */
 const LIST_ROW_GRID =
-  "sm:grid sm:grid-cols-[minmax(0,3.05fr)_5.5rem_8rem_6.25rem_6.75rem_5.75rem_minmax(0,2fr)_5.75rem_2.75rem_4.75rem] sm:items-stretch sm:gap-x-0";
+  "sm:grid sm:grid-cols-[minmax(0,3.55fr)_minmax(6rem,0.9fr)_8rem_6.25rem_6.75rem_5.75rem_minmax(0,1fr)_5.75rem_2.75rem_4.75rem] sm:items-stretch sm:gap-x-0";
 
 /** 最高管理員：加負責人欄，方便對照各業務的下次聯繫日 */
 const LIST_ROW_GRID_SUPER =
-  "sm:grid sm:grid-cols-[minmax(0,2.85fr)_5.5rem_8rem_6.25rem_6.75rem_4.25rem_5.75rem_minmax(0,2fr)_5.75rem_2.75rem_4.75rem] sm:items-stretch sm:gap-x-0";
+  "sm:grid sm:grid-cols-[minmax(0,3.35fr)_minmax(6rem,0.9fr)_8rem_6.25rem_6.75rem_4.25rem_5.75rem_minmax(0,1fr)_5.75rem_2.75rem_4.75rem] sm:items-stretch sm:gap-x-0";
 
 /** 欄位分隔：桌機每格左側淺線＋內距；首欄不加左線 */
 const LIST_CELL =
   "min-w-0 sm:flex sm:items-center sm:border-l sm:border-zinc-100 sm:px-2.5 sm:py-0.5 sm:first:border-l-0 sm:first:pl-0";
 
+const LIST_HEAD_CELL = `${LIST_CELL} justify-center text-center`;
+
 function ownerTrackingListRowGrid(isSuperAdmin: boolean) {
   return isSuperAdmin ? LIST_ROW_GRID_SUPER : LIST_ROW_GRID;
 }
 
+/** 列表建立／上次追蹤：只顯示日期 */
+function formatListDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("zh-TW", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+}
+
+/** tooltip 等仍可用含時間的格式 */
 function formatListWhen(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
@@ -718,21 +732,21 @@ function OwnerTrackingListInner({
         <div
           className={`hidden border-b border-zinc-100 bg-zinc-50 px-4 py-2.5 text-sm font-semibold text-zinc-500 ${ownerTrackingListRowGrid(isSuperAdmin)}`}
         >
-          <span className={`${LIST_CELL} truncate`}>地址</span>
-          <span className={`${LIST_CELL} -ml-1 truncate sm:-ml-1.5`}>社區</span>
-          <span className={`${LIST_CELL} truncate`}>屋主</span>
-          <span className={`${LIST_CELL} truncate`}>網址</span>
-          <span className={`${LIST_CELL} truncate`}>目前狀態</span>
-          {isSuperAdmin ? <span className={`${LIST_CELL} truncate`}>負責人</span> : null}
-          <span className={`${LIST_CELL} truncate`}>下次聯繫</span>
-          <span className={`${LIST_CELL} truncate`}>上次備註</span>
-          <span className={`${LIST_CELL} leading-snug tabular-nums`}>
+          <span className={`${LIST_HEAD_CELL} truncate`}>地址</span>
+          <span className={`${LIST_HEAD_CELL} truncate`}>社區</span>
+          <span className={`${LIST_HEAD_CELL} truncate`}>屋主</span>
+          <span className={`${LIST_HEAD_CELL} truncate`}>網址</span>
+          <span className={`${LIST_HEAD_CELL} truncate`}>目前狀態</span>
+          {isSuperAdmin ? <span className={`${LIST_HEAD_CELL} truncate`}>負責人</span> : null}
+          <span className={`${LIST_HEAD_CELL} truncate`}>下次聯繫</span>
+          <span className={`${LIST_HEAD_CELL} truncate`}>上次備註</span>
+          <span className={`${LIST_HEAD_CELL} leading-snug tabular-nums`}>
             建立時間
             <br />
             上次追蹤
           </span>
-          <span className={`${LIST_CELL} justify-center text-center`}>電訪</span>
-          <span className={`${LIST_CELL} justify-center text-center`}>操作</span>
+          <span className={LIST_HEAD_CELL}>電訪</span>
+          <span className={LIST_HEAD_CELL}>操作</span>
         </div>
         <ul className="divide-y divide-zinc-100">
           {rows.length === 0 ? (
@@ -886,33 +900,22 @@ function PageButton({
   );
 }
 
-function NextContactBadge({ nextContactDate }: { nextContactDate: string }) {
-  const category = contactDueCategory(nextContactDate);
-  const label = formatNextContactLabel(nextContactDate);
-  const ymd = (nextContactDate ?? "").trim();
-  const title = ymd && category === "upcoming" ? `排程：${ymd}` : undefined;
-  if (category === "none") {
-    return <span className="text-xs text-zinc-400 sm:text-sm">未排程</span>;
+/** 列表「下次聯繫」只顯示日期（不再用今日聯繫／已逾期／再聯繫文案） */
+function NextContactDateCell({ nextContactDate }: { nextContactDate: string }) {
+  const ymd = normalizeNextContactDate(nextContactDate);
+  if (!ymd) {
+    return <span className="text-sm text-zinc-400">—</span>;
   }
-  if (category === "today") {
-    return (
-      <span className="inline-block max-w-full truncate rounded-full bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-900 sm:text-xs">
-        {label}
-      </span>
-    );
-  }
-  if (category === "overdue") {
-    return (
-      <span className="inline-block max-w-full truncate rounded-full bg-rose-50 px-1.5 py-0.5 text-[11px] font-semibold text-rose-800 sm:text-xs">
-        {label}
-      </span>
-    );
-  }
+  const category = contactDueCategory(ymd);
+  const label = ymd.split("-").join("/");
+  const color =
+    category === "today"
+      ? "text-amber-900"
+      : category === "overdue"
+        ? "text-rose-800"
+        : "text-zinc-800";
   return (
-    <span
-      title={title}
-      className="inline-block max-w-full truncate text-[11px] font-medium text-sky-800 sm:text-xs"
-    >
+    <span className={`inline-block max-w-full truncate text-sm font-medium tabular-nums ${color}`} title={ymd}>
       {label}
     </span>
   );
@@ -1105,7 +1108,7 @@ function CaseRow({
         >
           {formatOwnerCaseAddress(item) || "—"}
         </p>
-        <p className={`${LIST_CELL} -ml-1 truncate text-base font-semibold leading-snug text-zinc-800 sm:-ml-1.5`}>
+        <p className={`${LIST_CELL} truncate text-base font-semibold leading-snug text-zinc-800`}>
           {listCommunityCell(item)}
         </p>
         <div className={`${LIST_CELL} overflow-hidden`}>
@@ -1153,7 +1156,7 @@ function CaseRow({
 
         {isSuperAdmin ? (
           <p
-            className={`${LIST_CELL} truncate text-sm font-medium text-zinc-700`}
+            className={`${LIST_CELL} justify-center text-center truncate text-sm font-medium text-zinc-700`}
             title={item.assignee?.trim() || undefined}
           >
             {formatAdminStaffLabel(item.assignee, staffLabels)}
@@ -1162,7 +1165,7 @@ function CaseRow({
 
         <div className={`${LIST_CELL} overflow-hidden`}>
           <div className="min-w-0 space-y-0.5 overflow-hidden">
-            <NextContactBadge nextContactDate={item.nextContactDate} />
+            <NextContactDateCell nextContactDate={item.nextContactDate} />
             {upcomingRelease && item.expectedReleaseDate ? (
               <span className="inline-block max-w-full truncate rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-950 sm:text-xs">
                 即將釋出 {formatRocDate(item.expectedReleaseDate)}
@@ -1182,13 +1185,13 @@ function CaseRow({
         <div className={`${LIST_CELL}`}>
           <div className="min-w-0 space-y-0.5 text-xs leading-tight tabular-nums text-zinc-600 sm:text-sm">
             <p className="truncate" title={formatListWhen(item.createdAt)}>
-              {formatListWhen(item.createdAt)}
+              {formatListDate(item.createdAt)}
             </p>
             <p
               className={`truncate ${last ? "text-zinc-700" : "text-zinc-400"}`}
               title={last ? formatListWhen(last.createdAt) : undefined}
             >
-              {last ? formatListWhen(last.createdAt) : "—"}
+              {last ? formatListDate(last.createdAt) : "—"}
             </p>
           </div>
         </div>
