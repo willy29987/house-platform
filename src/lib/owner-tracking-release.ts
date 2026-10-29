@@ -116,6 +116,7 @@ export function apply591RemovedToOwnerStore(
       ...c,
       expectedReleaseDate: releaseYmd,
       nextContactDate: "",
+      nextContactUpdatedAt: Date.now(),
     };
   });
 

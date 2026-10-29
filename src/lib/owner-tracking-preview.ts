@@ -77,11 +77,16 @@ export type OwnerCasePreview = {
   caseNote: string;
   /** 下次應聯繫日（Asia/Taipei YYYY-MM-DD；空 = 未設定） */
   nextContactDate: string;
+  /** 下次聯繫日最後寫入時間（ms）；用於雲端／本機合併時 last-write-wins，避免「不設定」被舊雲端日期蓋回 */
+  nextContactUpdatedAt: number;
   /** 591 下架等情況下預計可再開發日（YYYY-MM-DD） */
   expectedReleaseDate: string;
 };
 
-export type OwnerCaseInput = Omit<OwnerCasePreview, "id" | "assignee" | "createdAt">;
+export type OwnerCaseInput = Omit<
+  OwnerCasePreview,
+  "id" | "assignee" | "createdAt" | "nextContactUpdatedAt"
+>;
 
 export type OwnerFollowUpPreview = {
   id: string;
@@ -143,6 +148,10 @@ export function normalizeCase(raw: Record<string, unknown>, fallbackAssignee = "
     specialMatters: String(raw.specialMatters ?? ""),
     caseNote: String(raw.caseNote ?? ""),
     nextContactDate: normalizeNextContactDate(String(raw.nextContactDate ?? "")),
+    nextContactUpdatedAt: (() => {
+      const n = Number(raw.nextContactUpdatedAt ?? 0);
+      return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+    })(),
     expectedReleaseDate: normalizeNextContactDate(String(raw.expectedReleaseDate ?? "")),
   };
 }
@@ -193,10 +202,20 @@ export function loadOwnerTrackingStoreLocal(): OwnerTrackingStore {
   return parseOwnerTrackingStoreRaw(raw, true);
 }
 
+const OWNER_TRACKING_LOCAL_PERSISTED_AT_KEY = "house-platform:owner-tracking-local-persisted-at";
+
 let ownerTrackingLocalPersistedAt = 0;
+
+function readPersistedAtFromSession(): number {
+  if (typeof window === "undefined") return 0;
+  const n = Number(window.sessionStorage.getItem(OWNER_TRACKING_LOCAL_PERSISTED_AT_KEY) ?? 0);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
 
 /** 本機剛寫入屋主追蹤後的時間戳，用於避免雲端 refresh 蓋掉刪除等操作 */
 export function getOwnerTrackingLocalPersistedAt(): number {
+  if (ownerTrackingLocalPersistedAt > 0) return ownerTrackingLocalPersistedAt;
+  ownerTrackingLocalPersistedAt = readPersistedAtFromSession();
   return ownerTrackingLocalPersistedAt;
 }
 
@@ -204,6 +223,11 @@ export function persistOwnerTrackingStoreLocal(store: OwnerTrackingStore): void 
   if (typeof window === "undefined") return;
   window.localStorage.setItem(OWNER_TRACKING_STORAGE_KEY, JSON.stringify(store));
   ownerTrackingLocalPersistedAt = Date.now();
+  try {
+    window.sessionStorage.setItem(OWNER_TRACKING_LOCAL_PERSISTED_AT_KEY, String(ownerTrackingLocalPersistedAt));
+  } catch {
+    /* ignore quota / private mode */
+  }
 }
 
 export function loadOwnerTrackingStore(): OwnerTrackingStore {
@@ -278,19 +302,42 @@ function pickMergedYmd(cloudYmd: string, localYmd: string, preferLocal: boolean)
   return cloudYmd || localYmd;
 }
 
+/** 下次聯繫日：有更新時間戳時以較新為準（含本機清空），否則退回舊規則 */
+function pickMergedNextContact(
+  cloud: OwnerCasePreview,
+  local: OwnerCasePreview,
+  preferLocal: boolean,
+): { nextContactDate: string; nextContactUpdatedAt: number } {
+  const cloudYmd = normalizeNextContactDate(cloud.nextContactDate);
+  const localYmd = normalizeNextContactDate(local.nextContactDate);
+  const cloudAt = cloud.nextContactUpdatedAt || 0;
+  const localAt = local.nextContactUpdatedAt || 0;
+  if (preferLocal) {
+    return { nextContactDate: localYmd, nextContactUpdatedAt: localAt || Date.now() };
+  }
+  if (localAt !== cloudAt) {
+    return localAt > cloudAt
+      ? { nextContactDate: localYmd, nextContactUpdatedAt: localAt }
+      : { nextContactDate: cloudYmd, nextContactUpdatedAt: cloudAt };
+  }
+  const nextContactDate = pickMergedYmd(cloudYmd, localYmd, false);
+  return {
+    nextContactDate,
+    nextContactUpdatedAt: nextContactDate === localYmd ? localAt : cloudAt,
+  };
+}
+
 function mergeOwnerCaseForCloudHydrate(
   cloud: OwnerCasePreview,
   local: OwnerCasePreview,
   preferLocal: boolean,
 ): OwnerCasePreview {
   const base = preferLocal ? { ...cloud, ...local } : { ...local, ...cloud };
+  const nextContact = pickMergedNextContact(cloud, local, preferLocal);
   return {
     ...base,
-    nextContactDate: pickMergedYmd(
-      normalizeNextContactDate(cloud.nextContactDate),
-      normalizeNextContactDate(local.nextContactDate),
-      preferLocal,
-    ),
+    nextContactDate: nextContact.nextContactDate,
+    nextContactUpdatedAt: nextContact.nextContactUpdatedAt,
     expectedReleaseDate: pickMergedYmd(
       normalizeNextContactDate(cloud.expectedReleaseDate),
       normalizeNextContactDate(local.expectedReleaseDate),
@@ -403,12 +450,14 @@ export function appendOwnerCase(
   const caseId = newId("case");
   const createdAt = new Date().toISOString();
   const trimmed = trimOwnerCaseInput(input);
+  const nextYmd = normalizeNextContactDate(trimmed.nextContactDate);
   const newCase: OwnerCasePreview = {
     id: caseId,
     assignee,
     createdAt,
     ...trimmed,
-    nextContactDate: normalizeNextContactDate(trimmed.nextContactDate),
+    nextContactDate: nextYmd,
+    nextContactUpdatedAt: nextYmd ? Date.now() : 0,
   };
 
   const initialFollowUp: OwnerFollowUpPreview = {
@@ -493,11 +542,16 @@ export function patchOwnerCaseNextContact(
   store: OwnerTrackingStore,
   caseId: string,
   nextContactDate: string,
+  updatedAt = Date.now(),
 ): OwnerTrackingStore {
   const ymd = normalizeNextContactDate(nextContactDate);
   return {
     ...store,
-    cases: store.cases.map((c) => (c.id === caseId ? { ...c, nextContactDate: ymd } : c)),
+    cases: store.cases.map((c) =>
+      c.id === caseId
+        ? { ...c, nextContactDate: ymd, nextContactUpdatedAt: updatedAt }
+        : c,
+    ),
   };
 }
 
@@ -543,10 +597,14 @@ export function updateOwnerCase(
   const prev = store.cases[idx]!;
   const trimmed = trimOwnerCaseInput(input);
   const cases = [...store.cases];
+  const nextYmd = normalizeNextContactDate(trimmed.nextContactDate);
+  const prevYmd = normalizeNextContactDate(prev.nextContactDate);
   cases[idx] = {
     ...prev,
     ...trimmed,
-    nextContactDate: normalizeNextContactDate(trimmed.nextContactDate),
+    nextContactDate: nextYmd,
+    nextContactUpdatedAt:
+      nextYmd !== prevYmd ? Date.now() : prev.nextContactUpdatedAt || 0,
   };
   return { ...store, cases };
 }
