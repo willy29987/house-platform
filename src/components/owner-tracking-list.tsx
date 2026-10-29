@@ -97,12 +97,11 @@ function ownerTrackingListRowGrid(isSuperAdmin: boolean) {
   return isSuperAdmin ? LIST_ROW_GRID_SUPER : LIST_ROW_GRID;
 }
 
-/** 列表建立／上次追蹤：只顯示日期 */
+/** 列表建立／上次追蹤：只顯示月／日 */
 function formatListDate(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleDateString("zh-TW", {
-    year: "numeric",
     month: "2-digit",
     day: "2-digit",
   });
@@ -900,14 +899,15 @@ function PageButton({
   );
 }
 
-/** 列表「下次聯繫」只顯示日期（不再用今日聯繫／已逾期／再聯繫文案） */
+/** 列表「下次聯繫」只顯示月／日（不再用今日聯繫／已逾期／再聯繫文案） */
 function NextContactDateCell({ nextContactDate }: { nextContactDate: string }) {
   const ymd = normalizeNextContactDate(nextContactDate);
   if (!ymd) {
     return <span className="text-sm text-zinc-400">—</span>;
   }
   const category = contactDueCategory(ymd);
-  const label = ymd.split("-").join("/");
+  const parts = ymd.split("-");
+  const label = parts.length >= 3 ? `${parts[1]}/${parts[2]}` : ymd;
   const color =
     category === "today"
       ? "text-amber-900"
@@ -1142,7 +1142,7 @@ function CaseRow({
           </div>
         </div>
 
-        <div className={`${LIST_CELL} overflow-hidden`}>
+        <div className={`${LIST_CELL} justify-center overflow-hidden text-center`}>
           {last ? (
             <span
               className={`inline-block max-w-full truncate rounded-full px-2 py-0.5 text-xs font-medium leading-tight sm:text-sm ${statusBadgeClass(effectiveStatus)}`}
