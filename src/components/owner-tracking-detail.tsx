@@ -91,16 +91,12 @@ export function OwnerTrackingDetail({
     [store, caseId],
   );
 
+  // 記錄追蹤時「下次聯繫」一律預設不設定；不帶入案件上既有的今日／逾期日
   useEffect(() => {
     if (!ownerCase) return;
-    const fromCase = normalizeNextContactDate(ownerCase.nextContactDate);
-    setNextContactDate((prev) => {
-      const prevNorm = normalizeNextContactDate(prev);
-      if (nextContactEditedByUser.current && prevNorm !== fromCase) return prev;
-      nextContactEditedByUser.current = false;
-      return fromCase;
-    });
-  }, [ownerCase?.id, ownerCase?.nextContactDate]);
+    nextContactEditedByUser.current = false;
+    setNextContactDate("");
+  }, [ownerCase?.id]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -154,8 +150,12 @@ export function OwnerTrackingDetail({
     void pushOwnerTrackingStoreNow(next)
       .then(() => {
         nextContactEditedByUser.current = false;
-        setFlash("已更新下次聯繫");
-        window.setTimeout(() => setFlash(null), 2200);
+        setFlash(
+          formYmd
+            ? "已更新下次聯繫"
+            : "已改為不設定；案件已離開今日待聯繫",
+        );
+        window.setTimeout(() => setFlash(null), 2800);
       })
       .catch(() => {
         setFlash("聯繫日已存本機；雲端同步失敗，請稍後重新整理");
