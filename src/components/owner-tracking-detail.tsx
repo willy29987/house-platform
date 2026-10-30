@@ -29,7 +29,6 @@ import { propertyTypeLabel } from "@/lib/property-type-label";
 import {
   hydrateOwnerTrackingStoreOnce,
   invalidateOwnerTrackingHydrateCache,
-  pushOwnerTrackingFromLocalNow,
   pushOwnerTrackingStoreNow,
 } from "@/lib/admin-cloud-sync-client";
 import { resolveOwnerCaseEffectiveStatus } from "@/lib/owner-tracking-case-status";
@@ -38,7 +37,11 @@ import {
   ownerTrackingListHrefFromListParam,
 } from "@/lib/owner-tracking-list-url";
 import { OwnerTrackingNextContactField } from "@/components/owner-tracking-next-contact-field";
-import { formatNextContactLabel, normalizeNextContactDate } from "@/lib/owner-tracking-next-contact";
+import {
+  contactDueCategory,
+  formatNextContactLabel,
+  normalizeNextContactDate,
+} from "@/lib/owner-tracking-next-contact";
 import { formatAdminStaffLabel } from "@/lib/admin-staff-labels";
 import { formatRocDate, getDaysUntilRelease } from "@/lib/listing-internal-meta";
 import { isOwnerCaseUpcomingRelease } from "@/lib/owner-tracking-release";
@@ -174,6 +177,21 @@ export function OwnerTrackingDetail({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!ownerCase || submitting) return;
+
+    if (nextContactSaveTimer.current) {
+      clearTimeout(nextContactSaveTimer.current);
+      nextContactSaveTimer.current = null;
+    }
+
+    const formYmd = normalizeNextContactDate(nextContactDate);
+    const dueCategory = contactDueCategory(formYmd);
+    // 今日待聯繫案件聯繫後必須改成未來日或不設定，才會離開列表，直到該日再出現
+    if (dueCategory === "today" || dueCategory === "overdue") {
+      setFlash("請先將「下次聯繫」改為未來日期或不設定，送出後才會離開今日待聯繫");
+      window.setTimeout(() => setFlash(null), 4500);
+      return;
+    }
+
     setSubmitting(true);
     const entry: OwnerFollowUpPreview = {
       id: newId("fu"),
@@ -183,19 +201,16 @@ export function OwnerTrackingDetail({
       createdBy: currentUsername,
       createdAt: new Date().toISOString(),
     };
+    const local = loadOwnerTrackingStoreLocal();
     const withFollowUp: OwnerTrackingStore = {
-      ...store,
-      followUps: [...store.followUps, entry],
+      ...local,
+      followUps: [...local.followUps, entry],
     };
-    const caseYmd = normalizeNextContactDate(ownerCase.nextContactDate);
-    const formYmd = normalizeNextContactDate(nextContactDate);
-    const nextStore =
-      formYmd !== caseYmd
-        ? patchOwnerCaseNextContact(withFollowUp, caseId, nextContactDate)
-        : withFollowUp;
-    persist(nextStore);
+    // 一律寫入表單上的下次聯繫日＋時間戳，避免雲端舊日期蓋回導致仍留在今日待聯繫
+    const nextStore = patchOwnerCaseNextContact(withFollowUp, caseId, formYmd);
+    persistLocalOnly(nextStore);
     try {
-      await pushOwnerTrackingFromLocalNow();
+      await pushOwnerTrackingStoreNow(nextStore);
     } catch {
       setFlash("已記錄於本機；雲端同步失敗，請稍後重新整理");
       setSubmitting(false);
@@ -203,9 +218,14 @@ export function OwnerTrackingDetail({
       return;
     }
     setNote("");
-    setFlash("已記錄本次追蹤");
+    nextContactEditedByUser.current = false;
+    setFlash(
+      formYmd
+        ? "已記錄本次追蹤；案件已排程至下次聯繫日，今日待聯繫中不再顯示"
+        : "已記錄本次追蹤；未設定下次聯繫，已離開今日待聯繫",
+    );
     setSubmitting(false);
-    window.setTimeout(() => setFlash(null), 2500);
+    window.setTimeout(() => setFlash(null), 3500);
   }
 
   function handleDeleteFollowUp(followUpId: string) {
