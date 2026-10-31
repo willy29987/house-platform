@@ -35,5 +35,11 @@ export async function POST(request: Request) {
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 400 });
   }
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({
+    ok: true,
+    pushSent: result.pushSent,
+    confirmText: result.confirmText,
+    // 供 LIFF liff.sendMessages 備援（Vercel 若沒 LINE token 也能回對話）
+    followUpMessages: result.followUpMessages,
+  });
 }

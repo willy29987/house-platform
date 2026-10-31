@@ -69,10 +69,24 @@ export function LineLiffRentPick({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionId, picked, requestedWhen: when }),
       });
-      const data = (await response.json()) as { error?: string };
+      const data = (await response.json()) as {
+        error?: string;
+        pushSent?: boolean;
+        followUpMessages?: Array<Record<string, unknown>>;
+      };
       if (!response.ok) {
         setError(data.error || "送出失敗");
         return;
+      }
+      // 伺服器 push 常因正式站缺 token 失敗；在 LINE App 內改用 sendMessages 回對話
+      if (!data.pushSent && liffId) {
+        try {
+          if (liff.isInClient() && Array.isArray(data.followUpMessages) && data.followUpMessages.length) {
+            await liff.sendMessages(data.followUpMessages as never);
+          }
+        } catch (sendError) {
+          console.warn("[liff-rent-pick] sendMessages failed", sendError);
+        }
       }
       setDoneSummary({ when, titles: picked.map((item) => item.title) });
       setDone(true);
@@ -82,7 +96,7 @@ export function LineLiffRentPick({
         } catch {
           /* ignore */
         }
-      }, 1600);
+      }, 1200);
     } catch {
       setError("送出失敗，請稍後再試");
     } finally {

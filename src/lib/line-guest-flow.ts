@@ -276,6 +276,24 @@ function promptForStep(session: GuestSession, listings: RentalMatchListing[]): L
   }
 }
 
+function formatPickedListings(session: GuestSession) {
+  if (!session.picked.length) return ["（尚未選物件）"];
+  return session.picked.map((item, index) => {
+    const price =
+      item.price > 0 ? `（${item.price.toLocaleString("zh-TW")} 元/月）` : "";
+    return `${index + 1}. ${item.title}${price}`;
+  });
+}
+
+function formatGuestPickSummary(session: GuestSession) {
+  return [
+    "看屋時間：" + (session.requestedWhen || "尚未填寫"),
+    "",
+    "想看的物件：",
+    ...formatPickedListings(session),
+  ].join("\n");
+}
+
 async function finishCase(session: GuestSession) {
   const criteria = emptyCriteria();
   criteria.cities = session.cities;
@@ -283,6 +301,7 @@ async function finishCase(session: GuestSession) {
   criteria.rooms = session.rooms;
   criteria.priceKeys = session.priceKeys;
   criteria.extras = session.extras;
+  const pickSummary = formatGuestPickSummary(session);
   const summary = `已記下想看時間（${session.requestedWhen}），待同事確認。`;
   const created = await appendLineRentalCase({
     kind: "viewing",
@@ -305,7 +324,19 @@ async function finishCase(session: GuestSession) {
   await saveGuestSession(session);
   return {
     type: "text" as const,
-    text: `${summary}\n電話：${session.phone}\n我們會再跟你確認看屋時間，謝謝！`,
+    text: [
+      "基本資料已收到，謝謝！以下是你選好的看屋內容：",
+      "",
+      pickSummary,
+      "",
+      `入住人數：${session.peopleCount} 人`,
+      `職業：${session.occupation || "未填"}`,
+      `預計入住：${session.moveInDate || "未填"}`,
+      `國籍：${session.nationality || "未填"}`,
+      `電話：${session.phone}`,
+      "",
+      "時間需同事確認後會再回覆你。",
+    ].join("\n"),
   };
 }
 
@@ -526,7 +557,10 @@ export async function completeGuestLiffPick(input: {
   sessionId: string;
   picked: { id: string; title: string; price: number }[];
   requestedWhen: string;
-}): Promise<{ ok: true } | { ok: false; error: string }> {
+}): Promise<
+  | { ok: true; confirmText: string; followUpMessages: LineMessage[]; pushSent: boolean }
+  | { ok: false; error: string }
+> {
   const session = await getGuestSessionById(input.sessionId);
   if (!session) return { ok: false, error: "找不到找房進度，請在 LINE 重新開始找房" };
   if (!input.picked.length) return { ok: false, error: "請至少選一間物件" };
@@ -537,27 +571,28 @@ export async function completeGuestLiffPick(input: {
   session.step = "people";
   await saveGuestSession(session);
 
-  const listingLines = session.picked.map((item, index) => {
-    const price =
-      item.price > 0 ? `（${item.price.toLocaleString("zh-TW")} 元/月）` : "";
-    return `${index + 1}. ${item.title}${price}`;
-  });
   const confirmText = [
     "已收到你的看屋偏好，先幫你整理如下：",
     "",
-    `看屋時間：${session.requestedWhen}`,
-    "",
-    "想看的物件：",
-    ...listingLines,
+    formatGuestPickSummary(session),
     "",
     "時間需同事確認後會再回覆你。接著再問幾題基本資料。",
   ].join("\n");
-
-  await pushLineMessages(session.lineUserId, [
+  const followUpMessages: LineMessage[] = [
     { type: "text", text: confirmText },
     askPeople(),
-  ]);
-  return { ok: true };
+  ];
+
+  const pushed = await pushLineMessages(session.lineUserId, followUpMessages);
+  if (!pushed.sent) {
+    console.warn("[line-guest-flow] push after LIFF pick failed", pushed);
+  }
+  return {
+    ok: true,
+    confirmText,
+    followUpMessages,
+    pushSent: pushed.sent,
+  };
 }
 
 export async function getGuestSessionForLiff(sessionId: string) {
