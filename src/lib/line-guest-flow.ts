@@ -537,11 +537,24 @@ export async function completeGuestLiffPick(input: {
   session.step = "people";
   await saveGuestSession(session);
 
+  const listingLines = session.picked.map((item, index) => {
+    const price =
+      item.price > 0 ? `（${item.price.toLocaleString("zh-TW")} 元/月）` : "";
+    return `${index + 1}. ${item.title}${price}`;
+  });
+  const confirmText = [
+    "已收到你的看屋偏好，先幫你整理如下：",
+    "",
+    `看屋時間：${session.requestedWhen}`,
+    "",
+    "想看的物件：",
+    ...listingLines,
+    "",
+    "時間需同事確認後會再回覆你。接著再問幾題基本資料。",
+  ].join("\n");
+
   await pushLineMessages(session.lineUserId, [
-    {
-      type: "text",
-      text: `已收到你選的物件與時間（${session.requestedWhen}）。接著再問幾題基本資料。`,
-    },
+    { type: "text", text: confirmText },
     askPeople(),
   ]);
   return { ok: true };

@@ -108,6 +108,7 @@ async function handleEvent(event: LineEvent) {
     const text = event.message?.text?.trim() ?? "";
     if (!text) return;
 
+    // 配對員改時間優先；未命中則同一帳號仍可走客人找房（方便自測）
     if (userId && isViewingAgentUserId(userId)) {
       const handled = await handleAgentProposeText({
         replyToken: event.replyToken,
@@ -115,7 +116,6 @@ async function handleEvent(event: LineEvent) {
         text,
       });
       if (handled) return;
-      return;
     }
 
     if (userId) {

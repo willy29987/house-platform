@@ -31,6 +31,9 @@ export function LineLiffRentPick({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
+  const [doneSummary, setDoneSummary] = useState<{ when: string; titles: string[] } | null>(
+    null,
+  );
 
   useEffect(() => {
     if (!liffId) return;
@@ -71,6 +74,7 @@ export function LineLiffRentPick({
         setError(data.error || "送出失敗");
         return;
       }
+      setDoneSummary({ when, titles: picked.map((item) => item.title) });
       setDone(true);
       window.setTimeout(() => {
         try {
@@ -78,7 +82,7 @@ export function LineLiffRentPick({
         } catch {
           /* ignore */
         }
-      }, 1200);
+      }, 1600);
     } catch {
       setError("送出失敗，請稍後再試");
     } finally {
@@ -88,9 +92,22 @@ export function LineLiffRentPick({
 
   if (done) {
     return (
-      <div className="mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center gap-2 bg-zinc-100 px-4 text-center">
+      <div className="mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center gap-3 bg-zinc-100 px-4 text-center">
         <p className="text-lg font-bold text-zinc-900">已送出</p>
-        <p className="text-sm text-zinc-600">請回到 LINE 繼續回答幾題基本資料。</p>
+        {doneSummary ? (
+          <div className="w-full rounded-2xl bg-white px-4 py-3 text-left text-sm text-zinc-700">
+            <p>
+              看屋時間：<span className="font-semibold text-zinc-900">{doneSummary.when}</span>
+            </p>
+            <p className="mt-2 font-semibold text-zinc-900">想看的物件</p>
+            <ul className="mt-1 list-disc space-y-1 pl-5">
+              {doneSummary.titles.map((title) => (
+                <li key={title}>{title}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        <p className="text-sm text-zinc-600">請回到 LINE 查看確認訊息，並繼續回答基本資料。</p>
       </div>
     );
   }
