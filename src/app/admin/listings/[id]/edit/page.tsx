@@ -74,6 +74,7 @@ export default async function AdminEditListingPage({ params }: AdminEditListingP
     contactName: listing.contactName,
     contactPhone: listing.contactPhone,
     ownerIdCardUrl: listing.ownerIdCardUrl ?? "",
+    source591Url: listing.source591Url ?? listing.source591Id ?? "",
     furnitureItems: listing.furnitureItems ?? [],
     equipmentItems: listing.equipmentItems ?? [],
     shortTermRent: listing.shortTermRent ?? "",

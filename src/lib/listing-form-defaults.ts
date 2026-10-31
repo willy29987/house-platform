@@ -48,6 +48,7 @@ export function createEmptyFormData(type: "RENT" | "SALE" = "RENT"): AdminListin
     contactName: "",
     contactPhone: "",
     ownerIdCardUrl: "",
+    source591Url: "",
     furnitureItems: [],
     equipmentItems: [],
     shortTermRent: "",

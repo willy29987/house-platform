@@ -116,7 +116,7 @@ export function AdminShell({ current, children }: AdminShellProps) {
               href="/admin/line-assistant"
               className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
             >
-              客服試做
+              租屋客服
             </Link>
             {isSuperAdmin ? (
               <>
@@ -219,7 +219,7 @@ export function AdminShell({ current, children }: AdminShellProps) {
                   屋主追蹤
                 </Link>
                 <Link href="/admin/line-assistant" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
-                  客服試做
+                  租屋客服
                 </Link>
                 {isSuperAdmin ? (
                   <>

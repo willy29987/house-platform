@@ -61,6 +61,8 @@ export type AdminListingFormData = {
   contactName: string;
   contactPhone: string;
   ownerIdCardUrl: string;
+  /** 591 物件網址或編號；送出時後端抽出 source591Id */
+  source591Url: string;
   furnitureItems: string[];
   equipmentItems: string[];
   shortTermRent: string;
@@ -378,6 +380,7 @@ export function AdminListingForm({ mode, submitUrl, initialData, lockedListingTy
       contactName: formData.contactName,
       contactPhone: formData.contactPhone,
       ownerIdCardUrl: formData.ownerIdCardUrl.trim() || null,
+      source591Url: formData.source591Url.trim() || null,
       // 有勾選任何項目就視為「有」，供列表篩選使用
       furnitureProvided: formData.furnitureItems.length > 0 ? true : null,
       applianceProvided: formData.equipmentItems.length > 0 ? true : null,
@@ -462,6 +465,18 @@ export function AdminListingForm({ mode, submitUrl, initialData, lockedListingTy
             <input required value={formData.title}
               onChange={(e) => setFormData((p) => ({ ...p, title: e.target.value }))}
               className={`w-full ${field}`} />
+          </div>
+          <div className="sm:col-span-2">
+            <label className={labelCls}>591 物件網址（選填）</label>
+            <input
+              value={formData.source591Url}
+              onChange={(e) => setFormData((p) => ({ ...p, source591Url: e.target.value }))}
+              placeholder="貼上 591 連結，系統會抽出編號以便客人詢問時自動對應"
+              className={`w-full ${field}`}
+            />
+            <p className="mt-1 text-xs text-zinc-500">
+              有上 591 的物件請填，客人貼連結問能不能看時才能對到同一間。
+            </p>
           </div>
           {!lockedListingType ? (
             <div>

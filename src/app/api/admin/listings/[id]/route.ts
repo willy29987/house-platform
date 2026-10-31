@@ -3,6 +3,7 @@ import { getCurrentAdmin, requireAdminSession } from "@/lib/admin-auth";
 import { normalizeItemList } from "@/lib/furniture-appliance-value";
 import { parseListingInternalMeta, toListingDescription } from "@/lib/listing-internal-meta";
 import { prisma } from "@/lib/prisma";
+import { resolve591IdFromUrlOrId } from "@/lib/listing-591-id";
 import { listingInputSchema } from "@/lib/listing-validation";
 
 type RouteContext = {
@@ -52,6 +53,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
   }
 
   const data = parsed.data;
+  const source591 = resolve591IdFromUrlOrId(data.source591Url || data.source591Id);
   try {
     await prisma.listing.update({
       where: { id },
@@ -118,6 +120,8 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
         contactName: data.contactName,
         contactPhone: data.contactPhone,
         ownerIdCardUrl: data.ownerIdCardUrl ?? null,
+        source591Id: source591.id,
+        source591Url: source591.url,
         isPublished: data.isPublished ?? true,
       },
     });

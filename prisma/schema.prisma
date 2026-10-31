@@ -77,6 +77,10 @@ model Listing {
   contactName        String
   contactPhone       String
   ownerIdCardUrl     String?
+  /** 591 物件編號（從網址抽出），用於客人貼連結時對到同一間 */
+  source591Id        String?      @unique
+  /** 591 完整網址（選填，方便後台對照） */
+  source591Url       String?
   isPublished        Boolean      @default(true)
   inquiries          Inquiry[]
   createdAt          DateTime     @default(now())

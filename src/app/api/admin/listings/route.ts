@@ -3,6 +3,7 @@ import { getCurrentAdmin, requireAdminSession } from "@/lib/admin-auth";
 import { normalizeItemList } from "@/lib/furniture-appliance-value";
 import { toListingDescription } from "@/lib/listing-internal-meta";
 import { prisma } from "@/lib/prisma";
+import { resolve591IdFromUrlOrId } from "@/lib/listing-591-id";
 import { listingInputSchema } from "@/lib/listing-validation";
 
 export async function POST(request: Request) {
@@ -38,6 +39,7 @@ export async function POST(request: Request) {
   }
 
   const data = parsed.data;
+  const source591 = resolve591IdFromUrlOrId(data.source591Url || data.source591Id);
   try {
     const listing = await prisma.listing.create({
       data: {
@@ -103,6 +105,8 @@ export async function POST(request: Request) {
         contactName: data.contactName,
         contactPhone: data.contactPhone,
         ownerIdCardUrl: data.ownerIdCardUrl ?? null,
+        source591Id: source591.id,
+        source591Url: source591.url,
         isPublished:
           current.role === "SUPER_ADMIN"
             ? (data.isPublished ?? true)

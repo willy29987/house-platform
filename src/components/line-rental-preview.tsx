@@ -1,10 +1,27 @@
 "use client";
 
-import { useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { taipeiTodayYmd } from "@/lib/owner-tracking-next-contact";
-import { formatViewingWhen, RENT_PRICE_OPTIONS, VIEWING_SLOTS, type RentalMatchListing } from "@/lib/line-rental-assistant";
+import { formatViewingRange, RENT_PRICE_OPTIONS, type RentalMatchListing } from "@/lib/line-rental-assistant";
+import type { LineRentalCase } from "@/lib/line-rental-cases";
+import {
+  emptyViewingSchedule,
+  ViewingSchedulePicker,
+  type ViewingScheduleValue,
+} from "@/components/viewing-schedule-picker";
 
-type GuestStatus = "selecting" | "picking_time" | "pending_confirm" | "reschedule_sent" | "confirmed" | "saved";
+type GuestStatus =
+  | "selecting"
+  | "picking_time"
+  | "pending_confirm"
+  | "reschedule_sent"
+  | "confirmed"
+  | "saved"
+  | "awaiting_staff"
+  | "awaiting_agent"
+  | "agent_proposing";
+
+type ListFilter = "all" | "pending" | "active" | "confirmed";
 
 type ChatLine = { id: number; from: "guest" | "bot" | "staff"; text: string };
 
@@ -26,13 +43,23 @@ type StaffGuest = {
 };
 
 const STATUS_LABEL: Record<GuestStatus, string> = {
-  selecting: "正在選條件",
-  picking_time: "正在選看屋時間",
-  pending_confirm: "待確認看屋",
-  reschedule_sent: "已改期，等回覆",
-  confirmed: "時間已確認",
-  saved: "條件已留下",
+  selecting: "進行中",
+  picking_time: "進行中",
+  pending_confirm: "待確認",
+  reschedule_sent: "待客人確認改約",
+  confirmed: "已確認",
+  saved: "進行中",
+  awaiting_staff: "待回覆",
+  awaiting_agent: "待業務確認",
+  agent_proposing: "業務改約中",
 };
+
+const FILTERS: { id: ListFilter; label: string }[] = [
+  { id: "all", label: "全部" },
+  { id: "pending", label: "待確認" },
+  { id: "active", label: "進行中" },
+  { id: "confirmed", label: "已確認" },
+];
 
 function formatRent(price: number) {
   return `${price.toLocaleString("zh-TW")} 元/月`;
@@ -94,7 +121,7 @@ function extraChoice(listing: RentalMatchListing) {
 function fullThread(
   listing: RentalMatchListing | undefined,
   stop: "district" | "time" | "booked" | "declined",
-  extra?: { name?: string; when?: string; staff?: string },
+  extra?: { name?: string; when?: string; staff?: string; pet?: string },
 ): ChatLine[] {
   const lines: ChatLine[] = [];
   const add = (from: ChatLine["from"], text: string) => {
@@ -103,6 +130,8 @@ function fullThread(
   const city = listing?.city || "台北市";
   add("bot", WELCOME);
   add("guest", "開始找房");
+  add("bot", "有沒有養寵物？有的話跟我說是什麼寵物；沒有就回「沒有」。");
+  add("guest", extra?.pet ?? "沒有");
   add("bot", "想看哪些縣市？可複選，沒勾就是不限。");
   add("guest", city);
   add("bot", "哪些行政區？可複選，沒勾就是不限。");
@@ -132,7 +161,7 @@ function fullThread(
   }
 
   add("guest", `我想看：${listing?.title ?? "已上架物件"}`);
-  add("bot", "想哪一天、哪個時段看屋？先選日期，再選一個時段。這還不是確定的預約。");
+  add("bot", "想哪一天、哪個時段看屋？先選日期，再在時間軸點希望開始時間（每格 15 分）。這還不是確定的預約。");
   if (stop === "time") return lines;
 
   add("guest", extra?.when ?? "");
@@ -157,55 +186,59 @@ function buildStaffGuests(listings: RentalMatchListing[]): StaffGuest[] {
       lineName: "陳小姐",
       status: "selecting",
       watching: false,
-      criteriaText: "台北市 · 行政區還沒選",
+      criteriaText: "沒有寵物 · 台北市 · 行政區還沒選",
       picked: [],
       requestedWhen: "",
       proposedWhen: "",
       asks: [],
-      lines: fullThread(undefined, "district"),
+      lines: fullThread(undefined, "district", { pet: "沒有" }),
     },
     {
       id: "lin",
       lineName: "林先生",
       status: "picking_time",
       watching: true,
-      criteriaText: criteriaFrom(first, "新北市 · 板橋區 · 2 房 · 要車位"),
+      criteriaText: `${criteriaFrom(first, "新北市 · 板橋區 · 2 房 · 要車位")} · 有，一隻貓`,
       picked: firstPick,
       requestedWhen: "",
       proposedWhen: "",
       asks: [],
-      lines: fullThread(first, "time"),
+      lines: fullThread(first, "time", { pet: "有，一隻貓" }),
     },
     {
       id: "wang",
       lineName: "王先生",
       status: "pending_confirm",
       watching: true,
-      criteriaText: criteriaFrom(second, "台北市 · 中山區 · 2 房"),
+      criteriaText: `${criteriaFrom(second, "台北市 · 中山區 · 2 房")} · 沒有寵物`,
       picked: secondPick,
       requestedWhen: "2026/11/03 下午 13:00–17:00",
       proposedWhen: "",
       asks: second ? [{ listingId: second.id, title: second.title, answer: "yes" }] : [],
-      lines: fullThread(second, "booked", { name: "王先生", when: "2026/11/03 下午 13:00–17:00" }),
+      lines: fullThread(second, "booked", {
+        name: "王先生",
+        when: "2026/11/03 下午 13:00–17:00",
+        pet: "沒有",
+      }),
     },
     {
       id: "zhang",
       lineName: "張小姐",
       status: "saved",
       watching: true,
-      criteriaText: criteriaFrom(third, "台北市 · 1 房 · 租屋補助"),
+      criteriaText: `${criteriaFrom(third, "台北市 · 1 房 · 租屋補助")} · 有，小型犬`,
       picked: [],
       requestedWhen: "",
       proposedWhen: "",
       asks: third ? [{ listingId: third.id, title: third.title, answer: "no" }] : [],
-      lines: fullThread(third, "declined"),
+      lines: fullThread(third, "declined", { pet: "有，小型犬" }),
     },
     {
       id: "huang",
       lineName: "黃先生",
       status: "confirmed",
       watching: true,
-      criteriaText: criteriaFrom(first, "新北市 · 3 房 · 要車位 · 簽戶籍"),
+      criteriaText: `${criteriaFrom(first, "新北市 · 3 房 · 要車位 · 簽戶籍")} · 沒有寵物`,
       picked: firstPick,
       requestedWhen: "2026/10/30 上午 9:00–12:00",
       proposedWhen: "",
@@ -213,55 +246,196 @@ function buildStaffGuests(listings: RentalMatchListing[]): StaffGuest[] {
       lines: fullThread(first, "booked", {
         name: "黃先生",
         when: "2026/10/30 上午 9:00–12:00",
+        pet: "沒有",
         staff: "2026/10/30 上午 9:00–12:00 可以，同事會再跟你說帶看的人。",
       }),
     },
   ];
 }
 
-function statusBadge(status: GuestStatus) {
+function shortStatus(status: GuestStatus) {
+  return STATUS_LABEL[status];
+}
+
+function caseToStaffGuest(item: LineRentalCase): StaffGuest {
+  const lines: ChatLine[] = [];
+  const add = (from: ChatLine["from"], text: string) => {
+    if (!text) return;
+    lines.push({ id: lines.length + 1, from, text });
+  };
+
+  if (item.kind === "591_link") {
+    add("bot", "（客人貼 591 連結）");
+    add("guest", item.guestMessage || item.source591Url || item.source591Id || "591 連結");
+    add("bot", item.summaryText);
+  } else if (item.kind === "image_inquiry") {
+    add("bot", "（客人傳圖片）");
+    add("guest", "［圖片］");
+    add("bot", item.summaryText);
+  } else {
+    add("bot", "（LIFF 找房送出）");
+    add("guest", item.criteriaText || "條件已送出");
+    add(
+      "guest",
+      item.picked.length
+        ? `我想看：${item.picked.map((p) => p.title).join("、")}`
+        : "想看物件已送出",
+    );
+    add("guest", item.requestedWhen);
+    add("bot", item.summaryText);
+    if (item.proposedWhen) add("staff", `業務提案時間：${item.proposedWhen}`);
+  }
+
+  const status: GuestStatus =
+    item.status === "awaiting_staff"
+      ? "awaiting_staff"
+      : item.status === "awaiting_agent"
+        ? "awaiting_agent"
+        : item.status === "agent_proposing"
+          ? "agent_proposing"
+          : item.status === "reschedule_sent"
+            ? "reschedule_sent"
+            : item.status === "confirmed"
+              ? "confirmed"
+              : "pending_confirm";
+
+  const criteriaBits = [
+    item.kind === "591_link" ? "591 詢問" : item.kind === "image_inquiry" ? "圖片詢問" : item.criteriaText,
+    item.source591Id ? `#${item.source591Id}` : "",
+    item.phone ? `電話 ${item.phone}` : "",
+  ].filter(Boolean);
+
+  return {
+    id: item.id,
+    lineName: item.displayName || "LINE 客人",
+    status,
+    watching: true,
+    criteriaText: criteriaBits.join(" · ") || item.criteriaText,
+    picked: item.picked,
+    requestedWhen: item.requestedWhen,
+    proposedWhen: item.proposedWhen || "",
+    asks: [],
+    lines,
+  };
+}
+
+function matchesFilter(guest: StaffGuest, filter: ListFilter) {
+  if (filter === "all") return true;
+  if (filter === "pending") {
+    return (
+      guest.status === "pending_confirm" ||
+      guest.status === "reschedule_sent" ||
+      guest.status === "awaiting_staff" ||
+      guest.status === "awaiting_agent" ||
+      guest.status === "agent_proposing"
+    );
+  }
+  if (filter === "confirmed") return guest.status === "confirmed";
+  return guest.status === "selecting" || guest.status === "picking_time" || guest.status === "saved";
+}
+
+function statusPill(status: GuestStatus) {
   if (status === "confirmed") return "bg-emerald-100 text-emerald-950";
-  if (status === "reschedule_sent") return "bg-sky-100 text-sky-950";
-  if (status === "pending_confirm") return "bg-amber-100 text-amber-950";
+  if (
+    status === "pending_confirm" ||
+    status === "reschedule_sent" ||
+    status === "awaiting_staff" ||
+    status === "awaiting_agent" ||
+    status === "agent_proposing"
+  ) {
+    return "bg-amber-100 text-amber-950";
+  }
   return "bg-zinc-100 text-zinc-700";
 }
 
 export function LineRentalPreview({ listings, lineBasicId }: { listings: RentalMatchListing[]; lineBasicId: string }) {
+  const demoGuests = useMemo(() => buildStaffGuests(listings), [listings]);
+  const [liveGuests, setLiveGuests] = useState<StaffGuest[]>([]);
   const [guests, setGuests] = useState<StaffGuest[]>(() => buildStaffGuests(listings));
+  const [filter, setFilter] = useState<ListFilter>("pending");
   const [selectedId, setSelectedId] = useState("wang");
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editDate, setEditDate] = useState("");
-  const [editSlot, setEditSlot] = useState("");
+  const [editingTime, setEditingTime] = useState(false);
+  const [schedule, setSchedule] = useState<ViewingScheduleValue>(emptyViewingSchedule);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const lineId = useRef(500);
   const today = useMemo(() => taipeiTodayYmd(), []);
-  const selected = guests.find((guest) => guest.id === selectedId) ?? guests[0];
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadCases() {
+      try {
+        const response = await fetch("/api/line/rental-cases", { cache: "no-store" });
+        if (!response.ok) return;
+        const data = (await response.json()) as { cases?: LineRentalCase[] };
+        if (cancelled) return;
+        const mapped = (data.cases ?? []).map(caseToStaffGuest);
+        setLiveGuests(mapped);
+      } catch {
+        /* ignore */
+      }
+    }
+    void loadCases();
+    const timer = window.setInterval(() => {
+      void loadCases();
+    }, 12000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  useEffect(() => {
+    setGuests((current) => {
+      const byId = new Map(current.map((g) => [g.id, g]));
+      const mergedLive = liveGuests.map((g) => byId.get(g.id) ?? g);
+      const demoMerged = demoGuests.map((g) => byId.get(g.id) ?? g);
+      return [...mergedLive, ...demoMerged];
+    });
+  }, [liveGuests, demoGuests]);
+
+  useEffect(() => {
+    if (!liveGuests.length) return;
+    setSelectedId((current) => {
+      if (liveGuests.some((g) => g.id === current)) return current;
+      return liveGuests[0].id;
+    });
+  }, [liveGuests]);
+
+  const visible = guests.filter((guest) => matchesFilter(guest, filter));
+  const selected = visible.find((guest) => guest.id === selectedId) ?? visible[0] ?? null;
   const draft = selected ? (drafts[selected.id] ?? "") : "";
-  const selectingCount = guests.filter((guest) => guest.status === "selecting" || guest.status === "picking_time").length;
-  const pendingCount = guests.filter(
-    (guest) => guest.status === "pending_confirm" || guest.status === "reschedule_sent",
-  ).length;
-  const watchingCount = guests.filter((guest) => guest.watching).length;
-  const booked = guests.filter((guest) => guest.requestedWhen);
-  const watches = guests.filter((guest) => guest.watching);
+  const needsConfirm =
+    (selected?.status === "pending_confirm" || selected?.status === "reschedule_sent") &&
+    Boolean(selected.requestedWhen || selected.proposedWhen);
+
+  function selectGuest(id: string) {
+    setSelectedId(id);
+    setEditingTime(false);
+    setSchedule(emptyViewingSchedule());
+    setDetailsOpen(false);
+  }
 
   function patchGuest(id: string, update: (guest: StaffGuest) => StaffGuest) {
     setGuests((current) => current.map((guest) => (guest.id === id ? update(guest) : guest)));
   }
 
   function confirmTime(guest: StaffGuest) {
-    const text = `${guest.requestedWhen} 可以，同事會再跟你說帶看的人。`;
+    const when = guest.proposedWhen || guest.requestedWhen;
+    const text = `${when} 可以，同事會再跟你說帶看的人。`;
     const id = lineId.current++;
     patchGuest(guest.id, (current) => ({
       ...current,
       status: "confirmed",
+      requestedWhen: when,
+      proposedWhen: "",
       lines: [...current.lines, { id, from: "staff", text }],
     }));
-    setEditingId(null);
+    setEditingTime(false);
   }
 
   function sendNewTime(guest: StaffGuest) {
-    const when = formatViewingWhen(editDate, editSlot);
+    const when = formatViewingRange(schedule.date, schedule.start);
     if (!when) return;
     const id = lineId.current++;
     patchGuest(guest.id, (current) => ({
@@ -270,9 +444,31 @@ export function LineRentalPreview({ listings, lineBasicId }: { listings: RentalM
       proposedWhen: when,
       lines: [...current.lines, { id, from: "staff", text: `原本的時間暫無法安排，改 ${when} 可以嗎？` }],
     }));
-    setEditingId(null);
-    setEditDate("");
-    setEditSlot("");
+    setEditingTime(false);
+    setSchedule(emptyViewingSchedule());
+  }
+
+  function submitGuestSchedule(guest: StaffGuest) {
+    const when = formatViewingRange(schedule.date, schedule.start);
+    if (!when) return;
+    const guestLineId = lineId.current++;
+    const botLineId = lineId.current++;
+    patchGuest(guest.id, (current) => ({
+      ...current,
+      status: "pending_confirm",
+      requestedWhen: when,
+      proposedWhen: "",
+      lines: [
+        ...current.lines,
+        { id: guestLineId, from: "guest", text: when },
+        {
+          id: botLineId,
+          from: "bot",
+          text: `${current.lineName}，已記下想看的物件和希望時間，時間尚未確認。同事會再跟業務或屋主對過，確認後在 LINE 回你。`,
+        },
+      ],
+    }));
+    setSchedule(emptyViewingSchedule());
   }
 
   function sendDraft(event?: FormEvent) {
@@ -297,302 +493,337 @@ export function LineRentalPreview({ listings, lineBasicId }: { listings: RentalM
   }
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-3 gap-2">
-        <Stat label="還在選" value={selectingCount} />
-        <Stat label="待確認" value={pendingCount} />
-        <Stat label="持續配對" value={watchingCount} />
+    <div className="flex h-[min(44rem,calc(100dvh-9rem))] min-h-[28rem] flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
+      <div className="flex gap-1 overflow-x-auto border-b border-zinc-100 px-2 py-2">
+        {FILTERS.map((item) => {
+          const count = guests.filter((guest) => matchesFilter(guest, item.id)).length;
+          const active = filter === item.id;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => {
+                setFilter(item.id);
+                setEditingTime(false);
+                setDetailsOpen(false);
+              }}
+              className={`shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold ${
+                active ? "bg-[#0b2545] text-white" : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+              }`}
+            >
+              {item.label}
+              <span className={`ml-1 tabular-nums ${active ? "text-white/80" : "text-zinc-500"}`}>{count}</span>
+            </button>
+          );
+        })}
       </div>
 
-      <div className="grid items-start rounded-2xl border border-zinc-200 bg-white shadow-sm lg:grid-cols-[18rem_minmax(0,1fr)]">
-        <ul className="border-b border-zinc-100 lg:sticky lg:top-16 lg:border-r lg:border-b-0">
-          {guests.map((guest) => {
-            const active = guest.id === selected?.id;
-            const preview = guest.lines[guest.lines.length - 1]?.text ?? "";
-            return (
-              <li key={guest.id} className="border-b border-zinc-100 last:border-b-0">
-                <button
-                  type="button"
-                  onClick={() => setSelectedId(guest.id)}
-                  className={`flex w-full items-center gap-3 px-3 py-3 text-left ${active ? "bg-[#e7f8ee]" : "hover:bg-zinc-50"}`}
-                >
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#06c755] text-sm font-bold text-white">
-                    {guest.lineName.slice(0, 1)}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-bold text-zinc-900">{guest.lineName}</span>
-                    <span className="mt-0.5 block truncate text-xs text-zinc-500">{preview}</span>
-                  </span>
-                </button>
-              </li>
-            );
-          })}
+      <div className="grid min-h-0 flex-1 lg:grid-cols-[16rem_minmax(0,1fr)_18rem]">
+        <ul className="max-h-40 overflow-y-auto border-b border-zinc-100 lg:max-h-none lg:border-r lg:border-b-0">
+          {visible.length === 0 ? (
+            <li className="px-4 py-8 text-center text-sm text-zinc-500">這個篩選目前沒有客人</li>
+          ) : (
+            visible.map((guest) => {
+              const active = guest.id === selected?.id;
+              const preview = guest.lines[guest.lines.length - 1]?.text ?? "";
+              return (
+                <li key={guest.id} className="border-b border-zinc-100 last:border-b-0">
+                  <button
+                    type="button"
+                    onClick={() => selectGuest(guest.id)}
+                    className={`flex w-full items-center gap-3 px-3 py-3 text-left ${active ? "bg-[#e7f8ee]" : "hover:bg-zinc-50"}`}
+                  >
+                    <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#06c755] text-sm font-bold text-white">
+                      {guest.lineName.slice(0, 1)}
+                      {guest.watching ? (
+                        <span
+                          title="之後新案會問"
+                          className="absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-sky-500"
+                        />
+                      ) : null}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-2">
+                        <span className="truncate text-sm font-bold text-zinc-900">{guest.lineName}</span>
+                        <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${statusPill(guest.status)}`}>
+                          {shortStatus(guest.status)}
+                        </span>
+                      </span>
+                      <span className="mt-0.5 block truncate text-xs text-zinc-500">{preview}</span>
+                    </span>
+                  </button>
+                </li>
+              );
+            })
+          )}
         </ul>
 
         {selected ? (
-          <section className="flex flex-col border-t border-zinc-100 lg:border-t-0">
-            <header className="flex items-center gap-3 border-b border-zinc-100 px-4 py-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#06c755] text-sm font-bold text-white">
-                {selected.lineName.slice(0, 1)}
-              </span>
-              <div className="min-w-0">
-                <p className="truncate text-base font-bold text-zinc-900">{selected.lineName}</p>
-                <p className="text-xs text-zinc-500">LINE 顯示名稱 · {STATUS_LABEL[selected.status]}</p>
-              </div>
-            </header>
-            <details className="border-b border-zinc-100 px-4 py-2 lg:hidden">
-              <summary className="cursor-pointer text-sm font-medium text-zinc-700">這位客人的條件</summary>
-              <div className="pt-3">
-                <GuestFacts guest={selected} />
-              </div>
-            </details>
-            <div className="grid lg:grid-cols-[minmax(0,1fr)_16rem]">
-              <div className="flex flex-col">
-                <div className="space-y-2 bg-[#8cabd9] px-3 py-3">
-                  {selected.lines.map((line) => {
-                    const outgoing = line.from !== "guest";
-                    return (
-                      <p
-                        key={line.id}
-                        className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed text-zinc-900 ${
-                          outgoing ? "ml-auto rounded-tr-sm bg-[#95ec69]" : "rounded-tl-sm bg-white"
-                        }`}
-                      >
-                        {line.from === "staff" ? <span className="mb-1 block text-[11px] font-semibold text-[#067a36]">同事</span> : null}
-                        {line.text}
-                      </p>
-                    );
-                  })}
-                </div>
-                <form onSubmit={sendDraft} className="flex items-end gap-2 border-t border-zinc-200 bg-white px-3 py-2">
-                  <label className="min-w-0 flex-1">
-                    <span className="sr-only">輸入訊息</span>
-                    <textarea
-                      rows={1}
-                      value={draft}
-                      placeholder="輸入訊息"
-                      onChange={(event) => {
-                        const value = event.target.value;
-                        setDrafts((current) => ({ ...current, [selected.id]: value }));
-                      }}
-                      onKeyDown={onDraftKeyDown}
-                      className="max-h-28 min-h-10 w-full resize-none rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-[#06c755]"
+          <section className="flex min-h-0 flex-col border-b border-zinc-100 lg:border-b-0 lg:border-r">
+            <header className="border-b border-zinc-100 px-4 py-3">
+              <div className="flex items-center gap-3">
+                <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#06c755] text-sm font-bold text-white">
+                  {selected.lineName.slice(0, 1)}
+                  {selected.watching ? (
+                    <span
+                      title="之後新案會問"
+                      className="absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-sky-500"
                     />
-                  </label>
-                  <button
-                    type="submit"
-                    disabled={!draft.trim()}
-                    aria-label="傳送"
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#06c755] text-white disabled:opacity-40"
-                  >
-                    <SendIcon />
-                  </button>
-                </form>
-                <p className="bg-white px-4 pb-2 text-[11px] leading-relaxed text-zinc-500">
-                  預覽傳訊，不會送到{lineBasicId ? ` ${lineBasicId}` : "官方 LINE"}。
-                </p>
+                  ) : null}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-base font-bold text-zinc-900">{selected.lineName}</p>
+                  <p className="text-xs text-zinc-500">{shortStatus(selected.status)}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDetailsOpen((open) => !open)}
+                  className="shrink-0 rounded-full border border-zinc-200 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 lg:hidden"
+                >
+                  {detailsOpen ? "收起詳情" : "詳情"}
+                </button>
               </div>
-              <div className="hidden border-l border-zinc-100 px-4 py-4 lg:sticky lg:top-16 lg:block lg:self-start">
-                <GuestFacts guest={selected} />
+              {detailsOpen ? (
+                <div className="mt-3 lg:hidden">
+                  <GuestDecisionPanel
+                    guest={selected}
+                    needsConfirm={Boolean(needsConfirm)}
+                    editingTime={editingTime}
+                    schedule={schedule}
+                    today={today}
+                    onConfirm={() => confirmTime(selected)}
+                    onStartEdit={() => {
+                      setEditingTime(true);
+                      setSchedule(emptyViewingSchedule());
+                    }}
+                    onCancelEdit={() => {
+                      setEditingTime(false);
+                      setSchedule(emptyViewingSchedule());
+                    }}
+                    onScheduleChange={setSchedule}
+                    onSendNewTime={() => sendNewTime(selected)}
+                  />
+                </div>
+              ) : null}
+            </header>
+
+            <div className="min-h-0 flex-1 overflow-y-auto bg-[#8cabd9] px-3 py-3">
+              <div className="mx-auto w-full max-w-md space-y-2">
+                {selected.lines.map((line) => {
+                  const outgoing = line.from !== "guest";
+                  return (
+                    <p
+                      key={line.id}
+                      className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed text-zinc-900 ${
+                        outgoing ? "ml-auto rounded-tr-sm bg-[#95ec69]" : "rounded-tl-sm bg-white"
+                      }`}
+                    >
+                      {line.from === "staff" ? <span className="mb-1 block text-[11px] font-semibold text-[#067a36]">同事</span> : null}
+                      {line.text}
+                    </p>
+                  );
+                })}
               </div>
             </div>
-          </section>
-        ) : null}
-      </div>
 
-      <section className="rounded-2xl border border-[#0b2545]/15 bg-white p-4 shadow-sm sm:p-5">
-        <div className="flex flex-wrap items-end justify-between gap-2">
-          <div>
-            <p className="text-xs font-semibold text-[#1e3a8a]">獨立名單</p>
-            <h2 className="mt-1 text-lg font-bold text-zinc-900">已選好物件與時間</h2>
-          </div>
-          <span className="rounded-full bg-[#0b2545] px-3 py-1 text-xs font-semibold text-white">{booked.length} 位</span>
-        </div>
-        <p className="mt-2 text-sm text-zinc-600">物件和看屋時間都選完才會出現。同事跟業務或屋主對過之後，才能回客人這個時間可以，或改一個時間。</p>
-        {booked.length === 0 ? (
-          <p className="mt-4 rounded-xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-8 text-center text-sm text-zinc-500">還沒有客人完成選擇</p>
-        ) : (
-          <ul className={`mt-4 grid gap-3 ${booked.length > 1 ? "lg:grid-cols-2" : ""}`}>
-            {booked.map((guest) => (
-              <li key={guest.id} className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-4">
-                <button type="button" onClick={() => setSelectedId(guest.id)} className="w-full text-left">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <p className="text-base font-bold text-zinc-900">{guest.lineName}</p>
-                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${statusBadge(guest.status)}`}>
-                      {STATUS_LABEL[guest.status]}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-xs text-zinc-500">LINE 顯示名稱</p>
-                  <p className="mt-2 text-sm font-semibold text-[#0b2545]">{guest.requestedWhen}</p>
-                  {guest.proposedWhen ? <p className="mt-1 text-sm text-sky-900">改問 {guest.proposedWhen}</p> : null}
-                </button>
-                <ul className="mt-3 space-y-1 text-sm">
-                  {guest.picked.map((item) => (
-                    <li key={item.id}>
-                      <a href={`/listings/${item.id}`} target="_blank" rel="noopener noreferrer" className="text-[#1e3a8a] hover:underline">
-                        {item.title}
-                      </a>
-                      <span className="text-zinc-500"> · {formatRent(item.price)}</span>
-                    </li>
-                  ))}
-                </ul>
-                {guest.status === "pending_confirm" ? (
-                  <div className="mt-4 space-y-2">
-                    {editingId === guest.id ? (
-                      <div className="space-y-2 rounded-xl bg-white p-3">
-                        <label className="block">
-                          <span className="mb-1 block text-xs font-medium text-zinc-600">改成這一天</span>
-                          <input
-                            type="date"
-                            min={today}
-                            value={editDate}
-                            onChange={(event) => setEditDate(event.target.value)}
-                            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
-                          />
-                        </label>
-                        <div className="flex flex-wrap gap-2">
-                          {VIEWING_SLOTS.map((slot) => {
-                            const on = editSlot === slot.id;
-                            return (
-                              <button
-                                key={slot.id}
-                                type="button"
-                                onClick={() => setEditSlot(slot.id)}
-                                className={`rounded-full border px-3 py-1.5 text-sm font-medium ${
-                                  on ? "border-[#06c755] bg-emerald-50 text-zinc-900" : "border-zinc-300 bg-white text-zinc-800"
-                                }`}
-                              >
-                                {slot.label}
-                              </button>
-                            );
-                          })}
-                        </div>
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            disabled={!editDate || !editSlot}
-                            onClick={() => sendNewTime(guest)}
-                            className="rounded-full bg-[#0b2545] px-3 py-2 text-sm font-semibold text-white disabled:opacity-40"
-                          >
-                            送出改期
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setEditingId(null)}
-                            className="rounded-full border border-zinc-300 bg-white px-3 py-2 text-sm font-semibold text-zinc-700"
-                          >
-                            取消
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => confirmTime(guest)}
-                          className="rounded-full bg-[#0b2545] px-3 py-2 text-sm font-semibold text-white"
-                        >
-                          可以這個時間
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedId(guest.id);
-                            setEditingId(guest.id);
-                            setEditDate("");
-                            setEditSlot("");
-                          }}
-                          className="rounded-full border border-zinc-300 bg-white px-3 py-2 text-sm font-semibold text-zinc-800"
-                        >
-                          改時間
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section className="rounded-2xl border border-[#0b2545]/15 bg-white p-4 shadow-sm sm:p-5">
-        <div className="flex flex-wrap items-end justify-between gap-2">
-          <div>
-            <p className="text-xs font-semibold text-[#1e3a8a]">持續配對</p>
-            <h2 className="mt-1 text-lg font-bold text-zinc-900">條件已記下，之後新案會問</h2>
-          </div>
-          <span className="rounded-full bg-[#0b2545] px-3 py-1 text-xs font-semibold text-white">{watches.length} 位</span>
-        </div>
-        <p className="mt-2 text-sm text-zinc-600">
-          填完條件就留在這裡。之後官網新上架且符合的物件，會自動傳訊問要不要看。已經看過的不會再傳。
-        </p>
-        <ul className={`mt-4 grid gap-3 ${watches.length > 1 ? "lg:grid-cols-2" : ""}`}>
-          {watches.map((guest) => (
-            <li key={guest.id}>
-              <button
-                type="button"
-                onClick={() => setSelectedId(guest.id)}
-                className="w-full rounded-xl border border-sky-200 bg-sky-50/50 p-4 text-left"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <p className="text-base font-bold text-zinc-900">{guest.lineName}</p>
-                  <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-semibold text-sky-950">盯著官網</span>
+            {selected.status === "picking_time" ? (
+              <div className="flex max-h-[48%] min-h-[14rem] flex-col border-t border-zinc-200 bg-white px-3 py-3">
+                <div className="mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col">
+                  <ViewingSchedulePicker
+                    heading="客人選希望看屋時間"
+                    value={schedule}
+                    onChange={setSchedule}
+                    minDate={today}
+                    submitLabel="送出希望時間"
+                    onSubmit={() => submitGuestSchedule(selected)}
+                  />
                 </div>
-                <p className="mt-1 text-xs text-zinc-500">LINE 顯示名稱</p>
-                <p className="mt-3 text-sm leading-relaxed text-zinc-700">{guest.criteriaText}</p>
-                {guest.asks.length ? (
-                  <ul className="mt-3 space-y-1 text-sm text-zinc-800">
-                    {guest.asks.map((ask) => (
-                      <li key={ask.listingId}>
-                        {ask.title}
-                        <span className="text-zinc-500"> · {ask.answer === "yes" ? "想看" : ask.answer === "no" ? "先不用" : "尚未回覆"}</span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="mt-3 text-sm text-zinc-500">留下條件後還沒有新物件</p>
-                )}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </section>
+              </div>
+            ) : null}
+
+            <form onSubmit={sendDraft} className="border-t border-zinc-200 bg-white px-3 py-2">
+              <div className="mx-auto flex w-full max-w-md items-end gap-2">
+                <label className="min-w-0 flex-1">
+                  <span className="sr-only">輸入訊息</span>
+                  <textarea
+                    rows={1}
+                    value={draft}
+                    placeholder="輸入訊息"
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setDrafts((current) => ({ ...current, [selected.id]: value }));
+                    }}
+                    onKeyDown={onDraftKeyDown}
+                    className="max-h-28 min-h-10 w-full resize-none rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-[#06c755]"
+                  />
+                </label>
+                <button
+                  type="submit"
+                  disabled={!draft.trim()}
+                  aria-label="傳送"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#06c755] text-white disabled:opacity-40"
+                >
+                  <SendIcon />
+                </button>
+              </div>
+            </form>
+            <p className="bg-white px-4 pb-2 text-center text-[11px] leading-relaxed text-zinc-500">
+              預覽傳訊，不會送到{lineBasicId ? ` ${lineBasicId}` : "官方 LINE"}。
+            </p>
+          </section>
+        ) : (
+          <div className="flex items-center justify-center border-b border-zinc-100 px-4 text-sm text-zinc-500 lg:border-b-0 lg:border-r">
+            選左邊的客人開始回訊
+          </div>
+        )}
+
+        <aside className="hidden min-h-0 overflow-y-auto px-4 py-4 lg:block">
+          {selected ? (
+            <GuestDecisionPanel
+              guest={selected}
+              needsConfirm={Boolean(needsConfirm)}
+              editingTime={editingTime}
+              schedule={schedule}
+              today={today}
+              onConfirm={() => confirmTime(selected)}
+              onStartEdit={() => {
+                setEditingTime(true);
+                setSchedule(emptyViewingSchedule());
+              }}
+              onCancelEdit={() => {
+                setEditingTime(false);
+                setSchedule(emptyViewingSchedule());
+              }}
+              onScheduleChange={setSchedule}
+              onSendNewTime={() => sendNewTime(selected)}
+            />
+          ) : (
+            <p className="text-sm text-zinc-500">選客人後，這裡會顯示條件與看屋時間。</p>
+          )}
+        </aside>
+      </div>
     </div>
   );
 }
 
-function GuestFacts({ guest }: { guest: StaffGuest }) {
+function GuestDecisionPanel({
+  guest,
+  needsConfirm,
+  editingTime,
+  schedule,
+  today,
+  onConfirm,
+  onStartEdit,
+  onCancelEdit,
+  onScheduleChange,
+  onSendNewTime,
+}: {
+  guest: StaffGuest;
+  needsConfirm: boolean;
+  editingTime: boolean;
+  schedule: ViewingScheduleValue;
+  today: string;
+  onConfirm: () => void;
+  onStartEdit: () => void;
+  onCancelEdit: () => void;
+  onScheduleChange: (next: ViewingScheduleValue) => void;
+  onSendNewTime: () => void;
+}) {
+  const rescheduleForm = (
+    <ViewingSchedulePicker
+      value={schedule}
+      onChange={onScheduleChange}
+      minDate={today}
+      submitLabel="送出時間"
+      onSubmit={onSendNewTime}
+      onCancel={onCancelEdit}
+    />
+  );
+
   return (
-    <dl className="space-y-3 text-sm">
+    <div className="space-y-4 text-sm">
       <div>
-        <dt className="text-xs text-zinc-500">條件</dt>
-        <dd className="mt-1 leading-relaxed text-zinc-800">{guest.criteriaText}</dd>
+        <p className="text-xs font-semibold text-zinc-500">這位客人</p>
+        <p className="mt-1 font-bold text-zinc-900">{guest.lineName}</p>
+        <p className="mt-0.5 text-xs text-zinc-500">
+          {shortStatus(guest.status)}
+          {guest.watching ? " · 之後新案會問" : ""}
+        </p>
       </div>
+
       <div>
-        <dt className="text-xs text-zinc-500">已勾物件</dt>
-        <dd className="mt-1 text-zinc-800">
+        <p className="text-xs font-semibold text-zinc-500">條件</p>
+        <p className="mt-1 leading-relaxed text-zinc-800">{guest.criteriaText}</p>
+      </div>
+
+      <div>
+        <p className="text-xs font-semibold text-zinc-500">已勾物件</p>
+        <div className="mt-1 space-y-1 text-zinc-800">
           {guest.picked.length
             ? guest.picked.map((item) => (
-                <a key={item.id} href={`/listings/${item.id}`} target="_blank" rel="noopener noreferrer" className="block text-[#1e3a8a] hover:underline">
+                <a
+                  key={item.id}
+                  href={`/listings/${item.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block text-[#1e3a8a] hover:underline"
+                >
                   {item.title}
                   <span className="text-zinc-500"> · {formatRent(item.price)}</span>
                 </a>
               ))
             : "還沒勾"}
-        </dd>
+        </div>
       </div>
+
       <div>
-        <dt className="text-xs text-zinc-500">希望時間</dt>
-        <dd className="mt-1 text-zinc-800">{guest.requestedWhen || "還沒選"}</dd>
+        <p className="text-xs font-semibold text-zinc-500">希望時間</p>
+        <p className="mt-1 font-medium text-[#0b2545]">{guest.requestedWhen || "還沒選"}</p>
+        {guest.proposedWhen ? <p className="mt-1 text-sky-900">改問 {guest.proposedWhen}</p> : null}
       </div>
-      {guest.proposedWhen ? (
-        <div>
-          <dt className="text-xs text-zinc-500">改期提案</dt>
-          <dd className="mt-1 text-zinc-800">{guest.proposedWhen}</dd>
+
+      {needsConfirm ? (
+        <div className="space-y-2 rounded-xl border border-[#c5d4e8] bg-[#eef3f9] p-3">
+          <p className="text-xs font-semibold text-[#0b2545]">待確認看屋</p>
+          {!editingTime ? (
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={onConfirm}
+                className="rounded-full bg-[#0b2545] px-3 py-2 text-sm font-semibold text-white"
+              >
+                可以這個時間
+              </button>
+              <button
+                type="button"
+                onClick={onStartEdit}
+                className="rounded-full border border-zinc-300 bg-white px-3 py-2 text-sm font-semibold text-zinc-800"
+              >
+                改時間
+              </button>
+            </div>
+          ) : (
+            rescheduleForm
+          )}
         </div>
       ) : null}
-    </dl>
+
+      {guest.status === "confirmed" ? (
+        <div className="space-y-2">
+          {!editingTime ? (
+            <button
+              type="button"
+              onClick={onStartEdit}
+              className="w-full rounded-full border border-zinc-300 bg-white px-3 py-2 text-sm font-semibold text-zinc-800"
+            >
+              改時間
+            </button>
+          ) : (
+            rescheduleForm
+          )}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -601,14 +832,5 @@ function SendIcon() {
     <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" aria-hidden>
       <path d="M3.4 11.2 20.2 4.2c.7-.3 1.4.4 1.1 1.1l-7 16.8c-.3.8-1.4.8-1.7 0l-2.4-6.2-6.2-2.4c-.8-.3-.8-1.4 0-1.7z" />
     </svg>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-2xl border border-zinc-200 bg-white px-3 py-3 shadow-sm sm:px-4">
-      <p className="text-[11px] font-medium text-zinc-500 sm:text-xs">{label}</p>
-      <p className="mt-1 text-2xl font-bold text-[#0b2545]">{value}</p>
-    </div>
   );
 }

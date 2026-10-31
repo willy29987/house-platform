@@ -3,6 +3,7 @@ export const ADMIN_CLOUD_DATA_KEYS = {
   ownerTrackingListingChecks: "owner_tracking_listing_checks",
   commissionRecords: "commission_records",
   tenantManager: "tenant_manager",
+  lineRentalCases: "line_rental_cases",
 } as const;
 
 export type AdminCloudDataKey = (typeof ADMIN_CLOUD_DATA_KEYS)[keyof typeof ADMIN_CLOUD_DATA_KEYS];

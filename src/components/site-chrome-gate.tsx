@@ -12,7 +12,9 @@ type SiteChromeGateProps = {
 export function SiteChromeGate({ children }: SiteChromeGateProps) {
   const pathname = usePathname() ?? "";
   const hideChrome =
-    pathname.startsWith("/admin") || pathname.startsWith("/mobile-preview");
+    pathname.startsWith("/admin") ||
+    pathname.startsWith("/mobile-preview") ||
+    pathname.startsWith("/liff");
 
   return (
     <>

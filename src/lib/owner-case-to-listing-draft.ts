@@ -68,6 +68,7 @@ export function ownerCaseToListingDraft(
     specialMatters: ownerCase.specialMatters.trim(),
     contactName: ownerCase.ownerName.trim(),
     contactPhone: ownerCase.phone.trim(),
+    source591Url: ownerCase.listingUrl.trim(),
     rooms: layout.rooms.trim(),
     livingRooms: layout.living.trim(),
     bathrooms: layout.bath.trim(),

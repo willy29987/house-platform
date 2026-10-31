@@ -114,6 +114,8 @@ function collectLegacyImages(images: string[] | null | undefined, coverImage: st
 
 export type AdminListingDetail = ListingDetail & {
   isPublished: boolean;
+  source591Id?: string | null;
+  source591Url?: string | null;
   shortTermRent?: string | null;
   serviceFee?: string | null;
   registrationUse?: string | null;
