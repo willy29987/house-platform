@@ -21,8 +21,16 @@ export type LineUriAction = {
   uri: string;
 };
 
+export type LineMessageAction = LineUriAction | LinePostbackAction | { type: "message"; label: string; text: string };
+
 export type LineMessage =
-  | { type: "text"; text: string }
+  | {
+      type: "text";
+      text: string;
+      quickReply?: {
+        items: Array<{ type: "action"; action: LineMessageAction }>;
+      };
+    }
   | {
       type: "template";
       altText: string;
@@ -30,6 +38,7 @@ export type LineMessage =
         | {
             type: "buttons";
             text: string;
+            title?: string;
             actions: Array<LineUriAction | LinePostbackAction>;
           }
         | {
@@ -37,6 +46,9 @@ export type LineMessage =
             text: string;
             actions: [LinePostbackAction | LineUriAction, LinePostbackAction | LineUriAction];
           };
+      quickReply?: {
+        items: Array<{ type: "action"; action: LineMessageAction }>;
+      };
     };
 
 export async function pushLineTextMessage(lineUserId: string, text: string) {
@@ -95,13 +107,18 @@ export function buildPublicBaseUrl() {
   return fromSite;
 }
 
-export function buildLiffRentAssistantUrl() {
-  // 動態 import 會增加複雜度；LIFF ID 為公開值，與 line-liff-id 保持同步
+export function buildLiffRentAssistantUrl(query?: Record<string, string>) {
   const liffId =
     process.env.NEXT_PUBLIC_LIFF_ID?.trim() || "2012308800-rDFp5dsT";
-  if (liffId) return `https://liff.line.me/${liffId}`;
+  const qs = query
+    ? `?${Object.entries(query)
+        .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+        .join("&")}`
+    : "";
+  if (liffId) return `https://liff.line.me/${liffId}${qs}`;
   const base = buildPublicBaseUrl();
-  return base ? `${base}/liff/rent-assistant` : "/liff/rent-assistant";
+  const path = `/liff/rent-assistant${qs}`;
+  return base ? `${base}${path}` : path;
 }
 
 export function buildAgentRescheduleUrl(caseId: string) {

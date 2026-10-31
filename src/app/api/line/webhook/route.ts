@@ -3,6 +3,7 @@ import { appendFileSync, mkdirSync } from "fs";
 import path from "path";
 import { NextResponse } from "next/server";
 import { handle591LinkInquiry, handleImageInquiry } from "@/lib/line-591-inquiry";
+import { handleGuestPostback, handleGuestText } from "@/lib/line-guest-flow";
 import { replyLineMessages } from "@/lib/line-messaging";
 import {
   handleAgentProposeText,
@@ -69,6 +70,16 @@ async function handleEvent(event: LineEvent) {
   if (event.type === "postback") {
     const data = event.postback?.data?.trim() ?? "";
     if (!data || !userId) return;
+
+    if (data.startsWith("guest:")) {
+      await handleGuestPostback({
+        replyToken: event.replyToken,
+        lineUserId: userId,
+        data,
+      });
+      return;
+    }
+
     const parsed = parseViewingPostback(data);
     if (!parsed) return;
 
@@ -104,8 +115,16 @@ async function handleEvent(event: LineEvent) {
         text,
       });
       if (handled) return;
-      // 業務帳號一般訊息不走客人 591／圖片流程
       return;
+    }
+
+    if (userId) {
+      const guestHandled = await handleGuestText({
+        replyToken: event.replyToken,
+        lineUserId: userId,
+        text,
+      });
+      if (guestHandled) return;
     }
 
     const result = await handle591LinkInquiry({
@@ -159,7 +178,6 @@ export async function POST(request: Request) {
   return NextResponse.json({ ok: true });
 }
 
-/** LINE 驗證 webhook URL 時可能打 GET */
 export async function GET() {
   return NextResponse.json({ ok: true, service: "line-webhook" });
 }
