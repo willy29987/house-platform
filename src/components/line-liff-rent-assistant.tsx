@@ -28,21 +28,29 @@ export function LineLiffRentAssistant({
         // 本機／未設定 LIFF ID：仍可測完整 UI
         if (!cancelled) {
           setReady(true);
-          setError("尚未設定 NEXT_PUBLIC_LIFF_ID，目前以網頁預覽模式開啟。");
         }
         return;
       }
 
       try {
         await liff.init({ liffId });
-        if (!liff.isLoggedIn()) {
-          liff.login();
-          return;
-        }
-        const profile = await liff.getProfile();
         if (cancelled) return;
-        setLineUserId(profile.userId);
-        setDisplayName(profile.displayName);
+        // 不強制 liff.login()／授權頁：先進問卷。已登入才靜默帶入身分。
+        if (liff.isLoggedIn()) {
+          try {
+            const profile = await liff.getProfile();
+            if (!cancelled) {
+              setLineUserId(profile.userId);
+              setDisplayName(profile.displayName);
+            }
+          } catch {
+            const ctx = liff.getContext();
+            if (!cancelled && ctx?.userId) setLineUserId(ctx.userId);
+          }
+        } else {
+          const ctx = liff.getContext();
+          if (ctx?.userId) setLineUserId(ctx.userId);
+        }
         setReady(true);
       } catch (err) {
         if (cancelled) return;
