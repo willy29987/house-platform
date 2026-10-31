@@ -14,7 +14,8 @@ export function SiteChromeGate({ children }: SiteChromeGateProps) {
   const hideChrome =
     pathname.startsWith("/admin") ||
     pathname.startsWith("/mobile-preview") ||
-    pathname.startsWith("/liff");
+    pathname.startsWith("/liff") ||
+    pathname.startsWith("/line");
 
   return (
     <>

@@ -1,4 +1,6 @@
 import { createHmac, timingSafeEqual } from "crypto";
+import { appendFileSync, mkdirSync } from "fs";
+import path from "path";
 import { NextResponse } from "next/server";
 import { handle591LinkInquiry, handleImageInquiry } from "@/lib/line-591-inquiry";
 import { replyLineMessages } from "@/lib/line-messaging";
@@ -11,6 +13,22 @@ import {
 } from "@/lib/line-viewing-agent";
 
 export const dynamic = "force-dynamic";
+
+function rememberLineUserId(userId: string | null | undefined, eventType?: string) {
+  if (!userId) return;
+  console.info("[line/webhook] from userId=", userId, "type=", eventType);
+  try {
+    const dir = path.join(process.cwd(), ".cursor");
+    mkdirSync(dir, { recursive: true });
+    appendFileSync(
+      path.join(dir, "line-last-userid.txt"),
+      `${new Date().toISOString()}\t${userId}\t${eventType ?? ""}\n`,
+      "utf8",
+    );
+  } catch (error) {
+    console.error("[line/webhook] rememberLineUserId failed", error);
+  }
+}
 
 type LineEvent = {
   type?: string;
@@ -46,6 +64,7 @@ function verifyLineSignature(rawBody: string, signature: string | null): boolean
 async function handleEvent(event: LineEvent) {
   if (!event.replyToken) return;
   const userId = event.source?.userId ?? null;
+  rememberLineUserId(userId, event.type);
 
   if (event.type === "postback") {
     const data = event.postback?.data?.trim() ?? "";

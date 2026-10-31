@@ -88,11 +88,26 @@ export async function replyLineMessages(replyToken: string, messages: LineMessag
   return { sent: true as const };
 }
 
+export function buildPublicBaseUrl() {
+  const fromLine = process.env.LINE_PUBLIC_BASE_URL?.replace(/\/$/, "") ?? "";
+  if (fromLine) return fromLine;
+  const fromSite = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "";
+  return fromSite;
+}
+
 export function buildLiffRentAssistantUrl() {
-  const liffId = process.env.NEXT_PUBLIC_LIFF_ID?.trim() ?? "";
+  // 動態 import 會增加複雜度；LIFF ID 為公開值，與 line-liff-id 保持同步
+  const liffId =
+    process.env.NEXT_PUBLIC_LIFF_ID?.trim() || "2012308800-rDFp5dsT";
   if (liffId) return `https://liff.line.me/${liffId}`;
-  const base = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "";
+  const base = buildPublicBaseUrl();
   return base ? `${base}/liff/rent-assistant` : "/liff/rent-assistant";
+}
+
+export function buildAgentRescheduleUrl(caseId: string) {
+  const base = buildPublicBaseUrl();
+  const path = `/line/agent-reschedule?caseId=${encodeURIComponent(caseId)}`;
+  return base ? `${base}${path}` : path;
 }
 
 /** Confirm 文案上限約 240 字元 */

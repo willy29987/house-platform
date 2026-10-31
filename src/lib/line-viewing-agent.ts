@@ -7,6 +7,7 @@ import {
   type LineRentalCase,
 } from "@/lib/line-rental-cases";
 import {
+  buildAgentRescheduleUrl,
   buildLiffRentAssistantUrl,
   pushLineMessages,
   replyLineMessages,
@@ -76,10 +77,9 @@ export function buildAgentConfirmMessage(caseRecord: LineRentalCase): LineMessag
           displayText: "可以",
         },
         {
-          type: "postback",
+          type: "uri",
           label: "改時間",
-          data: viewingPostbackData("propose", caseRecord.id),
-          displayText: "改時間",
+          uri: buildAgentRescheduleUrl(caseRecord.id),
         },
       ],
     },
@@ -218,7 +218,7 @@ export async function handleViewingAgentPostback(input: {
     return true;
   }
 
-  // propose
+  // propose（舊 postback；新流程改開選時間頁）
   const claimed = await claimCase(caseRecord, input.agentLineUserId, "agent_proposing");
   if (!claimed.ok) {
     await replyLineMessages(input.replyToken, [alreadyHandledReply(claimed.case)]);
@@ -226,8 +226,19 @@ export async function handleViewingAgentPostback(input: {
   }
   await replyLineMessages(input.replyToken, [
     {
-      type: "text",
-      text: "請直接回覆新的看屋時間文字，例如「11/5 下午 14:00」。送出後會立刻問客人可不可以。",
+      type: "template",
+      altText: "請選擇新的看屋時間",
+      template: {
+        type: "buttons",
+        text: truncateLineTemplateText("請點下方選新的看屋時間（與客服相同的日曆選單）。"),
+        actions: [
+          {
+            type: "uri",
+            label: "選看屋時間",
+            uri: buildAgentRescheduleUrl(claimed.case.id),
+          },
+        ],
+      },
     },
   ]);
   return true;
@@ -295,7 +306,47 @@ async function handleGuestAccept(input: {
   }
 }
 
-/** 業務在 agent_proposing 狀態下回傳新時間文字 */
+/** 業務選好新時間後：更新案件並推給客人確認 */
+export async function submitAgentProposedWhen(input: {
+  caseId: string;
+  proposedWhen: string;
+  agentLineUserId?: string | null;
+}): Promise<{ ok: true; case: LineRentalCase } | { ok: false; error: string }> {
+  const proposedWhen = input.proposedWhen.trim();
+  if (!proposedWhen || proposedWhen.length > 120) {
+    return { ok: false, error: "請選擇有效的看屋時間" };
+  }
+
+  const caseRecord = await getLineRentalCase(input.caseId);
+  if (!caseRecord) return { ok: false, error: "找不到約看案件" };
+  if (caseRecord.status === "confirmed" || caseRecord.status === "reschedule_sent") {
+    return { ok: false, error: "此約看已處理，無法再改時間" };
+  }
+  if (caseRecord.status !== "awaiting_agent" && caseRecord.status !== "agent_proposing" && caseRecord.status !== "pending_confirm") {
+    return { ok: false, error: "此約看目前無法改時間" };
+  }
+
+  const agentId = input.agentLineUserId?.trim() || caseRecord.handledByAgentLineUserId || getViewingAgentUserIds()[0] || null;
+  const updated = await updateLineRentalCase(caseRecord.id, {
+    status: "reschedule_sent",
+    proposedWhen,
+    handledByAgentLineUserId: agentId,
+    summaryText: `業務提案改約為「${proposedWhen}」（原希望：${caseRecord.requestedWhen}），待客人確認。`,
+  });
+  if (!updated) return { ok: false, error: "更新失敗，請稍後再試" };
+
+  if (updated.lineUserId) {
+    await pushLineMessages(updated.lineUserId, [buildGuestRescheduleConfirmMessage(updated)]);
+  }
+  if (agentId) {
+    await pushLineMessages(agentId, [
+      { type: "text", text: `已送出新時間「${proposedWhen}」給客人確認。` },
+    ]);
+  }
+  return { ok: true, case: updated };
+}
+
+/** 業務在 agent_proposing 狀態下回傳新時間文字（備援） */
 export async function handleAgentProposeText(input: {
   replyToken: string;
   agentLineUserId: string;
@@ -305,30 +356,17 @@ export async function handleAgentProposeText(input: {
   const caseRecord = await findAgentProposingCase(input.agentLineUserId);
   if (!caseRecord) return false;
 
-  const proposedWhen = input.text.trim();
-  if (!proposedWhen || proposedWhen.length > 120) {
-    await replyLineMessages(input.replyToken, [
-      { type: "text", text: "請回覆較短的時間描述，例如「11/5 下午 14:00」。" },
-    ]);
-    return true;
-  }
-
-  const updated = await updateLineRentalCase(caseRecord.id, {
-    status: "reschedule_sent",
-    proposedWhen,
-    summaryText: `業務提案改約為「${proposedWhen}」（原希望：${caseRecord.requestedWhen}），待客人確認。`,
+  const result = await submitAgentProposedWhen({
+    caseId: caseRecord.id,
+    proposedWhen: input.text,
+    agentLineUserId: input.agentLineUserId,
   });
-  if (!updated) {
-    await replyLineMessages(input.replyToken, [{ type: "text", text: "更新失敗，請稍後再試。" }]);
+  if (!result.ok) {
+    await replyLineMessages(input.replyToken, [{ type: "text", text: result.error }]);
     return true;
   }
-
   await replyLineMessages(input.replyToken, [
-    { type: "text", text: `已送出新時間「${proposedWhen}」給客人確認。` },
+    { type: "text", text: `已送出新時間「${result.case.proposedWhen}」給客人確認。` },
   ]);
-
-  if (updated.lineUserId) {
-    await pushLineMessages(updated.lineUserId, [buildGuestRescheduleConfirmMessage(updated)]);
-  }
   return true;
 }
