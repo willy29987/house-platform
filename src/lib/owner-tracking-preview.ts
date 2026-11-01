@@ -1,6 +1,7 @@
 /** 屋主追蹤預覽版：型別、狀態選項、localStorage（正式版可改 Postgres）。 */
 
-import { formatOwnerCaseAddress, parseTaiwanAddress } from "@/lib/taiwan-address";
+import { extract591ListingId } from "@/lib/listing-591-id";
+import { parseTaiwanAddress } from "@/lib/taiwan-address";
 import { normalizeNextContactDate } from "@/lib/owner-tracking-next-contact";
 
 export { formatOwnerCaseAddress } from "@/lib/taiwan-address";
@@ -81,11 +82,23 @@ export type OwnerCasePreview = {
   nextContactUpdatedAt: number;
   /** 591 下架等情況下預計可再開發日（YYYY-MM-DD） */
   expectedReleaseDate: string;
+  /** 本站租賃物件 id（從追蹤帶入上架後寫回；空＝未連） */
+  linkedListingId: string;
+  /** 寫回本站物件的時間（ISO） */
+  linkedListingAt: string;
+  /** 手動標記：已在 591 上架（與網址／自動檢查獨立，僅備忘） */
+  marked591Posted: boolean;
 };
 
 export type OwnerCaseInput = Omit<
   OwnerCasePreview,
-  "id" | "assignee" | "createdAt" | "nextContactUpdatedAt"
+  | "id"
+  | "assignee"
+  | "createdAt"
+  | "nextContactUpdatedAt"
+  | "linkedListingId"
+  | "linkedListingAt"
+  | "marked591Posted"
 >;
 
 export type OwnerFollowUpPreview = {
@@ -153,6 +166,9 @@ export function normalizeCase(raw: Record<string, unknown>, fallbackAssignee = "
       return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
     })(),
     expectedReleaseDate: normalizeNextContactDate(String(raw.expectedReleaseDate ?? "")),
+    linkedListingId: String(raw.linkedListingId ?? "").trim(),
+    linkedListingAt: String(raw.linkedListingAt ?? "").trim(),
+    marked591Posted: Boolean(raw.marked591Posted),
   };
 }
 
@@ -458,6 +474,9 @@ export function appendOwnerCase(
     ...trimmed,
     nextContactDate: nextYmd,
     nextContactUpdatedAt: nextYmd ? Date.now() : 0,
+    linkedListingId: "",
+    linkedListingAt: "",
+    marked591Posted: false,
   };
 
   const initialFollowUp: OwnerFollowUpPreview = {
@@ -553,6 +572,61 @@ export function patchOwnerCaseNextContact(
         : c,
     ),
   };
+}
+
+/** 從追蹤帶入本站上架成功後，把 listingId 寫回案件 */
+export function patchOwnerCaseLinkedListing(
+  store: OwnerTrackingStore,
+  caseId: string,
+  listingId: string,
+  linkedAt = new Date().toISOString(),
+): OwnerTrackingStore {
+  const id = listingId.trim();
+  if (!id) return store;
+  return {
+    ...store,
+    cases: store.cases.map((c) =>
+      c.id === caseId
+        ? { ...c, linkedListingId: id, linkedListingAt: linkedAt }
+        : c,
+    ),
+  };
+}
+
+/** 手動標記／取消「已上591」備忘 */
+export function patchOwnerCaseMarked591Posted(
+  store: OwnerTrackingStore,
+  caseId: string,
+  marked: boolean,
+): OwnerTrackingStore {
+  return {
+    ...store,
+    cases: store.cases.map((c) =>
+      c.id === caseId ? { ...c, marked591Posted: marked } : c,
+    ),
+  };
+}
+
+/**
+ * 以 591 編號對照本站已上架物件，僅填補尚未連結的案件（不覆蓋既有 linkedListingId）。
+ * @param by591Id map of source591Id → listingId
+ */
+export function backfillOwnerCaseLinkedListingsFrom591(
+  store: OwnerTrackingStore,
+  by591Id: Record<string, string>,
+  linkedAt = new Date().toISOString(),
+): { store: OwnerTrackingStore; changed: number } {
+  let changed = 0;
+  const cases = store.cases.map((c) => {
+    if (c.linkedListingId.trim()) return c;
+    const rid = extract591ListingId(c.listingUrl);
+    if (!rid) return c;
+    const listingId = by591Id[rid]?.trim();
+    if (!listingId) return c;
+    changed += 1;
+    return { ...c, linkedListingId: listingId, linkedListingAt: linkedAt };
+  });
+  return changed > 0 ? { store: { ...store, cases }, changed } : { store, changed: 0 };
 }
 
 function trimOwnerCaseInput(input: OwnerCaseInput): OwnerCaseInput {

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  backfillOwnerCaseLinkedListingsFrom591,
   formatOwnerCaseAddress,
   getOwnerTrackingLocalPersistedAt,
   loadOwnerTrackingStoreLocal,
@@ -11,6 +12,7 @@ import {
   OWNER_TRACKING_STORAGE_KEY,
   persistOwnerTrackingStoreLocal,
   OWNER_TRACKING_STATUS_OPTIONS,
+  patchOwnerCaseMarked591Posted,
   statusBadgeClass,
   deleteOwnerCase,
   emptyOwnerTrackingStore,
@@ -31,6 +33,7 @@ import {
   cancelScheduledPushCloudPayload,
   invalidateOwnerTrackingHydrateCache,
   pushCloudPayload,
+  pushOwnerTrackingStoreNow,
   refreshOwnerTrackingFromCloud,
 } from "@/lib/admin-cloud-sync-client";
 import { OwnerTrackingUpcomingRelease } from "@/components/owner-tracking-upcoming-release";
@@ -221,6 +224,34 @@ function OwnerTrackingListInner({
         setHydrated(true);
       });
   }, []);
+
+  /** 歷史案件：以 591 編號對照本站已上架物件，僅補空的 linkedListingId */
+  useEffect(() => {
+    if (!hydrated) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/admin/owner-tracking/site-listing-links", {
+          credentials: "same-origin",
+        });
+        if (!res.ok || cancelled) return;
+        const json = (await res.json()) as { ok?: boolean; by591Id?: Record<string, string> };
+        if (!json.ok || !json.by591Id || cancelled) return;
+        const local = loadOwnerTrackingStoreLocal();
+        const { store: next, changed } = backfillOwnerCaseLinkedListingsFrom591(local, json.by591Id);
+        if (cancelled || changed === 0) return;
+        persistOwnerTrackingStoreLocal(next);
+        invalidateOwnerTrackingHydrateCache();
+        setStore(next);
+        await pushOwnerTrackingStoreNow(next);
+      } catch (e) {
+        console.warn("[owner-tracking] site listing backfill failed", e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrated]);
 
   useEffect(() => {
     const local = loadOwnerTrackingListingChecksLocal();
@@ -450,6 +481,19 @@ function OwnerTrackingListInner({
     } finally {
       setDeletingId(null);
     }
+  }
+
+  function handleToggleMarked591Posted(caseId: string, marked: boolean) {
+    cancelScheduledPushCloudPayload(ADMIN_CLOUD_DATA_KEYS.ownerTracking);
+    const next = patchOwnerCaseMarked591Posted(store, caseId, marked);
+    persistOwnerTrackingStoreLocal(next);
+    setStore(next);
+    invalidateOwnerTrackingHydrateCache();
+    void pushOwnerTrackingStoreNow(next).catch(() => {
+      void refreshOwnerTrackingFromCloud(loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreLocal).then(
+        setStore,
+      );
+    });
   }
 
   async function onExportExcel() {
@@ -790,6 +834,7 @@ function OwnerTrackingListInner({
                 upcomingRelease={isOwnerCaseUpcomingRelease(store, c)}
                 staffLabels={staffLabels}
                 onDelete={() => handleDeleteCase(c.id)}
+                onToggleMarked591Posted={handleToggleMarked591Posted}
               />
             ))
           )}
@@ -957,43 +1002,39 @@ function Listing591StatusBadge({
   checking: boolean;
 }) {
   if (!is591ListingUrl(listingUrl)) {
-    return (
-      <span className="inline-block max-w-full truncate text-[11px] text-zinc-400 sm:text-xs">
-        非591
-      </span>
-    );
+    return null;
   }
+  const chip =
+    "inline-block shrink-0 whitespace-nowrap rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none sm:text-[11px]";
   if (checking) {
-    return (
-      <span className="inline-block text-[11px] font-medium text-zinc-500 sm:text-xs">檢查中…</span>
-    );
+    return <span className={`${chip} text-zinc-500`}>591檢查中</span>;
   }
   const category = resolveListing591ListCategory(listingUrl, checkEntry);
   if (category === "live") {
     return (
       <span
-        className="inline-block rounded-full bg-emerald-50 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-800 sm:text-xs"
+        className={`${chip} bg-emerald-50 text-emerald-800`}
         title={
           checkEntry?.checkedAt
             ? `上次檢查：${formatListWhen(checkEntry.checkedAt)}`
             : undefined
         }
       >
-        在線
+        591在線
       </span>
     );
   }
   if (category === "removed") {
     return (
       <span
-        className="inline-block rounded-full bg-rose-50 px-1.5 py-0.5 text-[11px] font-semibold text-rose-800 sm:text-xs"
+        className={`${chip} bg-rose-50 text-rose-800`}
         title={
           checkEntry?.checkedAt
             ? `上次檢查：${formatListWhen(checkEntry.checkedAt)}`
             : undefined
         }
       >
-        已下架
+        591已下架
       </span>
     );
   }
@@ -1007,20 +1048,56 @@ function Listing591StatusBadge({
         : "591 可能阻擋自動檢查";
     return (
       <span
-        className="inline-block max-w-full truncate rounded-full bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-900 sm:text-xs"
+        className={`${chip} bg-amber-50 text-amber-900`}
         title={`${detail} · 上次：${formatListWhen(checkEntry.checkedAt)}`}
       >
-        無法確認
+        591無法確認
       </span>
     );
   }
   return (
-    <span
-      className="inline-block max-w-full truncate text-[11px] text-zinc-400 sm:text-xs"
-      title="尚未檢查或超過 24 小時"
-    >
-      未檢查
+    <span className={`${chip} text-zinc-400`} title="尚未檢查或超過 24 小時">
+      591未檢查
     </span>
+  );
+}
+
+function SiteListingBadge({ linkedListingId }: { linkedListingId: string }) {
+  const id = linkedListingId.trim();
+  if (!id) return null;
+  return (
+    <Link
+      href={`/admin/listings/${encodeURIComponent(id)}/edit`}
+      className="pointer-events-auto relative z-20 inline-block shrink-0 whitespace-nowrap rounded-full bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-sky-900 hover:bg-sky-100 sm:text-[11px]"
+      title="本站已上網站，點擊前往編輯"
+      onClick={(e) => e.stopPropagation()}
+    >
+      已上網站
+    </Link>
+  );
+}
+
+function Marked591PostedBadge({
+  marked,
+  onToggle,
+}: {
+  marked: boolean;
+  onToggle: () => void;
+}) {
+  if (!marked) return null;
+  return (
+    <button
+      type="button"
+      className="pointer-events-auto relative z-20 inline-block shrink-0 whitespace-nowrap rounded-full bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-violet-900 hover:bg-violet-100 sm:text-[11px]"
+      title="手動標記：已上591（再點一下可取消）"
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onToggle();
+      }}
+    >
+      已上591
+    </button>
   );
 }
 
@@ -1078,6 +1155,7 @@ function CaseRow({
   upcomingRelease,
   staffLabels = {},
   onDelete,
+  onToggleMarked591Posted,
 }: {
   item: OwnerCasePreview;
   last: OwnerFollowUpPreview | null;
@@ -1090,6 +1168,7 @@ function CaseRow({
   upcomingRelease?: boolean;
   staffLabels?: Record<string, string>;
   onDelete: () => void;
+  onToggleMarked591Posted: (caseId: string, marked: boolean) => void;
 }) {
   const caseHref = appendOwnerTrackingListContext(`/admin/owner-tracking/${item.id}`, listQuery);
   const editHref = appendOwnerTrackingListContext(
@@ -1111,12 +1190,23 @@ function CaseRow({
         aria-label={`查看案件：${item.address || item.ownerName}`}
       />
       <div className={`pointer-events-none relative z-10 px-4 py-3 text-base ${ownerTrackingListRowGrid(isSuperAdmin)}`}>
-        <p
-          className={`${LIST_CELL} truncate text-base font-medium leading-snug text-zinc-900`}
-          title={formatOwnerCaseAddress(item)}
-        >
-          {formatOwnerCaseAddress(item) || "—"}
-        </p>
+        <div className={`${LIST_CELL} min-w-0 overflow-hidden`}>
+          <div className="flex min-h-[2.5rem] w-full min-w-0 flex-col justify-center gap-0.5 overflow-hidden">
+            <p
+              className="min-w-0 truncate text-base font-medium leading-snug text-zinc-900"
+              title={formatOwnerCaseAddress(item)}
+            >
+              {formatOwnerCaseAddress(item) || "—"}
+            </p>
+            <div className="flex min-w-0 flex-wrap items-center gap-1">
+              <SiteListingBadge linkedListingId={item.linkedListingId} />
+              <Marked591PostedBadge
+                marked={Boolean(item.marked591Posted)}
+                onToggle={() => onToggleMarked591Posted(item.id, !item.marked591Posted)}
+              />
+            </div>
+          </div>
+        </div>
         <p className={`${LIST_CELL} truncate text-base font-semibold leading-snug text-zinc-800`}>
           {listCommunityCell(item)}
         </p>
