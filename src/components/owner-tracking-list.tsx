@@ -225,7 +225,7 @@ function OwnerTrackingListInner({
       });
   }, []);
 
-  /** 歷史案件：以 591 編號對照本站已上架物件，僅補空的 linkedListingId */
+  /** 歷史案件：以本站已上架物件（591／電話+地址／電話+社區）回填 linkedListingId */
   useEffect(() => {
     if (!hydrated) return;
     let cancelled = false;
@@ -235,10 +235,19 @@ function OwnerTrackingListInner({
           credentials: "same-origin",
         });
         if (!res.ok || cancelled) return;
-        const json = (await res.json()) as { ok?: boolean; by591Id?: Record<string, string> };
-        if (!json.ok || !json.by591Id || cancelled) return;
+        const json = (await res.json()) as {
+          ok?: boolean;
+          by591Id?: Record<string, string>;
+          byPhoneAddress?: Record<string, string>;
+          byPhoneCommunity?: Record<string, string>;
+        };
+        if (!json.ok || cancelled) return;
         const local = loadOwnerTrackingStoreLocal();
-        const { store: next, changed } = backfillOwnerCaseLinkedListingsFrom591(local, json.by591Id);
+        const { store: next, changed } = backfillOwnerCaseLinkedListingsFrom591(local, {
+          by591Id: json.by591Id ?? {},
+          byPhoneAddress: json.byPhoneAddress ?? {},
+          byPhoneCommunity: json.byPhoneCommunity ?? {},
+        });
         if (cancelled || changed === 0) return;
         persistOwnerTrackingStoreLocal(next);
         invalidateOwnerTrackingHydrateCache();

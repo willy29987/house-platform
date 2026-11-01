@@ -94,6 +94,8 @@ export const listingInputSchema = z.object({
   householdsPerFloor: optionalString,
   roomNumber: optionalString,
   isPublished: z.boolean().optional(),
+  /** 從屋主追蹤帶入上架時帶入；建立時強制已刊登（不落庫） */
+  fromOwnerCaseId: optionalString,
 }).refine(
   (data) => data.propertyType !== PropertyType.SUITE || Boolean(data.roomNumber),
   { message: "分租套房需填寫房間號碼", path: ["roomNumber"] },

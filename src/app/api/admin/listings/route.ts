@@ -40,6 +40,12 @@ export async function POST(request: Request) {
 
   const data = parsed.data;
   const source591 = resolve591IdFromUrlOrId(data.source591Url || data.source591Id);
+  const fromOwnerCase = Boolean(data.fromOwnerCaseId?.trim());
+  const isPublished = fromOwnerCase
+    ? true
+    : current.role === "SUPER_ADMIN"
+      ? (data.isPublished ?? true)
+      : data.isPublished === true;
   try {
     const listing = await prisma.listing.create({
       data: {
@@ -107,10 +113,7 @@ export async function POST(request: Request) {
         ownerIdCardUrl: data.ownerIdCardUrl ?? null,
         source591Id: source591.id,
         source591Url: source591.url,
-        isPublished:
-          current.role === "SUPER_ADMIN"
-            ? (data.isPublished ?? true)
-            : data.isPublished === true,
+        isPublished,
       },
       select: { id: true },
     });
