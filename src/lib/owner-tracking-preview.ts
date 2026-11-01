@@ -607,21 +607,62 @@ export function patchOwnerCaseMarked591Posted(
   };
 }
 
+function digitsPhone(value: string | null | undefined): string {
+  return String(value ?? "").replace(/\D/g, "");
+}
+
+function compactText(value: string | null | undefined): string {
+  return String(value ?? "").replace(/\s+/g, "").toLowerCase();
+}
+
+export type OwnerCaseSiteListingMaps = {
+  by591Id?: Record<string, string>;
+  byPhoneAddress?: Record<string, string>;
+  byPhoneCommunity?: Record<string, string>;
+};
+
 /**
- * 以 591 編號對照本站已上架物件，僅填補尚未連結的案件（不覆蓋既有 linkedListingId）。
- * @param by591Id map of source591Id → listingId
+ * 以本站已上架物件對照案件（591／電話+地址／電話+社區），僅填補尚未連結的案件。
  */
 export function backfillOwnerCaseLinkedListingsFrom591(
   store: OwnerTrackingStore,
-  by591Id: Record<string, string>,
+  maps: Record<string, string> | OwnerCaseSiteListingMaps,
   linkedAt = new Date().toISOString(),
 ): { store: OwnerTrackingStore; changed: number } {
+  const isMapsObject =
+    maps != null &&
+    typeof maps === "object" &&
+    ("by591Id" in maps || "byPhoneAddress" in maps || "byPhoneCommunity" in maps);
+  const by591Id: Record<string, string> = isMapsObject
+    ? ((maps as OwnerCaseSiteListingMaps).by591Id ?? {})
+    : (maps as Record<string, string>);
+  const byPhoneAddress: Record<string, string> = isMapsObject
+    ? ((maps as OwnerCaseSiteListingMaps).byPhoneAddress ?? {})
+    : {};
+  const byPhoneCommunity: Record<string, string> = isMapsObject
+    ? ((maps as OwnerCaseSiteListingMaps).byPhoneCommunity ?? {})
+    : {};
+
   let changed = 0;
   const cases = store.cases.map((c) => {
     if (c.linkedListingId.trim()) return c;
+
     const rid = extract591ListingId(c.listingUrl);
-    if (!rid) return c;
-    const listingId = by591Id[rid]?.trim();
+    let listingId = (rid && by591Id[rid]?.trim()) || "";
+
+    const phone = digitsPhone(c.phone);
+    if (!listingId && phone.length >= 8) {
+      const fullAddr = `${compactText(c.city)}${compactText(c.district)}${compactText(c.address)}`;
+      listingId =
+        byPhoneAddress[`${phone}|${fullAddr}`]?.trim() ||
+        byPhoneAddress[`${phone}|${compactText(c.address)}`]?.trim() ||
+        "";
+      if (!listingId) {
+        const community = compactText(c.community);
+        if (community) listingId = byPhoneCommunity[`${phone}|${community}`]?.trim() || "";
+      }
+    }
+
     if (!listingId) return c;
     changed += 1;
     return { ...c, linkedListingId: listingId, linkedListingAt: linkedAt };

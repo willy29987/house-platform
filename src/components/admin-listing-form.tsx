@@ -415,7 +415,11 @@ export function AdminListingForm({
         : null,
       householdsPerFloor: formData.householdsPerFloor || null,
       roomNumber: formData.propertyType === "SUITE" ? formData.roomNumber.trim() || null : null,
-      isPublished: formData.isPublished,
+      // 屋主追蹤帶入：直接上架，不走草稿
+      isPublished: fromOwnerCaseId?.trim() ? true : formData.isPublished,
+      ...(mode === "create" && fromOwnerCaseId?.trim()
+        ? { fromOwnerCaseId: fromOwnerCaseId.trim() }
+        : {}),
     };
 
     const response = await fetch(submitUrl, {
@@ -459,7 +463,8 @@ export function AdminListingForm({
     router.refresh();
     setTimeout(() => {
       const typeParam = isRent ? "rent" : "sale";
-      const qs = formData.isPublished ? "mine=1" : "mine=1&off=1";
+      const published = Boolean(payload.isPublished);
+      const qs = published ? "mine=1" : "mine=1&off=1";
       router.push(`/admin?type=${typeParam}&${qs}`);
     }, 500);
   }
