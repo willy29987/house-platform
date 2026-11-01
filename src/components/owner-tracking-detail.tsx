@@ -14,6 +14,7 @@ import {
   canViewOwnerTrackingCase,
   deleteOwnerFollowUp,
   patchOwnerCaseNextContact,
+  patchOwnerCaseMarked591Posted,
   saveOwnerTrackingStore,
   statusBadgeClass,
   lastFollowUp,
@@ -321,7 +322,42 @@ export function OwnerTrackingDetail({
           >
             帶入租賃上架
           </Link>
-          <span className="text-xs text-zinc-500">試做：預填刊登表單，仍須補照片與確認欄位</span>
+          <button
+            type="button"
+            className={`inline-flex items-center rounded-lg border px-4 py-2 text-sm font-semibold transition ${
+              ownerCase.marked591Posted
+                ? "border-violet-300 bg-violet-50 text-violet-900 hover:bg-violet-100"
+                : "border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-50"
+            }`}
+            onClick={() => {
+              const next = patchOwnerCaseMarked591Posted(
+                loadOwnerTrackingStoreLocal(),
+                caseId,
+                !ownerCase.marked591Posted,
+              );
+              persistLocalOnly(next);
+              void pushOwnerTrackingStoreNow(next)
+                .then(() => {
+                  setFlash(
+                    next.cases.find((c) => c.id === caseId)?.marked591Posted
+                      ? "已標記為已上591"
+                      : "已取消已上591標記",
+                  );
+                  window.setTimeout(() => setFlash(null), 2800);
+                })
+                .catch(() => {
+                  setFlash("標記已存本機；雲端同步失敗，請稍後重新整理");
+                  window.setTimeout(() => setFlash(null), 4000);
+                });
+            }}
+          >
+            {ownerCase.marked591Posted ? "已上591 ✓" : "標記已上591"}
+          </button>
+          <span className="text-xs text-zinc-500">
+            {ownerCase.marked591Posted
+              ? "總覽地址下會顯示「已上591」小標（再點可取消）"
+              : "獨立上591、無本站物件時可手動標記"}
+          </span>
         </div>
       </div>
 

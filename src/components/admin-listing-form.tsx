@@ -84,6 +84,8 @@ type AdminListingFormProps = {
   submitUrl: string;
   initialData: AdminListingFormData;
   lockedListingType?: "RENT" | "SALE";
+  /** 從屋主追蹤帶入上架時帶入；建立成功後寫回案件 linkedListingId */
+  fromOwnerCaseId?: string;
 };
 
 const PARKING_CUSTOM = "__CUSTOM__";
@@ -185,7 +187,13 @@ function choiceToValue(ui: ChoiceUi): string | null {
   return ui.select;
 }
 
-export function AdminListingForm({ mode, submitUrl, initialData, lockedListingType }: AdminListingFormProps) {
+export function AdminListingForm({
+  mode,
+  submitUrl,
+  initialData,
+  lockedListingType,
+  fromOwnerCaseId,
+}: AdminListingFormProps) {
   const [formData, setFormData] = useState(initialData);
   const [status, setStatus] = useState("");
   const [mediaStatus, setMediaStatus] = useState("");
@@ -419,11 +427,31 @@ export function AdminListingForm({ mode, submitUrl, initialData, lockedListingTy
     const result = (await response.json().catch(() => ({ ok: false, message: "伺服器回應異常" }))) as {
       ok: boolean;
       message?: string;
+      id?: string;
     };
     if (!response.ok || !result.ok) {
       setStatus(result.message ?? "儲存失敗，請稍後再試。");
       setLoading(false);
       return;
+    }
+
+    if (mode === "create" && fromOwnerCaseId?.trim() && result.id) {
+      try {
+        const { loadOwnerTrackingStoreLocal, patchOwnerCaseLinkedListing, persistOwnerTrackingStoreLocal } =
+          await import("@/lib/owner-tracking-preview");
+        const { invalidateOwnerTrackingHydrateCache, pushOwnerTrackingStoreNow } =
+          await import("@/lib/admin-cloud-sync-client");
+        const next = patchOwnerCaseLinkedListing(
+          loadOwnerTrackingStoreLocal(),
+          fromOwnerCaseId.trim(),
+          result.id,
+        );
+        persistOwnerTrackingStoreLocal(next);
+        invalidateOwnerTrackingHydrateCache();
+        await pushOwnerTrackingStoreNow(next);
+      } catch (e) {
+        console.warn("[admin-listing-form] 寫回屋主追蹤 linkedListingId 失敗", e);
+      }
     }
 
     setStatus(mode === "create" ? "建立成功！" : "更新成功！");

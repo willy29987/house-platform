@@ -108,6 +108,7 @@ export function AdminNewListingClient({
         submitUrl="/api/admin/listings"
         initialData={initialData}
         lockedListingType={listingType}
+        fromOwnerCaseId={fromOwnerCaseId}
       />
     </>
   );
