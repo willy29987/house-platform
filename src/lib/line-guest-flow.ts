@@ -341,7 +341,11 @@ async function finishCase(session: GuestSession) {
 }
 
 function openFullLiffFormMessages(): LineMessage[] {
-  const uri = buildLiffRentAssistantUrl();
+  // 優先用公開網址（本機隧道／正式站），避免官方 LIFF endpoint 還卡在舊對話版
+  const base = buildPublicBaseUrl();
+  const uri = base
+    ? `${base.replace(/\/$/, "")}/liff/rent-assistant`
+    : buildLiffRentAssistantUrl();
   return [
     { type: "text", text: WELCOME },
     {
@@ -350,7 +354,7 @@ function openFullLiffFormMessages(): LineMessage[] {
       template: {
         type: "buttons",
         title: "開始找房",
-        text: "請在表單一次填完條件、基本資料，並選物件與看屋時間。",
+        text: "一頁式填寫條件、基本資料，並選物件與看屋時間。",
         actions: [{ type: "uri", label: "打開找房表單", uri }],
       },
     },
