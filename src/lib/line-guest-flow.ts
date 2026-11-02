@@ -2,7 +2,6 @@
 
 import { ListingType } from "@prisma/client";
 import {
-  createGuestSession,
   getGuestSessionById,
   getGuestSessionByUserId,
   saveGuestSession,
@@ -21,6 +20,7 @@ import {
 } from "@/lib/line-rental-assistant";
 import { LINE_LIFF_RENT_ASSISTANT_ID } from "@/lib/line-liff-id";
 import {
+  buildLiffRentAssistantUrl,
   buildPublicBaseUrl,
   pushLineMessages,
   replyLineMessages,
@@ -340,20 +340,29 @@ async function finishCase(session: GuestSession) {
   };
 }
 
+function openFullLiffFormMessages(): LineMessage[] {
+  const uri = buildLiffRentAssistantUrl();
+  return [
+    { type: "text", text: WELCOME },
+    {
+      type: "template",
+      altText: "開始找房表單",
+      template: {
+        type: "buttons",
+        title: "開始找房",
+        text: "請在表單一次填完條件、基本資料，並選物件與看屋時間。",
+        actions: [{ type: "uri", label: "打開找房表單", uri }],
+      },
+    },
+  ];
+}
+
 export async function startGuestFlow(input: {
   replyToken: string;
   lineUserId: string;
   displayName?: string;
 }) {
-  const session = await createGuestSession({
-    lineUserId: input.lineUserId,
-    displayName: input.displayName,
-  });
-  const listings = await loadRentListings();
-  await replyLineMessages(input.replyToken, [
-    { type: "text", text: WELCOME },
-    ...promptForStep(session, listings),
-  ]);
+  await replyLineMessages(input.replyToken, openFullLiffFormMessages());
 }
 
 export async function handleGuestText(input: {

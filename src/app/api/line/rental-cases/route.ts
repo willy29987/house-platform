@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentAdmin } from "@/lib/admin-auth";
 import { appendLineRentalCase, readLineRentalCases } from "@/lib/line-rental-cases";
-import { pushLineTextMessage } from "@/lib/line-messaging";
+import { pushLineMessages } from "@/lib/line-messaging";
 import { getViewingAgentUserIds, notifyAgentsOfNewViewing } from "@/lib/line-viewing-agent";
 
 export const dynamic = "force-dynamic";
@@ -74,11 +74,34 @@ export async function POST(request: Request) {
       summaryText,
     });
 
+    const listingLines = created.picked.map((item, index) => {
+      const price =
+        item.price > 0 ? `（${item.price.toLocaleString("zh-TW")} 元/月）` : "";
+      return `${index + 1}. ${item.title}${price}`;
+    });
+    const confirmText = [
+      "已收到你的找房資料，整理如下：",
+      "",
+      `看屋時間：${created.requestedWhen}`,
+      "",
+      "想看的物件：",
+      ...listingLines,
+      "",
+      `條件：${created.criteriaText}`,
+      `電話：${created.phone}`,
+      "",
+      "時間需同事確認後會再回覆你。",
+    ].join("\n");
+
+    let pushSent = false;
     if (created.lineUserId) {
-      await pushLineTextMessage(
-        created.lineUserId,
-        `${created.summaryText}\n\n條件：${created.criteriaText}\n電話：${created.phone}`,
-      );
+      const pushed = await pushLineMessages(created.lineUserId, [
+        { type: "text", text: confirmText },
+      ]);
+      pushSent = pushed.sent;
+      if (!pushed.sent) {
+        console.warn("[line/rental-cases] guest confirm push failed", pushed);
+      }
     }
 
     const notify = await notifyAgentsOfNewViewing(created);
@@ -87,6 +110,8 @@ export async function POST(request: Request) {
       id: created.id,
       case: created,
       agentsNotified: notify.notified,
+      pushSent,
+      confirmText,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "寫入失敗";
