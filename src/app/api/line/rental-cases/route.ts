@@ -110,14 +110,28 @@ export async function POST(request: Request) {
       ].join("\n");
 
     let pushSent = false;
-    if (created.lineUserId && !skipGuestPush) {
+    let pushReason: string | null = null;
+    const pushText =
+      confirmText.length > 4900 ? `${confirmText.slice(0, 4890)}…` : confirmText;
+
+    if (skipGuestPush) {
+      pushReason = "skipped_client_sent";
+    } else if (!created.lineUserId) {
+      pushReason = "missing_line_user_id";
+      console.warn("[line/rental-cases] skip guest push: missing lineUserId");
+    } else {
       // force：表單確認必須推到對話，不依賴 LINE_ASSISTANT_LIVE
       const pushed = await pushLineMessages(
         created.lineUserId,
-        [{ type: "text", text: confirmText }],
+        [{ type: "text", text: pushText }],
         { force: true },
       );
       pushSent = pushed.sent;
+      pushReason = pushed.sent
+        ? "ok"
+        : "reason" in pushed
+          ? String(pushed.reason)
+          : "api_error";
       if (!pushed.sent) {
         console.warn("[line/rental-cases] guest confirm push failed", pushed);
       }
@@ -130,6 +144,8 @@ export async function POST(request: Request) {
       case: created,
       agentsNotified: notify.notified,
       pushSent,
+      pushReason,
+      hasLineUserId: Boolean(created.lineUserId),
       confirmText,
     });
   } catch (error) {

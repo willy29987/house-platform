@@ -23,7 +23,18 @@ export function LineLiffRentAssistant({
 
   useEffect(() => {
     setHydrated(true);
-  }, []);
+    try {
+      const fromUrl = new URLSearchParams(window.location.search).get("uid")?.trim();
+      const fromStore = window.sessionStorage.getItem("line_liff_uid")?.trim();
+      const uid = fromUrl || fromStore || fallbackLineUserId;
+      if (uid) {
+        window.sessionStorage.setItem("line_liff_uid", uid);
+        setLineUserId((current) => current || uid);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [fallbackLineUserId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -33,30 +44,39 @@ export function LineLiffRentAssistant({
       const liff = await loadLiffClient();
       if (!liff || cancelled) return;
       try {
+        // 不硬砍 init：超時仍繼續讀 context，否則 lineUserId 會是空的、後端推播失敗
         await Promise.race([
           liff.init({ liffId }),
-          new Promise<never>((_, reject) => {
-            window.setTimeout(() => reject(new Error("timeout")), 2500);
+          new Promise<void>((resolve) => {
+            window.setTimeout(() => resolve(), 8000);
           }),
         ]);
-        if (cancelled) return;
-        if (liff.isLoggedIn()) {
-          try {
-            const profile = await liff.getProfile();
-            if (!cancelled) {
-              setLineUserId(profile.userId);
-              setDisplayName(profile.displayName);
-            }
-          } catch {
-            const ctx = liff.getContext();
-            if (!cancelled && ctx?.userId) setLineUserId(ctx.userId);
-          }
-        } else {
-          const ctx = liff.getContext();
-          if (!cancelled && ctx?.userId) setLineUserId(ctx.userId);
+      } catch {
+        /* 可能已 init 或暫時失敗 */
+      }
+      if (cancelled) return;
+
+      try {
+        const ctx = liff.getContext();
+        if (ctx?.userId) {
+          window.sessionStorage.setItem("line_liff_uid", ctx.userId);
+          setLineUserId(ctx.userId);
         }
       } catch {
-        /* 表單不依賴 LIFF 身分 */
+        /* ignore */
+      }
+
+      if (liff.isLoggedIn()) {
+        try {
+          const profile = await liff.getProfile();
+          if (!cancelled) {
+            setLineUserId(profile.userId);
+            setDisplayName(profile.displayName);
+            window.sessionStorage.setItem("line_liff_uid", profile.userId);
+          }
+        } catch {
+          /* ignore */
+        }
       }
     }
 

@@ -507,9 +507,21 @@ export function LineLiffRentForm({
     setSubmitting(true);
     setError("");
     try {
-      // 1) 盡量用客戶端 sendMessages；2) 失敗則靠後端 force push
+      // 1) 客戶端 sendMessages 2) 後端 force push（有 userId 就一定試）
       let clientSent = false;
+      let clientSendError = "";
       let resolvedUserId = lineUserId;
+      try {
+        const fromUrl = new URLSearchParams(window.location.search).get("uid")?.trim();
+        const fromStore = window.sessionStorage.getItem("line_liff_uid")?.trim();
+        resolvedUserId = resolvedUserId || fromUrl || fromStore || null;
+      } catch {
+        /* ignore */
+      }
+
+      const outboundText =
+        chatText.length > 4900 ? `${chatText.slice(0, 4890)}…` : chatText;
+
       let liff: Awaited<ReturnType<typeof loadLiffClient>> = null;
       if (liffId) {
         try {
@@ -520,29 +532,44 @@ export function LineLiffRentForm({
             } catch {
               /* 可能已 init */
             }
-            if (!resolvedUserId) {
+            try {
+              const ctx = liff.getContext();
+              if (ctx?.userId) resolvedUserId = ctx.userId;
+            } catch {
+              /* ignore */
+            }
+            if (!resolvedUserId && liff.isLoggedIn()) {
               try {
-                const ctx = liff.getContext();
-                if (ctx?.userId) resolvedUserId = ctx.userId;
+                const profile = await liff.getProfile();
+                resolvedUserId = profile.userId;
               } catch {
                 /* ignore */
               }
-              if (!resolvedUserId && liff.isLoggedIn()) {
-                try {
-                  const profile = await liff.getProfile();
-                  resolvedUserId = profile.userId;
-                } catch {
-                  /* ignore */
-                }
+            }
+            if (resolvedUserId) {
+              try {
+                window.sessionStorage.setItem("line_liff_uid", resolvedUserId);
+              } catch {
+                /* ignore */
               }
             }
             if (liff.isInClient()) {
-              await liff.sendMessages([{ type: "text", text: chatText }]);
-              clientSent = true;
+              try {
+                await liff.sendMessages([{ type: "text", text: outboundText }]);
+                clientSent = true;
+              } catch (sendError) {
+                clientSendError =
+                  sendError instanceof Error ? sendError.message : "sendMessages failed";
+                console.warn("[liff-rent-form] sendMessages failed", sendError);
+              }
+            } else {
+              clientSendError = "not_in_line_client";
             }
           }
-        } catch (sendError) {
-          console.warn("[liff-rent-form] sendMessages failed", sendError);
+        } catch (bootError) {
+          clientSendError =
+            bootError instanceof Error ? bootError.message : "liff boot failed";
+          console.warn("[liff-rent-form] liff boot failed", bootError);
         }
       }
 
@@ -567,8 +594,7 @@ export function LineLiffRentForm({
           ].join(" · "),
           picked,
           requestedWhen: when,
-          summaryText: chatText,
-          // 只有確定客戶端已送出才略過 push，避免對話空白
+          summaryText: outboundText,
           skipGuestPush: clientSent,
         }),
       });
@@ -576,6 +602,8 @@ export function LineLiffRentForm({
         id?: string;
         error?: string;
         pushSent?: boolean;
+        pushReason?: string | null;
+        hasLineUserId?: boolean;
         confirmText?: string;
       } | null;
       if (!response.ok || !data) {
@@ -584,18 +612,32 @@ export function LineLiffRentForm({
 
       if (!clientSent && liff?.isInClient()) {
         try {
+          const retryText = data.confirmText || outboundText;
           await liff.sendMessages([
-            { type: "text", text: data.confirmText || chatText },
+            {
+              type: "text",
+              text: retryText.length > 4900 ? `${retryText.slice(0, 4890)}…` : retryText,
+            },
           ]);
           clientSent = true;
-        } catch {
-          /* ignore */
+        } catch (retryError) {
+          if (!clientSendError) {
+            clientSendError =
+              retryError instanceof Error ? retryError.message : "sendMessages retry failed";
+          }
         }
       }
 
       if (!clientSent && !data.pushSent) {
+        const why = [
+          !resolvedUserId && !data.hasLineUserId ? "缺少 LINE userId" : null,
+          clientSendError ? `客戶端：${clientSendError}` : null,
+          data.pushReason ? `伺服器：${data.pushReason}` : null,
+        ]
+          .filter(Boolean)
+          .join("；");
         throw new Error(
-          "無法送到 LINE 對話。請從官方帳號的「打開找房表單」重新開啟後再送一次。",
+          `無法送到 LINE 對話${why ? `（${why}）` : ""}。請從官方帳號按鈕重新打開表單再送一次。`,
         );
       }
 
