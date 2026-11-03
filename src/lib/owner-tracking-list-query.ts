@@ -8,8 +8,6 @@ import { matchesOwnerCaseStatusFilter, resolveOwnerCaseEffectiveStatus } from "@
 import {
   canViewOwnerTrackingCase,
   matchesOwnerTrackingAssigneeFilter,
-  lastFollowUp,
-  ownerCaseContactCount,
   type OwnerCasePreview,
   type OwnerFollowUpPreview,
   type OwnerTrackingStore,
@@ -41,6 +39,31 @@ export function listCommunityCell(item: OwnerCasePreview): string {
   return label !== "—" ? label : item.propertyType || "—";
 }
 
+function indexFollowUpsByCaseId(
+  followUps: OwnerFollowUpPreview[],
+): Map<string, OwnerFollowUpPreview[]> {
+  const map = new Map<string, OwnerFollowUpPreview[]>();
+  for (const f of followUps) {
+    const arr = map.get(f.caseId);
+    if (arr) arr.push(f);
+    else map.set(f.caseId, [f]);
+  }
+  return map;
+}
+
+function pickLastFollowUp(list: OwnerFollowUpPreview[] | undefined): OwnerFollowUpPreview | null {
+  if (!list?.length) return null;
+  let best = list[0]!;
+  for (let i = 1; i < list.length; i++) {
+    const f = list[i]!;
+    const byTime = f.createdAt.localeCompare(best.createdAt);
+    if (byTime > 0 || (byTime === 0 && f.id.localeCompare(best.id) > 0)) {
+      best = f;
+    }
+  }
+  return best;
+}
+
 export function buildOwnerTrackingListRows(
   store: OwnerTrackingStore,
   filters: {
@@ -62,16 +85,20 @@ export function buildOwnerTrackingListRows(
     filters.isSuperAdmin === false && filters.currentUsername
       ? { currentUsername: filters.currentUsername, isSuperAdmin: false as const }
       : null;
+  const followUpsByCaseId = indexFollowUpsByCaseId(store.followUps);
   const rows = store.cases
-    .map((c) => ({
-      case: c,
-      last: lastFollowUp(store, c.id),
-      contactCount: ownerCaseContactCount(store, c.id),
-    }))
+    .map((c) => {
+      const list = followUpsByCaseId.get(c.id);
+      return {
+        case: c,
+        last: pickLastFollowUp(list),
+        contactCount: list?.length ?? 0,
+      };
+    })
     .filter(({ case: c, last }) => {
       if (visibility && !canViewOwnerTrackingCase(c, visibility)) return false;
       if (!matchesOwnerTrackingAssigneeFilter(c.assignee, filters.assigneeFilter)) return false;
-      if (!matchesOwnerCaseStatusFilter(store, c, filters.statusFilter)) return false;
+      if (!matchesOwnerCaseStatusFilter(store, c, filters.statusFilter, last)) return false;
       if (filters.propertyTypeFilter !== "ALL" && c.propertyType !== filters.propertyTypeFilter) {
         return false;
       }

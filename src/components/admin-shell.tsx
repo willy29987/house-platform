@@ -79,7 +79,7 @@ export function AdminShell({ current, children }: AdminShellProps) {
           >
             <MenuIcon />
           </button>
-          <Link href="/admin" className="group flex min-w-0 flex-1 items-center gap-2 sm:gap-2.5">
+          <Link prefetch={false} href="/admin" className="group flex min-w-0 flex-1 items-center gap-2 sm:gap-2.5">
             <BrandLogo className="h-8 w-8 shrink-0 transition-transform group-hover:scale-105 sm:h-9 sm:w-9" />
             <span className="truncate text-base font-extrabold tracking-wide text-[#0b2545] sm:text-lg">
               不動產實踐家
@@ -100,19 +100,19 @@ export function AdminShell({ current, children }: AdminShellProps) {
             </div>
           ) : null}
           <div className="hidden items-center gap-2 md:flex">
-            <Link
+            <Link prefetch={false}
               href="/admin/listings/new"
               className="rounded-lg bg-[#0b2545] px-3 py-2 text-sm font-medium text-white hover:bg-[#1e3a8a]"
             >
               新增廣告
             </Link>
-            <Link
+            <Link prefetch={false}
               href="/admin/owner-tracking"
               className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
             >
               屋主追蹤
             </Link>
-            <Link
+            <Link prefetch={false}
               href="/admin/line-assistant"
               className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
             >
@@ -120,25 +120,25 @@ export function AdminShell({ current, children }: AdminShellProps) {
             </Link>
             {isSuperAdmin ? (
               <>
-                <Link
+                <Link prefetch={false}
                   href="/admin/commissions"
                   className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
                 >
                   服務費統計
                 </Link>
-                <Link
+                <Link prefetch={false}
                   href="/admin/listings/records"
                   className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
                 >
                   資料紀錄
                 </Link>
-                <Link
+                <Link prefetch={false}
                   href="/admin/tenants"
                   className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
                 >
                   房客管理
                 </Link>
-                <Link
+                <Link prefetch={false}
                   href="/admin/team"
                   className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
                 >
@@ -146,7 +146,7 @@ export function AdminShell({ current, children }: AdminShellProps) {
                 </Link>
               </>
             ) : null}
-            <Link
+            <Link prefetch={false}
               href="/"
               target="_blank"
               rel="noopener noreferrer"
@@ -155,7 +155,7 @@ export function AdminShell({ current, children }: AdminShellProps) {
               外網
             </Link>
             {isSuperAdmin ? (
-              <Link
+              <Link prefetch={false}
                 href="/admin/settings"
                 className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
               >
@@ -199,49 +199,49 @@ export function AdminShell({ current, children }: AdminShellProps) {
             </div>
             <nav className="flex-1 overflow-y-auto p-3">
               <div className="grid gap-1.5">
-                <Link
+                <Link prefetch={false}
                   href="/admin/listings/new"
                   onClick={() => setMenuOpen(false)}
                   className="rounded-xl bg-[#0b2545] px-4 py-3.5 text-center text-sm font-semibold text-white shadow-sm active:bg-[#1e3a8a]"
                 >
                   ＋ 新增廣告
                 </Link>
-                <Link href="/admin" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
+                <Link prefetch={false} href="/admin" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
                   營運總覽
                 </Link>
-                <Link href="/admin?type=rent" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
+                <Link prefetch={false} href="/admin?type=rent" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
                   租賃物件
                 </Link>
-                <Link href="/admin?type=sale" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
+                <Link prefetch={false} href="/admin?type=sale" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
                   買賣物件
                 </Link>
-                <Link href="/admin/owner-tracking" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
+                <Link prefetch={false} href="/admin/owner-tracking" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
                   屋主追蹤
                 </Link>
-                <Link href="/admin/line-assistant" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
+                <Link prefetch={false} href="/admin/line-assistant" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
                   租屋客服
                 </Link>
                 {isSuperAdmin ? (
                   <>
-                    <Link href="/admin/commissions" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
+                    <Link prefetch={false} href="/admin/commissions" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
                       服務費統計
                     </Link>
-                    <Link
+                    <Link prefetch={false}
                       href="/admin/listings/records"
                       onClick={() => setMenuOpen(false)}
                       className={menuLinkCls}
                     >
                       資料總紀錄
                     </Link>
-                    <Link href="/admin/tenants" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
+                    <Link prefetch={false} href="/admin/tenants" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
                       房客管理
                     </Link>
-                    <Link href="/admin/team" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
+                    <Link prefetch={false} href="/admin/team" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
                       AI 團隊
                     </Link>
                   </>
                 ) : null}
-                <Link
+                <Link prefetch={false}
                   href="/"
                   target="_blank"
                   rel="noopener noreferrer"
@@ -251,7 +251,7 @@ export function AdminShell({ current, children }: AdminShellProps) {
                   外網
                 </Link>
                 {isSuperAdmin ? (
-                  <Link href="/admin/settings" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
+                  <Link prefetch={false} href="/admin/settings" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
                     帳號管理
                   </Link>
                 ) : null}
