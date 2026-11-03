@@ -111,6 +111,7 @@ export async function POST(request: Request) {
 
     let pushSent = false;
     let pushReason: string | null = null;
+    let queued = false;
     const pushText =
       confirmText.length > 4900 ? `${confirmText.slice(0, 4890)}…` : confirmText;
 
@@ -134,6 +135,20 @@ export async function POST(request: Request) {
           : "api_error";
       if (!pushed.sent) {
         console.warn("[line/rental-cases] guest confirm push failed", pushed);
+        // Vercel 若沒 token：寫入待補推佇列，由 GitHub Action／本機腳本補送
+        if (pushReason === "missing_token" || pushReason === "not_live") {
+          try {
+            const { enqueueLineGuestPush } = await import("@/lib/line-guest-push-queue");
+            await enqueueLineGuestPush({
+              caseId: created.id,
+              lineUserId: created.lineUserId,
+              text: pushText,
+            });
+            queued = true;
+          } catch (queueError) {
+            console.warn("[line/rental-cases] enqueue guest push failed", queueError);
+          }
+        }
       }
     }
 
@@ -145,6 +160,7 @@ export async function POST(request: Request) {
       agentsNotified: notify.notified,
       pushSent,
       pushReason,
+      queued,
       hasLineUserId: Boolean(created.lineUserId),
       confirmText,
     });

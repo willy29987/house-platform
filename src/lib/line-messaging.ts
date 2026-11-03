@@ -1,11 +1,24 @@
 /** LINE Messaging API 推播／回覆（僅在 live + token 就緒時真送）。 */
 
-function lineToken() {
-  return process.env.LINE_CHANNEL_ACCESS_TOKEN?.trim() ?? "";
+import { readLineChannelAccessTokenFromCloud } from "@/lib/line-runtime-secrets";
+
+function lineTokenFromEnv() {
+  return (
+    process.env.LINE_CHANNEL_ACCESS_TOKEN?.trim() ||
+    process.env.LINE_MESSAGING_CHANNEL_ACCESS_TOKEN?.trim() ||
+    ""
+  );
 }
 
 function lineLive() {
-  return process.env.LINE_ASSISTANT_LIVE === "true";
+  const raw = (process.env.LINE_ASSISTANT_LIVE ?? "").trim().toLowerCase();
+  return raw === "true" || raw === "1" || raw === "yes";
+}
+
+async function resolveLineToken() {
+  const fromEnv = lineTokenFromEnv();
+  if (fromEnv) return fromEnv;
+  return readLineChannelAccessTokenFromCloud();
 }
 
 export type LinePostbackAction = {
@@ -60,12 +73,18 @@ export async function pushLineMessages(
   messages: LineMessage[],
   options?: { force?: boolean },
 ) {
-  const token = lineToken();
-  if (!token || !lineUserId || !messages.length) {
-    return { sent: false as const, reason: "not_live_or_missing_token" as const };
+  if (!lineUserId) {
+    return { sent: false as const, reason: "missing_user_id" as const };
+  }
+  if (!messages.length) {
+    return { sent: false as const, reason: "empty_messages" as const };
+  }
+  const token = await resolveLineToken();
+  if (!token) {
+    return { sent: false as const, reason: "missing_token" as const };
   }
   if (!options?.force && !lineLive()) {
-    return { sent: false as const, reason: "not_live_or_missing_token" as const };
+    return { sent: false as const, reason: "not_live" as const };
   }
 
   const response = await fetch("https://api.line.me/v2/bot/message/push", {
@@ -86,7 +105,7 @@ export async function pushLineMessages(
 
 /** Webhook 用 replyToken 回覆（不需 live 旗標也可在測試時送，仍需 token） */
 export async function replyLineMessages(replyToken: string, messages: LineMessage[]) {
-  const token = lineToken();
+  const token = await resolveLineToken();
   if (!token || !replyToken || !messages.length) {
     return { sent: false as const, reason: "missing_token_or_reply" as const };
   }

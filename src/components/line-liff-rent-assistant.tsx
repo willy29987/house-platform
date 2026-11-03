@@ -24,12 +24,13 @@ export function LineLiffRentAssistant({
   useEffect(() => {
     setHydrated(true);
     try {
+      // 必須用 Messaging API 的 userId（webhook / uid query），不可被 LIFF Login profile 覆蓋
       const fromUrl = new URLSearchParams(window.location.search).get("uid")?.trim();
-      const fromStore = window.sessionStorage.getItem("line_liff_uid")?.trim();
-      const uid = fromUrl || fromStore || fallbackLineUserId;
+      const fromStore = window.sessionStorage.getItem("line_messaging_uid")?.trim();
+      const uid = fromUrl || fallbackLineUserId || fromStore;
       if (uid) {
-        window.sessionStorage.setItem("line_liff_uid", uid);
-        setLineUserId((current) => current || uid);
+        window.sessionStorage.setItem("line_messaging_uid", uid);
+        setLineUserId(uid);
       }
     } catch {
       /* ignore */
@@ -44,7 +45,6 @@ export function LineLiffRentAssistant({
       const liff = await loadLiffClient();
       if (!liff || cancelled) return;
       try {
-        // 不硬砍 init：超時仍繼續讀 context，否則 lineUserId 會是空的、後端推播失敗
         await Promise.race([
           liff.init({ liffId }),
           new Promise<void>((resolve) => {
@@ -56,24 +56,11 @@ export function LineLiffRentAssistant({
       }
       if (cancelled) return;
 
-      try {
-        const ctx = liff.getContext();
-        if (ctx?.userId) {
-          window.sessionStorage.setItem("line_liff_uid", ctx.userId);
-          setLineUserId(ctx.userId);
-        }
-      } catch {
-        /* ignore */
-      }
-
+      // 只取顯示名稱；userId 堅持用 Messaging uid（與 Login channel 的 profile.userId 不同）
       if (liff.isLoggedIn()) {
         try {
           const profile = await liff.getProfile();
-          if (!cancelled) {
-            setLineUserId(profile.userId);
-            setDisplayName(profile.displayName);
-            window.sessionStorage.setItem("line_liff_uid", profile.userId);
-          }
+          if (!cancelled) setDisplayName(profile.displayName);
         } catch {
           /* ignore */
         }

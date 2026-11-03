@@ -5,6 +5,8 @@ export const ADMIN_CLOUD_DATA_KEYS = {
   tenantManager: "tenant_manager",
   lineRentalCases: "line_rental_cases",
   lineGuestSessions: "line_guest_sessions",
+  lineGuestPushQueue: "line_guest_push_queue",
+  lineRuntimeSecrets: "line_runtime_secrets",
 } as const;
 
 export type AdminCloudDataKey = (typeof ADMIN_CLOUD_DATA_KEYS)[keyof typeof ADMIN_CLOUD_DATA_KEYS];

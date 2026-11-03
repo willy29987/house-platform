@@ -510,11 +510,15 @@ export function LineLiffRentForm({
       // 1) 客戶端 sendMessages 2) 後端 force push（有 userId 就一定試）
       let clientSent = false;
       let clientSendError = "";
+      // Messaging API userId（來自官方帳號 webhook 帶的 uid），不要用 LIFF Login profile.userId
       let resolvedUserId = lineUserId;
       try {
         const fromUrl = new URLSearchParams(window.location.search).get("uid")?.trim();
-        const fromStore = window.sessionStorage.getItem("line_liff_uid")?.trim();
-        resolvedUserId = resolvedUserId || fromUrl || fromStore || null;
+        const fromStore = window.sessionStorage.getItem("line_messaging_uid")?.trim();
+        resolvedUserId = fromUrl || resolvedUserId || fromStore || null;
+        if (resolvedUserId) {
+          window.sessionStorage.setItem("line_messaging_uid", resolvedUserId);
+        }
       } catch {
         /* ignore */
       }
@@ -532,27 +536,7 @@ export function LineLiffRentForm({
             } catch {
               /* 可能已 init */
             }
-            try {
-              const ctx = liff.getContext();
-              if (ctx?.userId) resolvedUserId = ctx.userId;
-            } catch {
-              /* ignore */
-            }
-            if (!resolvedUserId && liff.isLoggedIn()) {
-              try {
-                const profile = await liff.getProfile();
-                resolvedUserId = profile.userId;
-              } catch {
-                /* ignore */
-              }
-            }
-            if (resolvedUserId) {
-              try {
-                window.sessionStorage.setItem("line_liff_uid", resolvedUserId);
-              } catch {
-                /* ignore */
-              }
-            }
+            // sendMessages 需 LIFF chat_message.write；失敗則改走後端 push
             if (liff.isInClient()) {
               try {
                 await liff.sendMessages([{ type: "text", text: outboundText }]);
@@ -603,6 +587,7 @@ export function LineLiffRentForm({
         error?: string;
         pushSent?: boolean;
         pushReason?: string | null;
+        queued?: boolean;
         hasLineUserId?: boolean;
         confirmText?: string;
       } | null;
@@ -610,35 +595,15 @@ export function LineLiffRentForm({
         throw new Error(data?.error || "送出失敗");
       }
 
-      if (!clientSent && liff?.isInClient()) {
-        try {
-          const retryText = data.confirmText || outboundText;
-          await liff.sendMessages([
-            {
-              type: "text",
-              text: retryText.length > 4900 ? `${retryText.slice(0, 4890)}…` : retryText,
-            },
-          ]);
-          clientSent = true;
-        } catch (retryError) {
-          if (!clientSendError) {
-            clientSendError =
-              retryError instanceof Error ? retryError.message : "sendMessages retry failed";
-          }
-        }
-      }
-
-      if (!clientSent && !data.pushSent) {
+      if (!clientSent && !data.pushSent && !data.queued) {
         const why = [
-          !resolvedUserId && !data.hasLineUserId ? "缺少 LINE userId" : null,
+          !resolvedUserId && !data.hasLineUserId ? "缺少 LINE userId（請從官方帳號按鈕開啟）" : null,
           clientSendError ? `客戶端：${clientSendError}` : null,
           data.pushReason ? `伺服器：${data.pushReason}` : null,
         ]
           .filter(Boolean)
           .join("；");
-        throw new Error(
-          `無法送到 LINE 對話${why ? `（${why}）` : ""}。請從官方帳號按鈕重新打開表單再送一次。`,
-        );
+        throw new Error(`無法送到 LINE 對話${why ? `（${why}）` : ""}`);
       }
 
       setDone({ when, titles: picked.map((item) => item.title) });
