@@ -35,6 +35,8 @@ type StaffGuest = {
   status: GuestStatus;
   watching: boolean;
   criteriaText: string;
+  /** 與 LINE 對話同一段原文（客人 sendMessages／案件 summaryText） */
+  summaryText: string;
   picked: PickedListing[];
   requestedWhen: string;
   proposedWhen: string;
@@ -187,6 +189,7 @@ function buildStaffGuests(listings: RentalMatchListing[]): StaffGuest[] {
       status: "selecting",
       watching: false,
       criteriaText: "沒有寵物 · 台北市 · 行政區還沒選",
+      summaryText: "沒有寵物 · 台北市 · 行政區還沒選",
       picked: [],
       requestedWhen: "",
       proposedWhen: "",
@@ -199,6 +202,7 @@ function buildStaffGuests(listings: RentalMatchListing[]): StaffGuest[] {
       status: "picking_time",
       watching: true,
       criteriaText: `${criteriaFrom(first, "新北市 · 板橋區 · 2 房 · 要車位")} · 有，一隻貓`,
+      summaryText: `${criteriaFrom(first, "新北市 · 板橋區 · 2 房 · 要車位")} · 有，一隻貓`,
       picked: firstPick,
       requestedWhen: "",
       proposedWhen: "",
@@ -211,6 +215,12 @@ function buildStaffGuests(listings: RentalMatchListing[]): StaffGuest[] {
       status: "pending_confirm",
       watching: true,
       criteriaText: `${criteriaFrom(second, "台北市 · 中山區 · 2 房")} · 沒有寵物`,
+      summaryText: [
+        "【找房預約】我想看以下物件，請協助確認時間。",
+        "",
+        "看屋時間：2026/11/03 下午 13:00–17:00",
+        `條件：${criteriaFrom(second, "台北市 · 中山區 · 2 房")} · 沒有寵物`,
+      ].join("\n"),
       picked: secondPick,
       requestedWhen: "2026/11/03 下午 13:00–17:00",
       proposedWhen: "",
@@ -227,6 +237,7 @@ function buildStaffGuests(listings: RentalMatchListing[]): StaffGuest[] {
       status: "saved",
       watching: true,
       criteriaText: `${criteriaFrom(third, "台北市 · 1 房 · 租屋補助")} · 有，小型犬`,
+      summaryText: `${criteriaFrom(third, "台北市 · 1 房 · 租屋補助")} · 有，小型犬`,
       picked: [],
       requestedWhen: "",
       proposedWhen: "",
@@ -239,6 +250,12 @@ function buildStaffGuests(listings: RentalMatchListing[]): StaffGuest[] {
       status: "confirmed",
       watching: true,
       criteriaText: `${criteriaFrom(first, "新北市 · 3 房 · 要車位 · 簽戶籍")} · 沒有寵物`,
+      summaryText: [
+        "【找房預約】我想看以下物件，請協助確認時間。",
+        "",
+        "看屋時間：2026/10/30 上午 9:00–12:00",
+        `條件：${criteriaFrom(first, "新北市 · 3 房 · 要車位 · 簽戶籍")} · 沒有寵物`,
+      ].join("\n"),
       picked: firstPick,
       requestedWhen: "2026/10/30 上午 9:00–12:00",
       proposedWhen: "",
@@ -264,27 +281,28 @@ function caseToStaffGuest(item: LineRentalCase): StaffGuest {
     lines.push({ id: lines.length + 1, from, text });
   };
 
+  const lineMessage =
+    item.summaryText?.trim() ||
+    [
+      item.criteriaText,
+      item.picked.length ? `想看：${item.picked.map((p) => p.title).join("、")}` : "",
+      item.requestedWhen ? `看屋時間：${item.requestedWhen}` : "",
+      item.phone ? `電話：${item.phone}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
   if (item.kind === "591_link") {
-    add("bot", "（客人貼 591 連結）");
     add("guest", item.guestMessage || item.source591Url || item.source591Id || "591 連結");
-    add("bot", item.summaryText);
+    if (lineMessage) add("guest", lineMessage);
   } else if (item.kind === "image_inquiry") {
-    add("bot", "（客人傳圖片）");
     add("guest", "［圖片］");
-    add("bot", item.summaryText);
+    if (lineMessage) add("guest", lineMessage);
   } else {
-    add("bot", "（LIFF 找房送出）");
-    add("guest", item.criteriaText || "條件已送出");
-    add(
-      "guest",
-      item.picked.length
-        ? `我想看：${item.picked.map((p) => p.title).join("、")}`
-        : "想看物件已送出",
-    );
-    add("guest", item.requestedWhen);
-    add("bot", item.summaryText);
-    if (item.proposedWhen) add("staff", `業務提案時間：${item.proposedWhen}`);
+    // 與真實 LINE 對話一致：客人端送出的整段原文
+    add("guest", lineMessage || "（客人已送出找房預約）");
   }
+  if (item.proposedWhen) add("staff", `業務提案時間：${item.proposedWhen}`);
 
   const status: GuestStatus =
     item.status === "awaiting_staff"
@@ -311,6 +329,7 @@ function caseToStaffGuest(item: LineRentalCase): StaffGuest {
     status,
     watching: true,
     criteriaText: criteriaBits.join(" · ") || item.criteriaText,
+    summaryText: lineMessage,
     picked: item.picked,
     requestedWhen: item.requestedWhen,
     proposedWhen: item.proposedWhen || "",
@@ -525,7 +544,10 @@ export function LineRentalPreview({ listings, lineBasicId }: { listings: RentalM
           ) : (
             visible.map((guest) => {
               const active = guest.id === selected?.id;
-              const preview = guest.lines[guest.lines.length - 1]?.text ?? "";
+              const preview =
+                guest.summaryText.split("\n").find((row) => row.trim()) ||
+                guest.lines[guest.lines.length - 1]?.text ||
+                "";
               return (
                 <li key={guest.id} className="border-b border-zinc-100 last:border-b-0">
                   <button
@@ -614,7 +636,7 @@ export function LineRentalPreview({ listings, lineBasicId }: { listings: RentalM
                   return (
                     <p
                       key={line.id}
-                      className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed text-zinc-900 ${
+                      className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm leading-relaxed text-zinc-900 ${
                         outgoing ? "ml-auto rounded-tr-sm bg-[#95ec69]" : "rounded-tl-sm bg-white"
                       }`}
                     >
@@ -752,12 +774,14 @@ function GuestDecisionPanel({
       </div>
 
       <div>
-        <p className="text-xs font-semibold text-zinc-500">條件</p>
-        <p className="mt-1 leading-relaxed text-zinc-800">{guest.criteriaText}</p>
+        <p className="text-xs font-semibold text-zinc-500">LINE 對話內容</p>
+        <pre className="mt-1 max-h-72 overflow-y-auto whitespace-pre-wrap rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs leading-relaxed text-zinc-800">
+          {guest.summaryText || guest.criteriaText || "尚無對話內容"}
+        </pre>
       </div>
 
       <div>
-        <p className="text-xs font-semibold text-zinc-500">已勾物件</p>
+        <p className="text-xs font-semibold text-zinc-500">已勾物件（快捷連結）</p>
         <div className="mt-1 space-y-1 text-zinc-800">
           {guest.picked.length
             ? guest.picked.map((item) => (
