@@ -3,7 +3,10 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { taipeiTodayYmd } from "@/lib/owner-tracking-next-contact";
 import { formatViewingRange, RENT_PRICE_OPTIONS, type RentalMatchListing } from "@/lib/line-rental-assistant";
-import type { LineConversation } from "@/lib/line-conversations";
+import type {
+  LineConversation,
+  LineConversationMediaType,
+} from "@/lib/line-conversations";
 import type { LineRentalCase } from "@/lib/line-rental-cases";
 import {
   emptyViewingSchedule,
@@ -29,6 +32,10 @@ type ChatLine = {
   from: "guest" | "bot" | "staff";
   text: string;
   at?: string;
+  messageId?: string;
+  mediaType?: LineConversationMediaType;
+  stickerId?: string;
+  packageId?: string;
 };
 
 type PickedListing = { id: string; title: string; price: number };
@@ -76,9 +83,76 @@ function formatLineDayLabel(iso: string) {
   });
 }
 
-/** 把網址做成可點連結，接近 LINE 對話顯示 */
-function LineMessageBody({ text }: { text: string }) {
-  const parts = text.split(/(https?:\/\/[^\s]+)/g);
+function inferMediaType(line: ChatLine): LineConversationMediaType | undefined {
+  if (line.mediaType) return line.mediaType;
+  if (!line.messageId || !/^\d+$/.test(line.messageId)) return undefined;
+  if (line.text === "［圖片］") return "image";
+  if (line.text === "［影片］") return "video";
+  if (line.text === "［語音］") return "audio";
+  if (line.text === "［貼圖］") return "sticker";
+  if (line.text.startsWith("［檔案］")) return "file";
+  return undefined;
+}
+
+function stickerImageUrl(stickerId: string) {
+  return `https://stickershop.line-scdn.net/stickershop/v1/sticker/${encodeURIComponent(stickerId)}/android/sticker.png`;
+}
+
+function lineContentUrl(messageId: string) {
+  return `/api/line/message-content/${encodeURIComponent(messageId)}`;
+}
+
+/** 文字＋貼圖／圖片／影片預覽，接近 LINE 對話顯示 */
+function LineMessageBody({ line }: { line: ChatLine }) {
+  const mediaType = inferMediaType(line);
+
+  if (mediaType === "sticker" && line.stickerId) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={stickerImageUrl(line.stickerId)}
+        alt="貼圖"
+        className="h-28 w-28 object-contain"
+        loading="lazy"
+      />
+    );
+  }
+
+  if (mediaType === "image" && line.messageId && /^\d+$/.test(line.messageId)) {
+    const href = lineContentUrl(line.messageId);
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" className="block">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={href}
+          alt="圖片"
+          className="max-h-64 max-w-full rounded-lg object-contain"
+          loading="lazy"
+        />
+      </a>
+    );
+  }
+
+  if (mediaType === "video" && line.messageId && /^\d+$/.test(line.messageId)) {
+    return (
+      <video
+        src={lineContentUrl(line.messageId)}
+        controls
+        playsInline
+        className="max-h-64 max-w-full rounded-lg bg-black"
+      />
+    );
+  }
+
+  if (mediaType === "audio" && line.messageId && /^\d+$/.test(line.messageId)) {
+    return <audio src={lineContentUrl(line.messageId)} controls className="w-full max-w-[16rem]" />;
+  }
+
+  if (mediaType === "sticker") {
+    return <span className="text-zinc-600">［貼圖］</span>;
+  }
+
+  const parts = line.text.split(/(https?:\/\/[^\s]+)/g);
   return (
     <>
       {parts.map((part, index) =>
@@ -433,6 +507,10 @@ function conversationToStaffGuest(
     from: message.from === "guest" ? "guest" : message.from === "staff" ? "staff" : "bot",
     text: message.text,
     at: formatLineClock(message.createdAt),
+    messageId: message.messageId,
+    mediaType: message.mediaType,
+    stickerId: message.stickerId,
+    packageId: message.packageId,
   }));
 
   const lastGuestText =
@@ -889,6 +967,12 @@ export function LineRentalPreview({
                 ) : null}
                 {selected.lines.map((line) => {
                   const fromGuest = line.from === "guest";
+                  const mediaType = inferMediaType(line);
+                  const mediaBubble =
+                    mediaType === "sticker" ||
+                    mediaType === "image" ||
+                    mediaType === "video" ||
+                    mediaType === "audio";
                   return (
                     <div
                       key={line.id}
@@ -903,16 +987,20 @@ export function LineRentalPreview({
                         <span className="mb-0.5 shrink-0 text-[10px] leading-none text-white/80">{line.at}</span>
                       ) : null}
                       <div
-                        className={`max-w-[min(78%,22rem)] whitespace-pre-wrap break-words px-3 py-2 text-[13.5px] leading-[1.55] text-zinc-900 shadow-sm ${
-                          fromGuest
-                            ? "rounded-[18px] rounded-bl-[4px] bg-white"
-                            : "rounded-[18px] rounded-br-[4px] bg-[#95ec69]"
+                        className={`max-w-[min(78%,22rem)] break-words text-[13.5px] leading-[1.55] text-zinc-900 ${
+                          mediaBubble
+                            ? "bg-transparent p-0 shadow-none"
+                            : `whitespace-pre-wrap px-3 py-2 shadow-sm ${
+                                fromGuest
+                                  ? "rounded-[18px] rounded-bl-[4px] bg-white"
+                                  : "rounded-[18px] rounded-br-[4px] bg-[#95ec69]"
+                              }`
                         }`}
                       >
-                        {line.from === "staff" ? (
+                        {line.from === "staff" && !mediaBubble ? (
                           <span className="mb-1 block text-[10px] font-semibold text-[#067a36]">官方帳號／同事</span>
                         ) : null}
-                        <LineMessageBody text={line.text} />
+                        <LineMessageBody line={line} />
                       </div>
                       {fromGuest && line.at ? (
                         <span className="mb-0.5 shrink-0 text-[10px] leading-none text-white/80">{line.at}</span>

@@ -22,6 +22,11 @@ async function resolveLineToken() {
   return readLineChannelAccessTokenFromCloud();
 }
 
+/** 客服預覽圖片／影片／語音時用 */
+export async function getLineChannelAccessToken() {
+  return resolveLineToken();
+}
+
 export type LinePostbackAction = {
   type: "postback";
   label: string;

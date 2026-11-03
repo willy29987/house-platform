@@ -3,7 +3,10 @@ import { appendFileSync, mkdirSync } from "fs";
 import path from "path";
 import { NextResponse } from "next/server";
 import { handle591LinkInquiry, handleImageInquiry } from "@/lib/line-591-inquiry";
-import { appendLineConversationMessage } from "@/lib/line-conversations";
+import {
+  appendLineConversationMessage,
+  type LineConversationMediaType,
+} from "@/lib/line-conversations";
 import { handleGuestPostback, handleGuestText } from "@/lib/line-guest-flow";
 import { replyLineMessages } from "@/lib/line-messaging";
 import { readLineChannelSecretFromCloud } from "@/lib/line-runtime-secrets";
@@ -99,31 +102,55 @@ function guessPostbackDisplayText(data: string): string | null {
   return data.length <= 40 ? data : null;
 }
 
-function previewForIncomingMessage(message: NonNullable<LineEvent["message"]>): string | null {
+function previewForIncomingMessage(message: NonNullable<LineEvent["message"]>): {
+  text: string;
+  mediaType?: LineConversationMediaType;
+  stickerId?: string;
+  packageId?: string;
+} | null {
   const type = message.type;
   if (type === "text") {
     const text = message.text?.trim() ?? "";
-    return text || null;
+    return text ? { text } : null;
   }
-  if (type === "image") return "［圖片］";
-  if (type === "video") return "［影片］";
-  if (type === "audio") return "［語音］";
-  if (type === "file") return `［檔案］${message.fileName?.trim() || ""}`.trim();
+  if (type === "image") return { text: "［圖片］", mediaType: "image" };
+  if (type === "video") return { text: "［影片］", mediaType: "video" };
+  if (type === "audio") return { text: "［語音］", mediaType: "audio" };
+  if (type === "file") {
+    return {
+      text: `［檔案］${message.fileName?.trim() || ""}`.trim(),
+      mediaType: "file",
+    };
+  }
   if (type === "location") {
     const title = message.title?.trim();
     const address = message.address?.trim();
-    if (title && address) return `［位置］${title}（${address}）`;
-    if (title || address) return `［位置］${title || address}`;
-    return "［位置］";
+    const text =
+      title && address
+        ? `［位置］${title}（${address}）`
+        : title || address
+          ? `［位置］${title || address}`
+          : "［位置］";
+    return { text, mediaType: "location" };
   }
-  if (type === "sticker") return "［貼圖］";
-  return type ? `［${type}］` : null;
+  if (type === "sticker") {
+    return {
+      text: "［貼圖］",
+      mediaType: "sticker",
+      stickerId: message.stickerId?.trim() || undefined,
+      packageId: message.packageId?.trim() || undefined,
+    };
+  }
+  return type ? { text: `［${type}］` } : null;
 }
 
 async function storeGuestMessage(input: {
   lineUserId: string;
   text: string;
   messageId?: string;
+  mediaType?: LineConversationMediaType;
+  stickerId?: string;
+  packageId?: string;
 }) {
   try {
     await appendLineConversationMessage({
@@ -131,6 +158,9 @@ async function storeGuestMessage(input: {
       from: "guest",
       text: input.text,
       messageId: input.messageId,
+      mediaType: input.mediaType,
+      stickerId: input.stickerId,
+      packageId: input.packageId,
     });
   } catch (error) {
     console.error("[line/webhook] append guest message failed", error);
@@ -194,8 +224,11 @@ async function handleEvent(event: LineEvent) {
   if (userId && preview) {
     await storeGuestMessage({
       lineUserId: userId,
-      text: preview,
+      text: preview.text,
       messageId: message.id,
+      mediaType: preview.mediaType,
+      stickerId: preview.stickerId,
+      packageId: preview.packageId,
     });
   }
 

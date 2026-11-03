@@ -6,12 +6,23 @@ import type { LineMessage } from "@/lib/line-messaging";
 
 export type LineConversationFrom = "guest" | "bot" | "staff";
 
+export type LineConversationMediaType =
+  | "image"
+  | "video"
+  | "audio"
+  | "sticker"
+  | "file"
+  | "location";
+
 export type LineConversationMessage = {
   id: string;
   from: LineConversationFrom;
   text: string;
   createdAt: string;
   messageId?: string;
+  mediaType?: LineConversationMediaType;
+  stickerId?: string;
+  packageId?: string;
 };
 
 export type LineConversation = {
@@ -28,6 +39,41 @@ type Store = {
 const MAX_CONVERSATIONS = 200;
 const MAX_MESSAGES = 200;
 
+const MEDIA_TYPES = new Set<LineConversationMediaType>([
+  "image",
+  "video",
+  "audio",
+  "sticker",
+  "file",
+  "location",
+]);
+
+function normalizeMessage(raw: unknown): LineConversationMessage | null {
+  if (!raw || typeof raw !== "object") return null;
+  const m = raw as Partial<LineConversationMessage>;
+  if (
+    typeof m.id !== "string" ||
+    typeof m.text !== "string" ||
+    (m.from !== "guest" && m.from !== "bot" && m.from !== "staff")
+  ) {
+    return null;
+  }
+  const mediaType =
+    typeof m.mediaType === "string" && MEDIA_TYPES.has(m.mediaType as LineConversationMediaType)
+      ? (m.mediaType as LineConversationMediaType)
+      : undefined;
+  return {
+    id: m.id,
+    from: m.from,
+    text: m.text,
+    createdAt: typeof m.createdAt === "string" ? m.createdAt : new Date().toISOString(),
+    messageId: typeof m.messageId === "string" ? m.messageId : undefined,
+    mediaType,
+    stickerId: typeof m.stickerId === "string" ? m.stickerId : undefined,
+    packageId: typeof m.packageId === "string" ? m.packageId : undefined,
+  };
+}
+
 function normalizeStore(payload: unknown): Store {
   if (!payload || typeof payload !== "object") return { conversations: [] };
   const rows = Array.isArray((payload as Store).conversations)
@@ -43,13 +89,8 @@ function normalizeStore(payload: unknown): Store {
           typeof row.updatedAt === "string" ? row.updatedAt : new Date().toISOString(),
         messages: Array.isArray(row.messages)
           ? row.messages
-              .filter(
-                (m) =>
-                  m &&
-                  typeof m.id === "string" &&
-                  typeof m.text === "string" &&
-                  (m.from === "guest" || m.from === "bot" || m.from === "staff"),
-              )
+              .map(normalizeMessage)
+              .filter((m): m is LineConversationMessage => Boolean(m))
               .slice(-MAX_MESSAGES)
           : [],
       }))
@@ -87,6 +128,9 @@ export async function appendLineConversationMessage(input: {
   text: string;
   displayName?: string;
   messageId?: string;
+  mediaType?: LineConversationMediaType;
+  stickerId?: string;
+  packageId?: string;
 }): Promise<LineConversationMessage | null> {
   const lineUserId = input.lineUserId.trim();
   const text = input.text.trim();
@@ -110,6 +154,9 @@ export async function appendLineConversationMessage(input: {
     text,
     createdAt: now,
     messageId: input.messageId,
+    mediaType: input.mediaType,
+    stickerId: input.stickerId,
+    packageId: input.packageId,
   };
 
   if (!existing) {
