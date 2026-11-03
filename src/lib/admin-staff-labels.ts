@@ -1,5 +1,7 @@
 /** 後台帳號：登入代號（R001）→ 顯示姓名 */
 
+import { cache } from "react";
+
 export type AdminStaffLabelEntry = {
   username: string;
   displayName: string | null;
@@ -28,8 +30,8 @@ export function buildAdminStaffLabelMap(entries: AdminStaffLabelEntry[]): Record
   return map;
 }
 
-/** 伺服端載入帳號姓名對照（失敗則空表） */
-export async function loadAdminStaffLabelMap(): Promise<Record<string, string>> {
+/** 伺服端載入帳號姓名對照（失敗則空表；同 request 內去重） */
+export const loadAdminStaffLabelMap = cache(async (): Promise<Record<string, string>> => {
   if (!process.env.DATABASE_URL) return {};
   try {
     const { prisma } = await import("@/lib/prisma");
@@ -45,4 +47,19 @@ export async function loadAdminStaffLabelMap(): Promise<Record<string, string>> 
     );
     return {};
   }
-}
+});
+
+/** 負責人篩選用帳號列表（同 request 內去重） */
+export const listStaffUsernamesForAssigneeFilter = cache(async (): Promise<string[]> => {
+  if (!process.env.DATABASE_URL) return [];
+  try {
+    const { prisma } = await import("@/lib/prisma");
+    const rows = await prisma.adminUser.findMany({
+      select: { username: true },
+      orderBy: { username: "asc" },
+    });
+    return rows.map((r) => r.username);
+  } catch {
+    return [];
+  }
+});

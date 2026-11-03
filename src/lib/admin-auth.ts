@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { cache } from "react";
 
 export const ADMIN_SESSION_COOKIE = "admin_session";
 export const ADMIN_USERNAME_COOKIE = "admin_username";
@@ -39,7 +40,8 @@ export async function isAdminAuthenticated() {
   return Boolean(token && expected && token === expected);
 }
 
-export async function getCurrentAdmin(): Promise<CurrentAdmin | null> {
+/** 同一次 RSC 請求內 layout + page 共用，避免重複查 DB */
+export const getCurrentAdmin = cache(async (): Promise<CurrentAdmin | null> => {
   const authed = await isAdminAuthenticated();
   if (!authed) return null;
 
@@ -86,7 +88,7 @@ export async function getCurrentAdmin(): Promise<CurrentAdmin | null> {
     }
     return null;
   }
-}
+});
 
 export async function requireAdminSession() {
   const authed = await isAdminAuthenticated();

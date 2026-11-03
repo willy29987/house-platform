@@ -1,4 +1,4 @@
-import ExcelJS from "exceljs";
+import type { CellValue, Worksheet } from "exceljs";
 import { formatAdminStaffLabel } from "@/lib/admin-staff-labels";
 import { formatFollowUpWhen, formatOwnerCaseAddress, type OwnerTrackingStore } from "@/lib/owner-tracking-preview";
 import { listCommunityCell, type OwnerTrackingListRow } from "@/lib/owner-tracking-list-query";
@@ -66,7 +66,7 @@ function propertyTypeText(code: string): string {
   return code;
 }
 
-function setupSimpleSheet(sheet: ExcelJS.Worksheet, columns: ColumnSpec[], dataRows: ExcelJS.CellValue[][]) {
+function setupSimpleSheet(sheet: Worksheet, columns: ColumnSpec[], dataRows: CellValue[][]) {
   sheet.columns = columns.map((c) => ({ header: c.header, width: c.width }));
   const header = sheet.getRow(1);
   header.font = { bold: true, color: { argb: "FFFFFFFF" } };
@@ -101,10 +101,10 @@ function setupSimpleSheet(sheet: ExcelJS.Worksheet, columns: ColumnSpec[], dataR
 function caseRow(
   row: OwnerTrackingListRow,
   staffLabels?: Record<string, string>,
-): ExcelJS.CellValue[] {
+): CellValue[] {
   const c = row.case;
   const url = normalizeUrl(c.listingUrl);
-  const urlCell: ExcelJS.CellValue = url
+  const urlCell: CellValue = url
     ? { text: c.listingUrl.trim(), hyperlink: url }
     : "";
   return [
@@ -147,7 +147,7 @@ function followUpRows(
   store: OwnerTrackingStore,
   listRows: OwnerTrackingListRow[],
   staffLabels?: Record<string, string>,
-): ExcelJS.CellValue[][] {
+): CellValue[][] {
   const caseIds = new Set(listRows.map((r) => r.case.id));
   const caseById = new Map(listRows.map((r) => [r.case.id, r.case]));
   return store.followUps
@@ -173,6 +173,7 @@ export async function buildOwnerTrackingWorkbook(
   listRows: OwnerTrackingListRow[],
   staffLabels?: Record<string, string>,
 ): Promise<ArrayBuffer> {
+  const ExcelJS = (await import("exceljs")).default;
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "屋主追蹤";
   workbook.created = new Date();

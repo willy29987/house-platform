@@ -73,6 +73,8 @@ type Props = {
   staffUsernames?: string[];
   /** username → 顯示姓名 */
   staffLabels?: Record<string, string>;
+  /** RSC 帶入的雲端 store，首屏免等 client hydrate */
+  initialStore?: OwnerTrackingStore;
 };
 
 const PAGE_SIZE = 40;
@@ -127,6 +129,7 @@ function OwnerTrackingListInner({
   isSuperAdmin = false,
   staffUsernames = [],
   staffLabels = {},
+  initialStore,
 }: Props) {
   const router = useRouter();
   const pathname = usePathname();
@@ -189,8 +192,15 @@ function OwnerTrackingListInner({
     return () => window.clearTimeout(handle);
   }, [keywordInput, keyword, commitSearchToUrl]);
 
-  const [store, setStore] = useState<OwnerTrackingStore>(emptyOwnerTrackingStore);
-  const [hydrated, setHydrated] = useState(false);
+  const [store, setStore] = useState<OwnerTrackingStore>(() => {
+    if (initialStore && (initialStore.cases.length > 0 || initialStore.followUps.length > 0)) {
+      return initialStore;
+    }
+    return emptyOwnerTrackingStore;
+  });
+  const [hydrated, setHydrated] = useState(() =>
+    Boolean(initialStore && (initialStore.cases.length > 0 || initialStore.followUps.length > 0)),
+  );
   const [syncError, setSyncError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -215,10 +225,16 @@ function OwnerTrackingListInner({
   }, [store.cases, staffUsernames]);
 
   useEffect(() => {
-    // 先畫本機快取，避免等雲端才可操作
-    const local = normalizeOwnerTrackingStore(loadOwnerTrackingStoreLocal());
-    setStore(local);
-    setHydrated(true);
+    // SSR 已有雲端資料時先寫入本機，再背景合併；否則先畫本機快取
+    if (initialStore && (initialStore.cases.length > 0 || initialStore.followUps.length > 0)) {
+      persistOwnerTrackingStoreLocal(initialStore);
+      setStore(initialStore);
+      setHydrated(true);
+    } else {
+      const local = normalizeOwnerTrackingStore(loadOwnerTrackingStoreLocal());
+      setStore(local);
+      setHydrated(true);
+    }
     void hydrateOwnerTrackingStoreOnce(loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreLocal)
       .then((next) => {
         setStore(next);
@@ -228,7 +244,7 @@ function OwnerTrackingListInner({
         setSyncError(e instanceof Error ? e.message : "雲端同步失敗");
         setStore(loadOwnerTrackingStoreLocal());
       });
-  }, []);
+  }, [initialStore]);
 
   /** 歷史案件回填：每分頁工作階段最多一次，且不上阻塞 UI */
   useEffect(() => {
@@ -473,7 +489,7 @@ function OwnerTrackingListInner({
     const start = (safePage - 1) * PAGE_SIZE;
     return rows.slice(start, start + PAGE_SIZE).map((row) => ({
       ...row,
-      effectiveStatus: resolveOwnerCaseEffectiveStatus(store, row.case),
+      effectiveStatus: resolveOwnerCaseEffectiveStatus(store, row.case, row.last),
       upcomingRelease: isOwnerCaseUpcomingRelease(store, row.case),
     }));
   }, [rows, safePage, store]);

@@ -4,6 +4,7 @@ import {
   lastFollowUp,
   normalizeFollowUpStatus,
   type OwnerCasePreview,
+  type OwnerFollowUpPreview,
   type OwnerTrackingStatus,
   type OwnerTrackingStore,
 } from "@/lib/owner-tracking-preview";
@@ -28,8 +29,11 @@ export function is591EntrustCaseNote(caseNote: string): boolean {
 export function resolveOwnerCaseEffectiveStatus(
   store: OwnerTrackingStore,
   ownerCase: OwnerCasePreview,
+  /** 已預先算好的最新追蹤；傳入可避免每列再掃整包 followUps */
+  lastOverride?: OwnerFollowUpPreview | null,
 ): OwnerTrackingStatus {
-  const last = lastFollowUp(store, ownerCase.id);
+  const last =
+    lastOverride !== undefined ? lastOverride : lastFollowUp(store, ownerCase.id);
   if (last) {
     return normalizeFollowUpStatus(last.status);
   }
@@ -48,10 +52,11 @@ export function matchesOwnerCaseStatusFilter(
   store: OwnerTrackingStore,
   ownerCase: OwnerCasePreview,
   statusFilter: string,
+  lastOverride?: OwnerFollowUpPreview | null,
 ): boolean {
   if (statusFilter === "ALL") return true;
   const want = normalizeFollowUpStatus(statusFilter);
-  const effective = resolveOwnerCaseEffectiveStatus(store, ownerCase);
+  const effective = resolveOwnerCaseEffectiveStatus(store, ownerCase, lastOverride);
   if (effective === want) return true;
   if (
     want === "可上591" &&
