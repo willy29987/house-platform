@@ -1,5 +1,10 @@
 /** 租屋 LINE 客服試做：條件可複選，只配對已上架出租物件。 */
 
+import { ListingType } from "@prisma/client";
+import { normalizeItemList } from "@/lib/furniture-appliance-value";
+import { parseListingInternalMeta } from "@/lib/listing-internal-meta";
+import { prisma } from "@/lib/prisma";
+
 export type RentalMatchListing = {
   id: string;
   title: string;
@@ -8,17 +13,35 @@ export type RentalMatchListing = {
   address: string;
   price: number;
   areaPing: number;
+  areaMain: number | null;
+  areaAncillary: number | null;
   rooms: number;
+  livingRooms: number | null;
+  balconies: number | null;
   bathrooms: number;
   floor: number | null;
   totalFloors: number | null;
+  propertyType: string;
+  community: string | null;
+  managementFee: number | null;
+  parkingType: string | null;
+  parkingRent: number | null;
   areaParkingSpace: number | null;
+  orientation: string | null;
   petsAllowed: boolean | null;
   coverImage: string | null;
   images: string[];
+  features: string[];
+  furnitureItems: string[];
+  equipmentItems: string[];
   rentSubsidy: boolean | null;
   taxDeductible: boolean | null;
   canRegisterAddress: boolean | null;
+  viewingMethod: string | null;
+  securityDeposit: string | null;
+  availableFrom: string | null;
+  shortTermRent: string | null;
+  serviceFee: string | null;
 };
 
 /** 從網站出租物件卡片轉成 LIFF／客服配對用結構 */
@@ -30,17 +53,35 @@ export function toRentalMatchListing(listing: {
   address: string;
   price: number;
   areaPing: number;
+  areaMain?: number | null;
+  areaAncillary?: number | null;
   rooms: number;
+  livingRooms?: number | null;
+  balconies?: number | null;
   bathrooms: number;
   floor: number | null;
   totalFloors: number | null;
+  propertyType?: string;
+  community?: string | null;
+  managementFee?: number | null;
+  parkingType?: string | null;
+  parkingRent?: number | null;
   areaParkingSpace: number | null;
+  orientation?: string | null;
   petsAllowed: boolean | null;
   coverImage: string | null;
   images: string[];
+  features?: string[] | null;
+  furnitureItems?: string[] | null;
+  equipmentItems?: string[] | null;
   rentSubsidy: boolean | null;
   taxDeductible: boolean | null;
   canRegisterAddress: boolean | null;
+  viewingMethod?: string | null;
+  securityDeposit?: string | null;
+  availableFrom?: string | null;
+  shortTermRent?: string | null;
+  serviceFee?: string | null;
 }): RentalMatchListing {
   return {
     id: listing.id,
@@ -50,18 +91,63 @@ export function toRentalMatchListing(listing: {
     address: listing.address,
     price: listing.price,
     areaPing: listing.areaPing,
+    areaMain: listing.areaMain ?? null,
+    areaAncillary: listing.areaAncillary ?? null,
     rooms: listing.rooms,
+    livingRooms: listing.livingRooms ?? null,
+    balconies: listing.balconies ?? null,
     bathrooms: listing.bathrooms,
     floor: listing.floor,
     totalFloors: listing.totalFloors,
+    propertyType: listing.propertyType ?? "",
+    community: listing.community ?? null,
+    managementFee: listing.managementFee ?? null,
+    parkingType: listing.parkingType ?? null,
+    parkingRent: listing.parkingRent ?? null,
     areaParkingSpace: listing.areaParkingSpace,
+    orientation: listing.orientation ?? null,
     petsAllowed: listing.petsAllowed,
     coverImage: listing.coverImage,
     images: listing.images,
+    features: (listing.features ?? []).filter(Boolean),
+    furnitureItems: listing.furnitureItems ?? [],
+    equipmentItems: listing.equipmentItems ?? [],
     rentSubsidy: listing.rentSubsidy,
     taxDeductible: listing.taxDeductible,
     canRegisterAddress: listing.canRegisterAddress,
+    viewingMethod: listing.viewingMethod ?? null,
+    securityDeposit: listing.securityDeposit ?? null,
+    availableFrom: listing.availableFrom ?? null,
+    shortTermRent: listing.shortTermRent ?? null,
+    serviceFee: listing.serviceFee ?? null,
   };
+}
+
+/** 已上架出租物件（含詳情欄位）供 LIFF／LINE 配對 */
+export async function loadRentalMatchListings(take = 60): Promise<RentalMatchListing[]> {
+  if (!process.env.DATABASE_URL) return [];
+  try {
+    const rows = await prisma.listing.findMany({
+      where: { listingType: ListingType.RENT, isPublished: true },
+      orderBy: { createdAt: "desc" },
+      take,
+    });
+    return rows.map((row) => {
+      const meta = parseListingInternalMeta(row.description);
+      return toRentalMatchListing({
+        ...row,
+        furnitureItems: normalizeItemList(meta.furnitureItems),
+        equipmentItems: normalizeItemList(meta.equipmentItems),
+        securityDeposit: meta.securityDeposit ?? null,
+        availableFrom: meta.availableFrom ?? null,
+        shortTermRent: meta.shortTermRent ?? null,
+        serviceFee: meta.serviceFee ?? null,
+      });
+    });
+  } catch (error) {
+    console.error("[line-rental-assistant] loadRentalMatchListings", error);
+    return [];
+  }
 }
 
 export type RentalExtra = "subsidy" | "tax" | "household";

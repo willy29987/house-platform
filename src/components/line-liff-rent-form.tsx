@@ -1,11 +1,13 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { ListingAmenityGrid } from "@/components/listing-amenity-grid";
 import {
   emptyViewingSchedule,
   ViewingSchedulePicker,
   type ViewingScheduleValue,
 } from "@/components/viewing-schedule-picker";
+import { EQUIPMENT_ITEMS, FURNITURE_ITEMS } from "@/lib/furniture-appliance-value";
 import { loadLiffClient } from "@/lib/line-liff-client";
 import {
   EXTRA_OPTIONS,
@@ -21,6 +23,8 @@ import {
   type RentalMatchListing,
 } from "@/lib/line-rental-assistant";
 import { taipeiTodayYmd } from "@/lib/owner-tracking-next-contact";
+import { PARKING_TYPE_LABELS } from "@/lib/parking-type-label";
+import { propertyTypeLabel } from "@/lib/property-type-label";
 
 type Step = "criteria" | "listings" | "profile";
 
@@ -73,10 +77,12 @@ function Chip({
   label,
   active,
   onClick,
+  className = "",
 }: {
   label: string;
   active: boolean;
   onClick: () => void;
+  className?: string;
 }) {
   return (
     <button
@@ -86,10 +92,43 @@ function Chip({
         active
           ? "border-[#06c755] bg-[#e8f8ef] font-semibold text-[#067a36]"
           : "border-zinc-200 bg-white text-zinc-700"
-      }`}
+      } ${className}`}
     >
       {label}
     </button>
+  );
+}
+
+function DetailInfoCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex min-w-0 items-center justify-between gap-2">
+      <span className="shrink-0 text-xs font-medium text-zinc-500">{label}</span>
+      <span className="min-w-0 break-words text-right text-sm font-bold text-zinc-900">{value}</span>
+    </div>
+  );
+}
+
+function DetailInfoRowPair({
+  left,
+  right,
+}: {
+  left: { label: string; value: string };
+  right?: { label: string; value: string };
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-3 border-b border-zinc-100 py-1.5">
+      <DetailInfoCell label={left.label} value={left.value} />
+      {right ? <DetailInfoCell label={right.label} value={right.value} /> : null}
+    </div>
+  );
+}
+
+function DetailInfoBlock({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg bg-zinc-50 px-2.5 py-2">
+      <p className="text-[11px] text-zinc-500">{label}</p>
+      <p className="mt-0.5 text-xs font-bold text-zinc-900">{value}</p>
+    </div>
   );
 }
 
@@ -141,13 +180,124 @@ function ListingDetailSheet({
 }) {
   const photos = listingPhotos(listing);
   const [photoIndex, setPhotoIndex] = useState(0);
-  const current = photos[photoIndex] ?? null;
-  const floorLabel =
-    listing.floor != null
-      ? listing.totalFloors != null
-        ? `${listing.floor}/${listing.totalFloors} 樓`
-        : `${listing.floor} 樓`
-      : "樓層未提供";
+  const scrollerRef = useRef<HTMLDivElement>(null);
+
+  const layoutText = [
+    `${listing.rooms}房`,
+    listing.livingRooms != null ? `${listing.livingRooms}廳` : null,
+    `${listing.bathrooms}衛`,
+    listing.balconies != null ? `${listing.balconies}陽台` : null,
+  ]
+    .filter(Boolean)
+    .join("");
+
+  const floorText =
+    listing.floor != null && listing.totalFloors != null
+      ? `${listing.floor} / ${listing.totalFloors} F`
+      : listing.floor != null
+        ? `${listing.floor} F`
+        : listing.totalFloors != null
+          ? `共 ${listing.totalFloors} F`
+          : "—";
+
+  const buildingAreaTotalText = (() => {
+    const m = listing.areaMain;
+    const a = listing.areaAncillary;
+    if (m != null && a != null) {
+      const total = m + a;
+      return `${Number.isInteger(total) ? total : total.toFixed(2)} 坪`;
+    }
+    if (m != null) return `${m} 坪`;
+    if (a != null) return `${a} 坪`;
+    return "—";
+  })();
+
+  const hasParking =
+    Boolean(listing.parkingType) ||
+    Boolean(listing.parkingRent) ||
+    Boolean(listing.areaParkingSpace);
+
+  const parkingTypeText = listing.parkingType
+    ? (PARKING_TYPE_LABELS[listing.parkingType] ?? listing.parkingType)
+    : "有車位";
+  const parkingRentText = listing.parkingRent
+    ? `${listing.parkingRent.toLocaleString("zh-TW")} 元 / 月`
+    : null;
+  const managementFeeText = listing.managementFee
+    ? `${listing.managementFee.toLocaleString("zh-TW")} 元/月`
+    : "免管理費";
+  const propertyTypeText = listing.propertyType
+    ? propertyTypeLabel(listing.propertyType)
+    : "—";
+  const orientationText = listing.orientation?.trim() || "—";
+
+  const viewingMethodLabel: Record<string, string> = {
+    KEY: "有鑰匙，隨時可帶看",
+    OWNER_APPOINTMENT: "需約屋主時間",
+  };
+
+  function rentConditionValue(value: boolean | null | undefined): string | null {
+    if (value === true) return "可以";
+    if (value === false) return "不可";
+    return null;
+  }
+
+  const rentConditionItems = (
+    [
+      rentConditionValue(listing.petsAllowed)
+        ? { label: "養寵物", value: rentConditionValue(listing.petsAllowed)! }
+        : null,
+      rentConditionValue(listing.taxDeductible)
+        ? { label: "報稅", value: rentConditionValue(listing.taxDeductible)! }
+        : null,
+      rentConditionValue(listing.rentSubsidy)
+        ? { label: "租屋補助", value: rentConditionValue(listing.rentSubsidy)! }
+        : null,
+      rentConditionValue(listing.canRegisterAddress)
+        ? { label: "入戶籍", value: rentConditionValue(listing.canRegisterAddress)! }
+        : null,
+      listing.viewingMethod
+        ? {
+            label: "看屋方式",
+            value: viewingMethodLabel[listing.viewingMethod] ?? listing.viewingMethod,
+          }
+        : null,
+      listing.securityDeposit?.trim()
+        ? { label: "押金", value: listing.securityDeposit.trim() }
+        : null,
+      listing.availableFrom?.trim()
+        ? { label: "起租日", value: listing.availableFrom.trim() }
+        : null,
+      listing.shortTermRent?.trim()
+        ? { label: "能否短租", value: listing.shortTermRent.trim() }
+        : null,
+      listing.serviceFee?.trim() ? { label: "服務費", value: listing.serviceFee.trim() } : null,
+    ] as const
+  ).filter((item): item is { label: string; value: string } => item !== null);
+
+  const amenityGridItems = [
+    ...EQUIPMENT_ITEMS.map((name) => ({ name, on: listing.equipmentItems.includes(name) })),
+    ...FURNITURE_ITEMS.map((name) => ({ name, on: listing.furnitureItems.includes(name) })),
+  ];
+
+  useEffect(() => {
+    setPhotoIndex(0);
+    scrollerRef.current?.scrollTo({ left: 0, behavior: "auto" });
+  }, [listing.id]);
+
+  function onPhotoScroll() {
+    const el = scrollerRef.current;
+    if (!el || photos.length === 0) return;
+    const next = Math.round(el.scrollLeft / Math.max(el.clientWidth, 1));
+    setPhotoIndex(Math.max(0, Math.min(photos.length - 1, next)));
+  }
+
+  function scrollToPhoto(index: number) {
+    const el = scrollerRef.current;
+    if (!el) return;
+    el.scrollTo({ left: index * el.clientWidth, behavior: "smooth" });
+    setPhotoIndex(index);
+  }
 
   return (
     <div className="fixed inset-0 z-30 flex flex-col bg-black/40 p-3">
@@ -163,12 +313,23 @@ function ListingDetailSheet({
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="relative aspect-[4/3] bg-zinc-100">
-            {current ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={current} alt="" className="h-full w-full object-cover" />
+          <div className="relative bg-zinc-100">
+            {photos.length > 0 ? (
+              <div
+                ref={scrollerRef}
+                onScroll={onPhotoScroll}
+                className="flex aspect-[4/3] snap-x snap-mandatory overflow-x-auto overscroll-x-contain scroll-smooth [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                style={{ WebkitOverflowScrolling: "touch" }}
+              >
+                {photos.map((src, i) => (
+                  <div key={`${src}-${i}`} className="h-full w-full shrink-0 snap-center snap-always">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={src} alt="" className="h-full w-full object-cover" draggable={false} />
+                  </div>
+                ))}
+              </div>
             ) : (
-              <div className="flex h-full items-center justify-center text-sm text-zinc-400">
+              <div className="flex aspect-[4/3] items-center justify-center text-sm text-zinc-400">
                 尚無照片
               </div>
             )}
@@ -177,16 +338,16 @@ function ListingDetailSheet({
                 <button
                   type="button"
                   aria-label="上一張"
-                  onClick={() => setPhotoIndex((i) => (i - 1 + photos.length) % photos.length)}
-                  className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 px-2 py-1 text-white"
+                  onClick={() => scrollToPhoto((photoIndex - 1 + photos.length) % photos.length)}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/45 px-2.5 py-1.5 text-white"
                 >
                   ‹
                 </button>
                 <button
                   type="button"
                   aria-label="下一張"
-                  onClick={() => setPhotoIndex((i) => (i + 1) % photos.length)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 px-2 py-1 text-white"
+                  onClick={() => scrollToPhoto((photoIndex + 1) % photos.length)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/45 px-2.5 py-1.5 text-white"
                 >
                   ›
                 </button>
@@ -196,40 +357,124 @@ function ListingDetailSheet({
               </>
             ) : null}
           </div>
-          <div className="space-y-2 px-3 py-3 text-sm text-zinc-800">
-            <p className="text-base font-semibold text-zinc-900">{formatRent(listing.price)}</p>
-            <p>
-              {listing.city}
-              {listing.district} · {listing.address}
-            </p>
-            <p>
-              {listing.rooms} 房 · {listing.bathrooms} 衛 · {listing.areaPing} 坪 · {floorLabel}
-            </p>
-            <p>
-              {listing.areaParkingSpace && listing.areaParkingSpace > 0 ? "有車位" : "無車位"}
-              {" · "}
-              {listing.petsAllowed === true
-                ? "可養寵物"
-                : listing.petsAllowed === false
-                  ? "不可養寵物"
-                  : "寵物未標示"}
-            </p>
-            <p className="text-xs text-zinc-500">
-              {[
-                listing.rentSubsidy ? "租屋補助" : null,
-                listing.taxDeductible ? "可報稅" : null,
-                listing.canRegisterAddress ? "可簽戶籍" : null,
-              ]
-                .filter(Boolean)
-                .join(" · ") || "補助／報稅／戶籍未標示"}
-            </p>
+
+          <div className="space-y-5 px-3 py-4">
+            <div>
+              <span className="inline-block rounded bg-emerald-600 px-2 py-0.5 text-xs font-bold text-white">
+                出租
+              </span>
+              <h3 className="mt-2 text-lg font-extrabold leading-snug text-zinc-900">{listing.title}</h3>
+              <div className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                <span className="text-3xl font-extrabold tabular-nums tracking-tight text-red-600">
+                  {listing.price.toLocaleString("zh-TW")}
+                </span>
+                <span className="text-sm font-semibold text-red-600">元/月</span>
+                {listing.securityDeposit?.trim() ? (
+                  <span className="text-sm text-zinc-500">押金 {listing.securityDeposit.trim()}</span>
+                ) : null}
+              </div>
+            </div>
+
+            <div>
+              <h4 className="mb-2 text-base font-bold text-zinc-900">物件詳細資訊</h4>
+              <div className="flex flex-col">
+                <div className="flex items-center justify-between gap-3 border-b border-zinc-100 py-2.5">
+                  <span className="shrink-0 text-xs font-medium text-zinc-500">格局</span>
+                  <p className="min-w-0 text-right text-base font-bold text-zinc-900">{layoutText}</p>
+                </div>
+                <DetailInfoRowPair
+                  left={{ label: "權狀坪數", value: `${listing.areaPing} 坪` }}
+                  right={{ label: "主＋附屬", value: buildingAreaTotalText }}
+                />
+                <DetailInfoRowPair
+                  left={{ label: "型態", value: propertyTypeText }}
+                  right={{ label: "樓層", value: floorText }}
+                />
+                <DetailInfoRowPair
+                  left={{ label: "朝向", value: orientationText }}
+                  right={{ label: "管理費", value: managementFeeText }}
+                />
+                <DetailInfoRowPair
+                  left={{ label: "車位", value: hasParking ? parkingTypeText : "無" }}
+                  right={
+                    hasParking && parkingRentText
+                      ? { label: "車位租金", value: parkingRentText }
+                      : undefined
+                  }
+                />
+              </div>
+
+              {rentConditionItems.length > 0 ? (
+                <div className="mt-4">
+                  <h4 className="mb-2 text-sm font-bold text-zinc-900">租賃條件</h4>
+                  <div
+                    className={
+                      rentConditionItems.length >= 2
+                        ? "grid grid-cols-2 gap-2"
+                        : "grid grid-cols-1 gap-2"
+                    }
+                  >
+                    {rentConditionItems.map((item) => (
+                      <DetailInfoBlock key={item.label} label={item.label} value={item.value} />
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            {amenityGridItems.some((item) => item.on) ? (
+              <div>
+                <h4 className="mb-2 text-base font-bold text-zinc-900">提供設備/家具</h4>
+                <ListingAmenityGrid items={amenityGridItems} />
+              </div>
+            ) : null}
+
+            {listing.features.length > 0 ? (
+              <div>
+                <h4 className="mb-2 text-base font-bold text-zinc-900">物件特色</h4>
+                <ul className="grid gap-2">
+                  {listing.features.map((feature, i) => (
+                    <li
+                      key={`${feature}-${i}`}
+                      className="flex items-start gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2.5"
+                    >
+                      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#0b2545] text-[11px] font-bold text-white">
+                        {i + 1}
+                      </span>
+                      <span className="text-sm leading-snug text-zinc-800">{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            <div>
+              <h4 className="mb-2 text-base font-bold text-zinc-900">位置與周邊</h4>
+              <dl className="space-y-2 text-sm">
+                <div className="flex gap-3">
+                  <dt className="w-14 shrink-0 text-zinc-500">地址</dt>
+                  <dd className="min-w-0 break-words font-medium text-zinc-900">
+                    {listing.city}
+                    {listing.district}
+                    {listing.address}
+                  </dd>
+                </div>
+                {listing.community ? (
+                  <div className="flex gap-3">
+                    <dt className="w-14 shrink-0 text-zinc-500">社區</dt>
+                    <dd className="min-w-0 font-medium text-zinc-900">{listing.community}</dd>
+                  </div>
+                ) : null}
+              </dl>
+            </div>
+
             <a
               href={pageUrl}
               target="_blank"
               rel="noreferrer"
               className="inline-block text-xs font-semibold text-[#067a36] underline"
             >
-              開啟物件網頁
+              開啟完整物件網頁
             </a>
           </div>
         </div>
@@ -337,6 +582,12 @@ export function LineLiffRentForm({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState<{ when: string; titles: string[] } | null>(null);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }, [step]);
 
   const cities = useMemo(
     () => [...new Set(listings.map((item) => item.city).filter(Boolean))].sort(),
@@ -697,7 +948,7 @@ export function LineLiffRentForm({
               {step === "criteria"
                 ? "先填找房條件"
                 : step === "listings"
-                  ? "點物件看詳情，右側點「想看」"
+                  ? "點物件看照片與資訊，右側點「想看」"
                   : "填基本資料與看屋時間後送出"}
             </p>
           </div>
@@ -734,7 +985,7 @@ export function LineLiffRentForm({
             </div>
             <div>
               <p className="mb-2 text-xs font-medium text-zinc-500">行政區（可複選）</p>
-              <div className="flex flex-wrap gap-2">
+              <div className="grid grid-cols-5 gap-1.5">
                 {districts.slice(0, 16).map((d) => (
                   <Chip
                     key={d}
@@ -743,12 +994,14 @@ export function LineLiffRentForm({
                     onClick={() =>
                       setCriteria((c) => ({ ...c, districts: toggleIn(c.districts, d) }))
                     }
+                    className="w-full justify-center px-1 text-xs"
                   />
                 ))}
                 <Chip
                   label="不限"
                   active={criteria.districts.length === 0}
                   onClick={() => setCriteria((c) => ({ ...c, districts: [] }))}
+                  className="w-full justify-center px-1 text-xs"
                 />
               </div>
             </div>
@@ -834,7 +1087,10 @@ export function LineLiffRentForm({
               </div>
             </div>
             <div>
-              <p className="mb-2 text-xs font-medium text-zinc-500">租補／報稅／入戶籍</p>
+              <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
+                <p className="text-xs font-medium text-zinc-500">租補／報稅／入戶籍</p>
+                <p className="text-[11px] text-zinc-400">若不需要或都可以請選「不限」</p>
+              </div>
               <div className="flex flex-wrap gap-2">
                 {EXTRA_OPTIONS.map((o) => (
                   <Chip
@@ -850,7 +1106,7 @@ export function LineLiffRentForm({
                   />
                 ))}
                 <Chip
-                  label="都不需要"
+                  label="不限"
                   active={criteria.extras.length === 0}
                   onClick={() => setCriteria((c) => ({ ...c, extras: [] }))}
                 />
@@ -899,7 +1155,7 @@ export function LineLiffRentForm({
         {step === "listings" ? (
           <Section title={`配對物件（${matched.length}）`}>
             <p className="text-xs text-zinc-500">
-              點左側看詳情；右側「想看」可複選。
+              點物件卡片查看照片與資訊；右側「想看」可複選。
               {matchedRelaxed.length ? `（已放寬：${matchedRelaxed.join("、")}）` : ""}
             </p>
             {matched.length === 0 ? (
@@ -921,24 +1177,24 @@ export function LineLiffRentForm({
                       <button
                         type="button"
                         onClick={() => setDetailId(item.id)}
-                        className="flex min-w-0 flex-1 gap-3 p-3 text-left"
+                        className="flex min-w-0 flex-1 items-center gap-3 p-3 text-left"
                       >
-                        <span className="h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-zinc-100">
+                        <span className="h-20 w-24 shrink-0 overflow-hidden rounded-xl bg-zinc-100">
                           {photo ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img src={photo} alt="" className="h-full w-full object-cover" />
                           ) : null}
                         </span>
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-bold text-zinc-900">
+                          <span className="line-clamp-2 text-sm font-bold leading-snug text-zinc-900">
                             {item.title}
                           </span>
-                          <span className="mt-0.5 block text-xs text-zinc-500">
+                          <span className="mt-1 block text-xs text-zinc-500">
                             {item.city}
-                            {item.district} · {item.rooms} 房 · {formatRent(item.price)}
+                            {item.district} · {item.rooms} 房 · {item.areaPing} 坪
                           </span>
-                          <span className="mt-1 inline-block text-xs text-[#067a36]">
-                            點此看詳細資訊
+                          <span className="mt-1 block text-sm font-semibold tabular-nums text-red-600">
+                            {formatRent(item.price)}
                           </span>
                         </span>
                       </button>

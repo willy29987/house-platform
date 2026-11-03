@@ -1,10 +1,8 @@
-import { ListingType } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { LineAssistantWorkbench } from "@/components/line-assistant-workbench";
 import { getCurrentAdmin } from "@/lib/admin-auth";
 import { getLineAccountLink } from "@/lib/line-official-account";
-import { toRentalMatchListing } from "@/lib/line-rental-assistant";
-import { getListings } from "@/lib/listings";
+import { loadRentalMatchListings } from "@/lib/line-rental-assistant";
 
 export const dynamic = "force-dynamic";
 
@@ -12,11 +10,10 @@ export default async function LineAssistantPreviewPage() {
   const current = await getCurrentAdmin();
   if (!current) redirect("/admin/login");
 
-  const [listings, lineAccount] = await Promise.all([
-    getListings({ listingType: ListingType.RENT }),
+  const [cards, lineAccount] = await Promise.all([
+    loadRentalMatchListings(60),
     getLineAccountLink(),
   ]);
-  const cards = listings.map(toRentalMatchListing);
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-3">

@@ -176,7 +176,7 @@ export function ViewingSchedulePicker({
             <p className="mb-1 text-xs font-medium text-slate-600">
               {value.start ? `時段 ${value.start}` : "點選希望開始時間（每格 15 分）"}
             </p>
-            <div className="max-h-28 overflow-y-auto rounded-xl border border-slate-200 bg-[#f4f7fb] p-1">
+            <div className="max-h-60 overflow-y-auto rounded-xl border border-slate-200 bg-[#f4f7fb] p-1">
               <div className="flex flex-col">
                 {TIMELINE_SLOTS.map((hm) => {
                   const active = value.start === hm;

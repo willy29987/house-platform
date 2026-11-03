@@ -1,6 +1,5 @@
 /** 方案 3：LINE 對話問條件 → LIFF 選房＋時間 → LINE 續問個資 */
 
-import { ListingType } from "@prisma/client";
 import {
   getGuestSessionById,
   getGuestSessionByUserId,
@@ -14,7 +13,6 @@ import {
   criteriaSummary,
   emptyCriteria,
   matchRentals,
-  toRentalMatchListing,
   type RentalExtra,
   type RentalMatchListing,
 } from "@/lib/line-rental-assistant";
@@ -29,7 +27,6 @@ import {
 } from "@/lib/line-messaging";
 import { appendLineRentalCase } from "@/lib/line-rental-cases";
 import { notifyAgentsOfNewViewing } from "@/lib/line-viewing-agent";
-import { prisma } from "@/lib/prisma";
 
 const ROOM_OPTS = [
   { id: "1", label: "1 房" },
@@ -66,18 +63,8 @@ export function buildGuestLiffPickUrl(sessionId: string) {
 }
 
 async function loadRentListings(): Promise<RentalMatchListing[]> {
-  if (!process.env.DATABASE_URL) return [];
-  try {
-    const rows = await prisma.listing.findMany({
-      where: { listingType: ListingType.RENT, isPublished: true },
-      orderBy: { updatedAt: "desc" },
-      take: 200,
-    });
-    return rows.map(toRentalMatchListing);
-  } catch (error) {
-    console.error("[line-guest-flow] loadRentListings", error);
-    return [];
-  }
+  const { loadRentalMatchListings } = await import("@/lib/line-rental-assistant");
+  return loadRentalMatchListings(200);
 }
 
 function citiesFrom(listings: RentalMatchListing[]) {
