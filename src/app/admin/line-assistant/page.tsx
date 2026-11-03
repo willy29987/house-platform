@@ -1,8 +1,10 @@
 import { redirect } from "next/navigation";
 import { LineAssistantWorkbench } from "@/components/line-assistant-workbench";
 import { getCurrentAdmin } from "@/lib/admin-auth";
+import { readLineConversations } from "@/lib/line-conversations";
 import { getLineAccountLink } from "@/lib/line-official-account";
 import { loadRentalMatchListings } from "@/lib/line-rental-assistant";
+import { readLineRentalCases } from "@/lib/line-rental-cases";
 
 export const dynamic = "force-dynamic";
 
@@ -10,9 +12,11 @@ export default async function LineAssistantPreviewPage() {
   const current = await getCurrentAdmin();
   if (!current) redirect("/admin/login");
 
-  const [cards, lineAccount] = await Promise.all([
+  const [cards, lineAccount, conversations, cases] = await Promise.all([
     loadRentalMatchListings(60),
     getLineAccountLink(),
+    readLineConversations(),
+    readLineRentalCases(),
   ]);
 
   return (
@@ -38,7 +42,12 @@ export default async function LineAssistantPreviewPage() {
           </a>
         ) : null}
       </div>
-      <LineAssistantWorkbench listings={cards} lineBasicId={lineAccount.basicId} />
+      <LineAssistantWorkbench
+        listings={cards}
+        lineBasicId={lineAccount.basicId}
+        initialConversations={conversations}
+        initialCases={cases}
+      />
     </div>
   );
 }

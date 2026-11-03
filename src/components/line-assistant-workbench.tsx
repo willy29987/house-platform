@@ -4,6 +4,8 @@ import { useState } from "react";
 import { LineGuestChatPreview } from "@/components/line-guest-chat-preview";
 import { LineNativeChatPreview } from "@/components/line-native-chat-preview";
 import { LineRentalPreview } from "@/components/line-rental-preview";
+import type { LineConversation } from "@/lib/line-conversations";
+import type { LineRentalCase } from "@/lib/line-rental-cases";
 import type { RentalMatchListing } from "@/lib/line-rental-assistant";
 
 type TabId = "staff" | "guest" | "native";
@@ -17,9 +19,13 @@ const TABS: { id: TabId; label: string }[] = [
 export function LineAssistantWorkbench({
   listings,
   lineBasicId,
+  initialConversations = [],
+  initialCases = [],
 }: {
   listings: RentalMatchListing[];
   lineBasicId: string;
+  initialConversations?: LineConversation[];
+  initialCases?: LineRentalCase[];
 }) {
   const [tab, setTab] = useState<TabId>("staff");
 
@@ -44,7 +50,12 @@ export function LineAssistantWorkbench({
       </div>
 
       {tab === "staff" ? (
-        <LineRentalPreview listings={listings} lineBasicId={lineBasicId} />
+        <LineRentalPreview
+          listings={listings}
+          lineBasicId={lineBasicId}
+          initialConversations={initialConversations}
+          initialCases={initialCases}
+        />
       ) : tab === "guest" ? (
         <LineGuestChatPreview listings={listings} lineBasicId={lineBasicId} />
       ) : (

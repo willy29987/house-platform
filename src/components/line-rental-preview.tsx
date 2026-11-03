@@ -404,6 +404,22 @@ function caseToStaffGuest(item: LineRentalCase): StaffGuest {
   };
 }
 
+function buildLiveGuests(
+  conversations: LineConversation[],
+  cases: LineRentalCase[],
+): StaffGuest[] {
+  const fromConversations = conversations.map((item) =>
+    conversationToStaffGuest(item, cases),
+  );
+  const covered = new Set(
+    fromConversations.map((item) => item.lineUserId).filter(Boolean) as string[],
+  );
+  const orphans = cases
+    .filter((item) => item.lineUserId && !covered.has(item.lineUserId))
+    .map(caseToStaffGuest);
+  return [...fromConversations, ...orphans];
+}
+
 function conversationToStaffGuest(
   conversation: LineConversation,
   cases: LineRentalCase[],
@@ -481,12 +497,28 @@ function statusPill(status: GuestStatus) {
   return "bg-zinc-100 text-zinc-700";
 }
 
-export function LineRentalPreview({ listings, lineBasicId }: { listings: RentalMatchListing[]; lineBasicId: string }) {
+export function LineRentalPreview({
+  listings,
+  lineBasicId,
+  initialConversations = [],
+  initialCases = [],
+}: {
+  listings: RentalMatchListing[];
+  lineBasicId: string;
+  initialConversations?: LineConversation[];
+  initialCases?: LineRentalCase[];
+}) {
   const demoGuests = useMemo(() => buildStaffGuests(listings), [listings]);
-  const [liveGuests, setLiveGuests] = useState<StaffGuest[]>([]);
-  const [guests, setGuests] = useState<StaffGuest[]>(() => buildStaffGuests(listings));
+  const seedLive = useMemo(
+    () => buildLiveGuests(initialConversations, initialCases),
+    [initialConversations, initialCases],
+  );
+  const [liveGuests, setLiveGuests] = useState<StaffGuest[]>(() => seedLive);
+  const [guests, setGuests] = useState<StaffGuest[]>(() =>
+    seedLive.length ? seedLive : buildStaffGuests(listings),
+  );
   const [filter, setFilter] = useState<ListFilter>("pending");
-  const [selectedId, setSelectedId] = useState("wang");
+  const [selectedId, setSelectedId] = useState(() => seedLive[0]?.id ?? "wang");
   const [editingTime, setEditingTime] = useState(false);
   const [schedule, setSchedule] = useState<ViewingScheduleValue>(emptyViewingSchedule);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -505,19 +537,7 @@ export function LineRentalPreview({ listings, lineBasicId }: { listings: RentalM
           cases?: LineRentalCase[];
         };
         if (cancelled) return;
-        const conversations = data.conversations ?? [];
-        const cases = data.cases ?? [];
-        const fromConversations = conversations.map((item) =>
-          conversationToStaffGuest(item, cases),
-        );
-        const covered = new Set(
-          fromConversations.map((item) => item.lineUserId).filter(Boolean) as string[],
-        );
-        // 尚無 webhook 對話紀錄的舊案件：暫用 summaryText 備援
-        const orphans = cases
-          .filter((item) => item.lineUserId && !covered.has(item.lineUserId))
-          .map(caseToStaffGuest);
-        setLiveGuests([...fromConversations, ...orphans]);
+        setLiveGuests(buildLiveGuests(data.conversations ?? [], data.cases ?? []));
       } catch {
         /* ignore */
       }
