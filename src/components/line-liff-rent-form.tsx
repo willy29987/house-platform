@@ -733,7 +733,7 @@ export function LineLiffRentForm({
                   />
                 ))}
               </div>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
+              <div className="mt-2 flex flex-nowrap items-center gap-1.5">
                 <Chip
                   label="最低"
                   active={priceMinOn}
@@ -752,7 +752,7 @@ export function LineLiffRentForm({
                     min={0}
                     value={priceMin}
                     onChange={(e) => setPriceMin(e.target.value)}
-                    className="w-28 rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-900"
+                    className="min-h-11 min-w-0 flex-1 rounded-xl border border-zinc-200 px-2 py-2 text-sm text-zinc-900"
                     aria-label="最低預算"
                   />
                 ) : null}
@@ -774,7 +774,7 @@ export function LineLiffRentForm({
                     min={0}
                     value={priceMax}
                     onChange={(e) => setPriceMax(e.target.value)}
-                    className="w-28 rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-900"
+                    className="min-h-11 min-w-0 flex-1 rounded-xl border border-zinc-200 px-2 py-2 text-sm text-zinc-900"
                     aria-label="最高預算"
                   />
                 ) : null}
