@@ -1,12 +1,12 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
-import liff from "@line/liff";
 import {
   emptyViewingSchedule,
   ViewingSchedulePicker,
   type ViewingScheduleValue,
 } from "@/components/viewing-schedule-picker";
+import { loadLiffClient } from "@/lib/line-liff-client";
 import {
   EXTRA_OPTIONS,
   MATCH_LIST_LIMIT,
@@ -63,18 +63,23 @@ function Chip({
   active: boolean;
   onClick: () => void;
 }) {
+  // 用原生 label + checkbox，LINE WebView 比 button onClick 穩
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`touch-manipulation rounded-full border px-3 py-1.5 text-sm active:opacity-80 ${
+    <label
+      className={`inline-flex min-h-11 cursor-pointer touch-manipulation items-center rounded-full border px-3 py-2 text-sm active:opacity-80 ${
         active
           ? "border-[#06c755] bg-[#e8f8ef] font-semibold text-[#067a36]"
           : "border-zinc-200 bg-white text-zinc-700"
       }`}
     >
+      <input
+        type="checkbox"
+        className="sr-only"
+        checked={active}
+        onChange={() => onClick()}
+      />
       {label}
-    </button>
+    </label>
   );
 }
 
@@ -442,7 +447,8 @@ export function LineLiffRentForm({
       let clientSent = false;
       if (liffId) {
         try {
-          if (liff.isInClient()) {
+          const liff = await loadLiffClient();
+          if (liff?.isInClient()) {
             await liff.sendMessages([{ type: "text", text: chatText }]);
             clientSent = true;
           }
@@ -490,7 +496,8 @@ export function LineLiffRentForm({
       // 客戶端沒送成功時，再用 server push / sendMessages 備援
       if (!clientSent && !data.pushSent && liffId) {
         try {
-          if (liff.isInClient()) {
+          const liff = await loadLiffClient();
+          if (liff?.isInClient()) {
             await liff.sendMessages([
               { type: "text", text: data.confirmText || chatText },
             ]);
@@ -548,7 +555,7 @@ export function LineLiffRentForm({
   }
 
   return (
-    <div className="relative z-0 mx-auto flex h-dvh w-full max-w-md flex-col overflow-hidden bg-zinc-100">
+    <div className="relative z-0 mx-auto flex min-h-dvh w-full max-w-md flex-col bg-zinc-100">
       <header className="shrink-0 border-b border-zinc-200 bg-white px-4 py-3">
         <div className="flex items-center gap-2">
           {step !== "criteria" ? (
@@ -576,7 +583,7 @@ export function LineLiffRentForm({
         <StepDots step={step} />
       </header>
 
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-3">
+      <div className="flex-1 space-y-3 px-3 py-3 pb-4">
         {step === "criteria" ? (
           <Section title="找房條件">
             <div>
