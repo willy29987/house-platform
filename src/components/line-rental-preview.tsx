@@ -23,7 +23,12 @@ type GuestStatus =
 
 type ListFilter = "all" | "pending" | "active" | "confirmed";
 
-type ChatLine = { id: number; from: "guest" | "bot" | "staff"; text: string };
+type ChatLine = {
+  id: number;
+  from: "guest" | "bot" | "staff";
+  text: string;
+  at?: string;
+};
 
 type PickedListing = { id: string; title: string; price: number };
 
@@ -37,12 +42,60 @@ type StaffGuest = {
   criteriaText: string;
   /** 與 LINE 對話同一段原文（客人 sendMessages／案件 summaryText） */
   summaryText: string;
+  createdAt: string;
   picked: PickedListing[];
   requestedWhen: string;
   proposedWhen: string;
   lines: ChatLine[];
   asks: FollowAsk[];
 };
+
+function formatLineClock(iso: string) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString("zh-TW", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "Asia/Taipei",
+  });
+}
+
+function formatLineDayLabel(iso: string) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("zh-TW", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    weekday: "short",
+    timeZone: "Asia/Taipei",
+  });
+}
+
+/** 把網址做成可點連結，接近 LINE 對話顯示 */
+function LineMessageBody({ text }: { text: string }) {
+  const parts = text.split(/(https?:\/\/[^\s]+)/g);
+  return (
+    <>
+      {parts.map((part, index) =>
+        /^https?:\/\//.test(part) ? (
+          <a
+            key={`${index}-${part.slice(0, 24)}`}
+            href={part}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="break-all text-[#5179ad] underline"
+          >
+            {part}
+          </a>
+        ) : (
+          <span key={`${index}-${part.slice(0, 12)}`}>{part}</span>
+        ),
+      )}
+    </>
+  );
+}
 
 const STATUS_LABEL: Record<GuestStatus, string> = {
   selecting: "進行中",
@@ -190,6 +243,7 @@ function buildStaffGuests(listings: RentalMatchListing[]): StaffGuest[] {
       watching: false,
       criteriaText: "沒有寵物 · 台北市 · 行政區還沒選",
       summaryText: "沒有寵物 · 台北市 · 行政區還沒選",
+      createdAt: "2026-11-03T04:10:00.000Z",
       picked: [],
       requestedWhen: "",
       proposedWhen: "",
@@ -203,6 +257,7 @@ function buildStaffGuests(listings: RentalMatchListing[]): StaffGuest[] {
       watching: true,
       criteriaText: `${criteriaFrom(first, "新北市 · 板橋區 · 2 房 · 要車位")} · 有，一隻貓`,
       summaryText: `${criteriaFrom(first, "新北市 · 板橋區 · 2 房 · 要車位")} · 有，一隻貓`,
+      createdAt: "2026-11-03T04:20:00.000Z",
       picked: firstPick,
       requestedWhen: "",
       proposedWhen: "",
@@ -221,6 +276,7 @@ function buildStaffGuests(listings: RentalMatchListing[]): StaffGuest[] {
         "看屋時間：2026/11/03 下午 13:00–17:00",
         `條件：${criteriaFrom(second, "台北市 · 中山區 · 2 房")} · 沒有寵物`,
       ].join("\n"),
+      createdAt: "2026-11-03T05:00:00.000Z",
       picked: secondPick,
       requestedWhen: "2026/11/03 下午 13:00–17:00",
       proposedWhen: "",
@@ -238,6 +294,7 @@ function buildStaffGuests(listings: RentalMatchListing[]): StaffGuest[] {
       watching: true,
       criteriaText: `${criteriaFrom(third, "台北市 · 1 房 · 租屋補助")} · 有，小型犬`,
       summaryText: `${criteriaFrom(third, "台北市 · 1 房 · 租屋補助")} · 有，小型犬`,
+      createdAt: "2026-11-03T05:30:00.000Z",
       picked: [],
       requestedWhen: "",
       proposedWhen: "",
@@ -256,6 +313,7 @@ function buildStaffGuests(listings: RentalMatchListing[]): StaffGuest[] {
         "看屋時間：2026/10/30 上午 9:00–12:00",
         `條件：${criteriaFrom(first, "新北市 · 3 房 · 要車位 · 簽戶籍")} · 沒有寵物`,
       ].join("\n"),
+      createdAt: "2026-10-30T01:00:00.000Z",
       picked: firstPick,
       requestedWhen: "2026/10/30 上午 9:00–12:00",
       proposedWhen: "",
@@ -275,10 +333,12 @@ function shortStatus(status: GuestStatus) {
 }
 
 function caseToStaffGuest(item: LineRentalCase): StaffGuest {
+  const createdAt = item.createdAt || new Date().toISOString();
+  const clock = formatLineClock(createdAt);
   const lines: ChatLine[] = [];
   const add = (from: ChatLine["from"], text: string) => {
     if (!text) return;
-    lines.push({ id: lines.length + 1, from, text });
+    lines.push({ id: lines.length + 1, from, text, at: clock });
   };
 
   const lineMessage =
@@ -299,7 +359,7 @@ function caseToStaffGuest(item: LineRentalCase): StaffGuest {
     add("guest", "［圖片］");
     if (lineMessage) add("guest", lineMessage);
   } else {
-    // 與真實 LINE 對話一致：客人端送出的整段原文
+    // 與真實 LINE 對話一致：客人端送出的整段原文（單則氣泡）
     add("guest", lineMessage || "（客人已送出找房預約）");
   }
   if (item.proposedWhen) add("staff", `業務提案時間：${item.proposedWhen}`);
@@ -330,6 +390,7 @@ function caseToStaffGuest(item: LineRentalCase): StaffGuest {
     watching: true,
     criteriaText: criteriaBits.join(" · ") || item.criteriaText,
     summaryText: lineMessage,
+    createdAt,
     picked: item.picked,
     requestedWhen: item.requestedWhen,
     proposedWhen: item.proposedWhen || "",
@@ -407,9 +468,11 @@ export function LineRentalPreview({ listings, lineBasicId }: { listings: RentalM
   useEffect(() => {
     setGuests((current) => {
       const byId = new Map(current.map((g) => [g.id, g]));
-      const mergedLive = liveGuests.map((g) => byId.get(g.id) ?? g);
-      const demoMerged = demoGuests.map((g) => byId.get(g.id) ?? g);
-      return [...mergedLive, ...demoMerged];
+      // 有真實案件時只顯示真實對話，避免跟示範資料混在一起
+      if (liveGuests.length) {
+        return liveGuests.map((g) => byId.get(g.id) ?? g);
+      }
+      return demoGuests.map((g) => byId.get(g.id) ?? g);
     });
   }, [liveGuests, demoGuests]);
 
@@ -443,12 +506,13 @@ export function LineRentalPreview({ listings, lineBasicId }: { listings: RentalM
     const when = guest.proposedWhen || guest.requestedWhen;
     const text = `${when} 可以，同事會再跟你說帶看的人。`;
     const id = lineId.current++;
+    const at = formatLineClock(new Date().toISOString());
     patchGuest(guest.id, (current) => ({
       ...current,
       status: "confirmed",
       requestedWhen: when,
       proposedWhen: "",
-      lines: [...current.lines, { id, from: "staff", text }],
+      lines: [...current.lines, { id, from: "staff", text, at }],
     }));
     setEditingTime(false);
   }
@@ -457,11 +521,15 @@ export function LineRentalPreview({ listings, lineBasicId }: { listings: RentalM
     const when = formatViewingRange(schedule.date, schedule.start);
     if (!when) return;
     const id = lineId.current++;
+    const at = formatLineClock(new Date().toISOString());
     patchGuest(guest.id, (current) => ({
       ...current,
       status: "reschedule_sent",
       proposedWhen: when,
-      lines: [...current.lines, { id, from: "staff", text: `原本的時間暫無法安排，改 ${when} 可以嗎？` }],
+      lines: [
+        ...current.lines,
+        { id, from: "staff", text: `原本的時間暫無法安排，改 ${when} 可以嗎？`, at },
+      ],
     }));
     setEditingTime(false);
     setSchedule(emptyViewingSchedule());
@@ -497,9 +565,10 @@ export function LineRentalPreview({ listings, lineBasicId }: { listings: RentalM
     if (!text) return;
     const id = lineId.current++;
     const guestId = selected.id;
+    const at = formatLineClock(new Date().toISOString());
     patchGuest(guestId, (current) => ({
       ...current,
-      lines: [...current.lines, { id, from: "staff", text }],
+      lines: [...current.lines, { id, from: "staff", text, at }],
     }));
     setDrafts((current) => ({ ...current, [guestId]: "" }));
   }
@@ -512,8 +581,8 @@ export function LineRentalPreview({ listings, lineBasicId }: { listings: RentalM
   }
 
   return (
-    <div className="flex h-[min(44rem,calc(100dvh-9rem))] min-h-[28rem] flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
-      <div className="flex gap-1 overflow-x-auto border-b border-zinc-100 px-2 py-2">
+    <div className="flex h-[min(52rem,calc(100dvh-8rem))] min-h-[32rem] flex-col overflow-hidden rounded-xl border border-[#c9ced6] bg-[#edf0f5] shadow-sm">
+      <div className="flex gap-1 overflow-x-auto border-b border-[#d8dde6] bg-white px-2 py-2">
         {FILTERS.map((item) => {
           const count = guests.filter((guest) => matchesFilter(guest, item.id)).length;
           const active = filter === item.id;
@@ -527,7 +596,7 @@ export function LineRentalPreview({ listings, lineBasicId }: { listings: RentalM
                 setDetailsOpen(false);
               }}
               className={`shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold ${
-                active ? "bg-[#0b2545] text-white" : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+                active ? "bg-[#06c755] text-white" : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
               }`}
             >
               {item.label}
@@ -537,8 +606,8 @@ export function LineRentalPreview({ listings, lineBasicId }: { listings: RentalM
         })}
       </div>
 
-      <div className="grid min-h-0 flex-1 lg:grid-cols-[16rem_minmax(0,1fr)_18rem]">
-        <ul className="max-h-40 overflow-y-auto border-b border-zinc-100 lg:max-h-none lg:border-r lg:border-b-0">
+      <div className="grid min-h-0 flex-1 lg:grid-cols-[17rem_minmax(0,1fr)_17rem]">
+        <ul className="max-h-40 overflow-y-auto border-b border-[#d8dde6] bg-white lg:max-h-none lg:border-r lg:border-b-0">
           {visible.length === 0 ? (
             <li className="px-4 py-8 text-center text-sm text-zinc-500">這個篩選目前沒有客人</li>
           ) : (
@@ -581,32 +650,30 @@ export function LineRentalPreview({ listings, lineBasicId }: { listings: RentalM
         </ul>
 
         {selected ? (
-          <section className="flex min-h-0 flex-col border-b border-zinc-100 lg:border-b-0 lg:border-r">
-            <header className="border-b border-zinc-100 px-4 py-3">
+          <section className="flex min-h-0 flex-col overflow-hidden border-b border-[#d8dde6] bg-[#7494c0] lg:border-b-0 lg:border-r lg:border-[#d8dde6]">
+            {/* LINE 電腦版頂欄風格 */}
+            <header className="shrink-0 border-b border-black/10 bg-[#432e1f] px-3 py-2.5 text-white">
               <div className="flex items-center gap-3">
-                <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#06c755] text-sm font-bold text-white">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#06c755] text-sm font-bold text-white">
                   {selected.lineName.slice(0, 1)}
-                  {selected.watching ? (
-                    <span
-                      title="之後新案會問"
-                      className="absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-sky-500"
-                    />
-                  ) : null}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-base font-bold text-zinc-900">{selected.lineName}</p>
-                  <p className="text-xs text-zinc-500">{shortStatus(selected.status)}</p>
+                  <p className="truncate text-[15px] font-semibold leading-tight">{selected.lineName}</p>
+                  <p className="truncate text-[11px] text-white/65">
+                    {shortStatus(selected.status)}
+                    {lineBasicId ? ` · ${lineBasicId}` : ""}
+                  </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setDetailsOpen((open) => !open)}
-                  className="shrink-0 rounded-full border border-zinc-200 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 lg:hidden"
+                  className="shrink-0 rounded-md bg-white/10 px-2.5 py-1 text-xs font-medium text-white hover:bg-white/15 lg:hidden"
                 >
-                  {detailsOpen ? "收起詳情" : "詳情"}
+                  {detailsOpen ? "收起" : "處理"}
                 </button>
               </div>
               {detailsOpen ? (
-                <div className="mt-3 lg:hidden">
+                <div className="mt-3 rounded-lg bg-white p-3 text-zinc-900 lg:hidden">
                   <GuestDecisionPanel
                     guest={selected}
                     needsConfirm={Boolean(needsConfirm)}
@@ -629,20 +696,47 @@ export function LineRentalPreview({ listings, lineBasicId }: { listings: RentalM
               ) : null}
             </header>
 
-            <div className="min-h-0 flex-1 overflow-y-auto bg-[#8cabd9] px-3 py-3">
-              <div className="mx-auto w-full max-w-md space-y-2">
+            {/* LINE 對話區：日期分隔 + 氣泡 + 旁側時間 */}
+            <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+              <div className="mx-auto flex w-full max-w-xl flex-col gap-3">
+                {selected.createdAt ? (
+                  <div className="flex justify-center py-1">
+                    <span className="rounded-full bg-black/20 px-3 py-0.5 text-[11px] font-medium text-white/95">
+                      {formatLineDayLabel(selected.createdAt)}
+                    </span>
+                  </div>
+                ) : null}
                 {selected.lines.map((line) => {
-                  const outgoing = line.from !== "guest";
+                  const fromGuest = line.from === "guest";
                   return (
-                    <p
+                    <div
                       key={line.id}
-                      className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm leading-relaxed text-zinc-900 ${
-                        outgoing ? "ml-auto rounded-tr-sm bg-[#95ec69]" : "rounded-tl-sm bg-white"
-                      }`}
+                      className={`flex items-end gap-1.5 ${fromGuest ? "justify-start" : "justify-end"}`}
                     >
-                      {line.from === "staff" ? <span className="mb-1 block text-[11px] font-semibold text-[#067a36]">同事</span> : null}
-                      {line.text}
-                    </p>
+                      {fromGuest ? (
+                        <span className="mb-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#06c755] text-xs font-bold text-white">
+                          {selected.lineName.slice(0, 1)}
+                        </span>
+                      ) : null}
+                      {!fromGuest && line.at ? (
+                        <span className="mb-0.5 shrink-0 text-[10px] leading-none text-white/80">{line.at}</span>
+                      ) : null}
+                      <div
+                        className={`max-w-[min(78%,22rem)] whitespace-pre-wrap break-words px-3 py-2 text-[13.5px] leading-[1.55] text-zinc-900 shadow-sm ${
+                          fromGuest
+                            ? "rounded-[18px] rounded-bl-[4px] bg-white"
+                            : "rounded-[18px] rounded-br-[4px] bg-[#95ec69]"
+                        }`}
+                      >
+                        {line.from === "staff" ? (
+                          <span className="mb-1 block text-[10px] font-semibold text-[#067a36]">官方帳號／同事</span>
+                        ) : null}
+                        <LineMessageBody text={line.text} />
+                      </div>
+                      {fromGuest && line.at ? (
+                        <span className="mb-0.5 shrink-0 text-[10px] leading-none text-white/80">{line.at}</span>
+                      ) : null}
+                    </div>
                   );
                 })}
               </div>
@@ -663,8 +757,8 @@ export function LineRentalPreview({ listings, lineBasicId }: { listings: RentalM
               </div>
             ) : null}
 
-            <form onSubmit={sendDraft} className="border-t border-zinc-200 bg-white px-3 py-2">
-              <div className="mx-auto flex w-full max-w-md items-end gap-2">
+            <form onSubmit={sendDraft} className="shrink-0 border-t border-black/10 bg-[#f5f5f5] px-3 py-2">
+              <div className="mx-auto flex w-full max-w-xl items-end gap-2">
                 <label className="min-w-0 flex-1">
                   <span className="sr-only">輸入訊息</span>
                   <textarea
@@ -676,7 +770,7 @@ export function LineRentalPreview({ listings, lineBasicId }: { listings: RentalM
                       setDrafts((current) => ({ ...current, [selected.id]: value }));
                     }}
                     onKeyDown={onDraftKeyDown}
-                    className="max-h-28 min-h-10 w-full resize-none rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-[#06c755]"
+                    className="max-h-28 min-h-10 w-full resize-none rounded-md border border-[#d0d3d9] bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-[#06c755]"
                   />
                 </label>
                 <button
@@ -688,14 +782,14 @@ export function LineRentalPreview({ listings, lineBasicId }: { listings: RentalM
                   <SendIcon />
                 </button>
               </div>
+              <p className="mx-auto mt-1 max-w-xl text-center text-[10px] text-zinc-500">
+                此輸入框僅供內部備註預覽，不會送到 LINE。上方氣泡＝客人真實對話內容。
+              </p>
             </form>
-            <p className="bg-white px-4 pb-2 text-center text-[11px] leading-relaxed text-zinc-500">
-              預覽傳訊，不會送到{lineBasicId ? ` ${lineBasicId}` : "官方 LINE"}。
-            </p>
           </section>
         ) : (
-          <div className="flex items-center justify-center border-b border-zinc-100 px-4 text-sm text-zinc-500 lg:border-b-0 lg:border-r">
-            選左邊的客人開始回訊
+          <div className="flex items-center justify-center border-b border-zinc-100 bg-[#7494c0] px-4 text-sm text-white/90 lg:border-b-0 lg:border-r">
+            選左邊的客人查看 LINE 對話
           </div>
         )}
 
@@ -771,13 +865,6 @@ function GuestDecisionPanel({
           {shortStatus(guest.status)}
           {guest.watching ? " · 之後新案會問" : ""}
         </p>
-      </div>
-
-      <div>
-        <p className="text-xs font-semibold text-zinc-500">LINE 對話內容</p>
-        <pre className="mt-1 max-h-72 overflow-y-auto whitespace-pre-wrap rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs leading-relaxed text-zinc-800">
-          {guest.summaryText || guest.criteriaText || "尚無對話內容"}
-        </pre>
       </div>
 
       <div>

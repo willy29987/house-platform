@@ -23,7 +23,7 @@ export default async function LineAssistantPreviewPage() {
           <p className="mt-1 text-sm text-zinc-500">
             {lineAccount.basicId || "官方帳號"}
             {" · "}
-            收件匣同步客人 LIFF 約看；在此回覆先供內部作業
+            中間對話區比照 LINE 聊天室顯示客人原文
             {lineAccount.live ? "（已開 LINE 推播）" : "（LINE 自動推播尚未開啟）"}
           </p>
         </div>
