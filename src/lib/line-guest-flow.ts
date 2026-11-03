@@ -35,6 +35,14 @@ const ROOM_OPTS = [
   { id: "4", label: "4 房以上" },
 ];
 
+async function replyGuest(
+  replyToken: string,
+  lineUserId: string,
+  messages: LineMessage[],
+) {
+  return replyLineMessages(replyToken, messages, { lineUserId });
+}
+
 const WELCOME =
   "您好～請問最近有在找房子嗎？如果有需要找房子可以點選「 開始找房 」，點選您要的需求就可以推薦您合適的房源哦！";
 
@@ -352,7 +360,7 @@ export async function startGuestFlow(input: {
   lineUserId: string;
   displayName?: string;
 }) {
-  await replyLineMessages(input.replyToken, openFullLiffFormMessages(input.lineUserId));
+  await replyGuest(input.replyToken, input.lineUserId, openFullLiffFormMessages(input.lineUserId));
 }
 
 export async function handleGuestText(input: {
@@ -369,6 +377,11 @@ export async function handleGuestText(input: {
     return true;
   }
 
+  // LIFF 送出的預約原文已進對話，勿再當找房流程文字處理
+  if (text.includes("【找房預約】")) {
+    return true;
+  }
+
   const session = await getGuestSessionByUserId(input.lineUserId);
   if (!session) return false;
 
@@ -378,19 +391,19 @@ export async function handleGuestText(input: {
     session.petNote = text;
     session.step = "awaiting_liff";
     await saveGuestSession(session);
-    await replyLineMessages(input.replyToken, openLiffMessage(session));
+    await replyGuest(input.replyToken, input.lineUserId, openLiffMessage(session));
     return true;
   }
 
   if (session.step === "awaiting_liff") {
-    await replyLineMessages(input.replyToken, openLiffMessage(session));
+    await replyGuest(input.replyToken, input.lineUserId, openLiffMessage(session));
     return true;
   }
 
   if (session.step === "people") {
     const n = Number.parseInt(text.replace(/[^\d]/g, ""), 10);
     if (!Number.isFinite(n) || n < 1 || n > 20) {
-      await replyLineMessages(input.replyToken, [
+      await replyGuest(input.replyToken, input.lineUserId, [
         { type: "text", text: "請回覆 1–20 的數字。" },
         askPeople(),
       ]);
@@ -399,7 +412,7 @@ export async function handleGuestText(input: {
     session.peopleCount = n;
     session.step = "occupation";
     await saveGuestSession(session);
-    await replyLineMessages(input.replyToken, [askOccupation()]);
+    await replyGuest(input.replyToken, input.lineUserId, [askOccupation()]);
     return true;
   }
 
@@ -407,7 +420,7 @@ export async function handleGuestText(input: {
     session.occupation = text.slice(0, 80);
     session.step = "moveIn";
     await saveGuestSession(session);
-    await replyLineMessages(input.replyToken, [askMoveIn()]);
+    await replyGuest(input.replyToken, input.lineUserId, [askMoveIn()]);
     return true;
   }
 
@@ -415,7 +428,7 @@ export async function handleGuestText(input: {
     session.moveInDate = text.slice(0, 40);
     session.step = "nationality";
     await saveGuestSession(session);
-    await replyLineMessages(input.replyToken, [askNationality()]);
+    await replyGuest(input.replyToken, input.lineUserId, [askNationality()]);
     return true;
   }
 
@@ -423,14 +436,14 @@ export async function handleGuestText(input: {
     session.nationality = text.slice(0, 40);
     session.step = "phone";
     await saveGuestSession(session);
-    await replyLineMessages(input.replyToken, [askPhone()]);
+    await replyGuest(input.replyToken, input.lineUserId, [askPhone()]);
     return true;
   }
 
   if (session.step === "phone") {
     const phone = text.replace(/\s/g, "");
     if (!/^09\d{8}$/.test(phone) && !/^0\d{8,12}$/.test(phone)) {
-      await replyLineMessages(input.replyToken, [
+      await replyGuest(input.replyToken, input.lineUserId, [
         { type: "text", text: "請留下有效電話（例如 0912345678）。" },
         askPhone(),
       ]);
@@ -438,13 +451,13 @@ export async function handleGuestText(input: {
     }
     session.phone = phone;
     const done = await finishCase(session);
-    await replyLineMessages(input.replyToken, [done]);
+    await replyGuest(input.replyToken, input.lineUserId, [done]);
     return true;
   }
 
   // 多選步驟若打字，提示用按鈕
   if (["city", "district", "rooms", "price", "extras"].includes(session.step)) {
-    await replyLineMessages(input.replyToken, [
+    await replyGuest(input.replyToken, input.lineUserId, [
       { type: "text", text: "請用下方按鈕選擇，選完按「下一步」。" },
       ...promptForStep(session, listings),
     ]);
@@ -493,7 +506,7 @@ export async function handleGuestPostback(input: {
       session.extras = toggle(session.extras, value) as RentalExtra[];
     }
     await saveGuestSession(session);
-    await replyLineMessages(input.replyToken, promptForStep(session, listings));
+    await replyGuest(input.replyToken, input.lineUserId, promptForStep(session, listings));
     return true;
   }
 
@@ -508,7 +521,7 @@ export async function handleGuestPostback(input: {
     if (field === "price") session.priceKeys = [];
     if (field === "extras") session.extras = [];
     await saveGuestSession(session);
-    await replyLineMessages(input.replyToken, promptForStep(session, listings));
+    await replyGuest(input.replyToken, input.lineUserId, promptForStep(session, listings));
     return true;
   }
 
@@ -520,7 +533,7 @@ export async function handleGuestPostback(input: {
       session.step = order[idx + 1] ?? "pet";
       await saveGuestSession(session);
     }
-    await replyLineMessages(input.replyToken, promptForStep(session, listings));
+    await replyGuest(input.replyToken, input.lineUserId, promptForStep(session, listings));
     return true;
   }
 
@@ -528,7 +541,7 @@ export async function handleGuestPostback(input: {
     session.petNote = "沒有";
     session.step = "awaiting_liff";
     await saveGuestSession(session);
-    await replyLineMessages(input.replyToken, openLiffMessage(session));
+    await replyGuest(input.replyToken, input.lineUserId, openLiffMessage(session));
     return true;
   }
 
@@ -536,7 +549,7 @@ export async function handleGuestPostback(input: {
     session.peopleCount = Number.parseInt(parts[2], 10) || 1;
     session.step = "occupation";
     await saveGuestSession(session);
-    await replyLineMessages(input.replyToken, [askOccupation()]);
+    await replyGuest(input.replyToken, input.lineUserId, [askOccupation()]);
     return true;
   }
 
@@ -544,7 +557,7 @@ export async function handleGuestPostback(input: {
     session.nationality = parts.slice(2).join(":") || "台灣";
     session.step = "phone";
     await saveGuestSession(session);
-    await replyLineMessages(input.replyToken, [askPhone()]);
+    await replyGuest(input.replyToken, input.lineUserId, [askPhone()]);
     return true;
   }
 

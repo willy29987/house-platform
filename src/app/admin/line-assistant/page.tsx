@@ -23,7 +23,7 @@ export default async function LineAssistantPreviewPage() {
           <p className="mt-1 text-sm text-zinc-500">
             {lineAccount.basicId || "官方帳號"}
             {" · "}
-            中間對話區比照 LINE 聊天室顯示客人原文
+            對話內容以 LINE webhook 真實訊息為準（與聊天室同步）
             {lineAccount.live ? "（已開 LINE 推播）" : "（LINE 自動推播尚未開啟）"}
           </p>
         </div>

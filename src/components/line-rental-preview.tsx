@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { taipeiTodayYmd } from "@/lib/owner-tracking-next-contact";
 import { formatViewingRange, RENT_PRICE_OPTIONS, type RentalMatchListing } from "@/lib/line-rental-assistant";
+import type { LineConversation } from "@/lib/line-conversations";
 import type { LineRentalCase } from "@/lib/line-rental-cases";
 import {
   emptyViewingSchedule,
@@ -36,11 +37,13 @@ type FollowAsk = { listingId: string; title: string; answer: "pending" | "yes" |
 
 type StaffGuest = {
   id: string;
+  lineUserId?: string;
+  caseId?: string;
   lineName: string;
   status: GuestStatus;
   watching: boolean;
   criteriaText: string;
-  /** 與 LINE 對話同一段原文（客人 sendMessages／案件 summaryText） */
+  /** 列表預覽用 */
   summaryText: string;
   createdAt: string;
   picked: PickedListing[];
@@ -384,7 +387,9 @@ function caseToStaffGuest(item: LineRentalCase): StaffGuest {
   ].filter(Boolean);
 
   return {
-    id: item.id,
+    id: item.lineUserId || item.id,
+    lineUserId: item.lineUserId || undefined,
+    caseId: item.id,
     lineName: item.displayName || "LINE 客人",
     status,
     watching: true,
@@ -396,6 +401,54 @@ function caseToStaffGuest(item: LineRentalCase): StaffGuest {
     proposedWhen: item.proposedWhen || "",
     asks: [],
     lines,
+  };
+}
+
+function conversationToStaffGuest(
+  conversation: LineConversation,
+  cases: LineRentalCase[],
+): StaffGuest {
+  const related = cases.filter((item) => item.lineUserId === conversation.lineUserId);
+  const latest = related[0] ?? null;
+  const base = latest ? caseToStaffGuest(latest) : null;
+
+  const lines: ChatLine[] = conversation.messages.map((message, index) => ({
+    id: index + 1,
+    from: message.from === "guest" ? "guest" : message.from === "staff" ? "staff" : "bot",
+    text: message.text,
+    at: formatLineClock(message.createdAt),
+  }));
+
+  const lastGuestText =
+    [...conversation.messages].reverse().find((m) => m.from === "guest")?.text ||
+    base?.summaryText ||
+    "";
+
+  return {
+    id: conversation.lineUserId,
+    lineUserId: conversation.lineUserId,
+    caseId: latest?.id,
+    lineName: conversation.displayName || base?.lineName || "LINE 客人",
+    status: base?.status ?? "awaiting_staff",
+    watching: true,
+    criteriaText: base?.criteriaText || "",
+    summaryText: lastGuestText,
+    createdAt: conversation.updatedAt || base?.createdAt || new Date().toISOString(),
+    picked: base?.picked ?? [],
+    requestedWhen: base?.requestedWhen ?? "",
+    proposedWhen: base?.proposedWhen ?? "",
+    asks: [],
+    lines:
+      lines.length > 0
+        ? lines
+        : base?.lines ?? [
+            {
+              id: 1,
+              from: "guest",
+              text: lastGuestText || "（尚無訊息）",
+              at: formatLineClock(conversation.updatedAt),
+            },
+          ],
   };
 }
 
@@ -443,22 +496,36 @@ export function LineRentalPreview({ listings, lineBasicId }: { listings: RentalM
 
   useEffect(() => {
     let cancelled = false;
-    async function loadCases() {
+    async function loadLive() {
       try {
-        const response = await fetch("/api/line/rental-cases", { cache: "no-store" });
+        const response = await fetch("/api/line/conversations", { cache: "no-store" });
         if (!response.ok) return;
-        const data = (await response.json()) as { cases?: LineRentalCase[] };
+        const data = (await response.json()) as {
+          conversations?: LineConversation[];
+          cases?: LineRentalCase[];
+        };
         if (cancelled) return;
-        const mapped = (data.cases ?? []).map(caseToStaffGuest);
-        setLiveGuests(mapped);
+        const conversations = data.conversations ?? [];
+        const cases = data.cases ?? [];
+        const fromConversations = conversations.map((item) =>
+          conversationToStaffGuest(item, cases),
+        );
+        const covered = new Set(
+          fromConversations.map((item) => item.lineUserId).filter(Boolean) as string[],
+        );
+        // 尚無 webhook 對話紀錄的舊案件：暫用 summaryText 備援
+        const orphans = cases
+          .filter((item) => item.lineUserId && !covered.has(item.lineUserId))
+          .map(caseToStaffGuest);
+        setLiveGuests([...fromConversations, ...orphans]);
       } catch {
         /* ignore */
       }
     }
-    void loadCases();
+    void loadLive();
     const timer = window.setInterval(() => {
-      void loadCases();
-    }, 12000);
+      void loadLive();
+    }, 8000);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
@@ -466,14 +533,12 @@ export function LineRentalPreview({ listings, lineBasicId }: { listings: RentalM
   }, []);
 
   useEffect(() => {
-    setGuests((current) => {
-      const byId = new Map(current.map((g) => [g.id, g]));
-      // 有真實案件時只顯示真實對話，避免跟示範資料混在一起
-      if (liveGuests.length) {
-        return liveGuests.map((g) => byId.get(g.id) ?? g);
-      }
-      return demoGuests.map((g) => byId.get(g.id) ?? g);
-    });
+    // 一律以伺服器對話為準（與 LINE 同步）；勿用本地舊 lines 蓋掉 webhook 新訊息
+    if (liveGuests.length) {
+      setGuests(liveGuests);
+      return;
+    }
+    setGuests(demoGuests);
   }, [liveGuests, demoGuests]);
 
   useEffect(() => {
@@ -502,6 +567,21 @@ export function LineRentalPreview({ listings, lineBasicId }: { listings: RentalM
     setGuests((current) => current.map((guest) => (guest.id === id ? update(guest) : guest)));
   }
 
+  function pushStaffLine(guest: StaffGuest, text: string, lineIdLocal: number) {
+    if (!guest.lineUserId) return;
+    void fetch("/api/line/conversations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lineUserId: guest.lineUserId, text }),
+    }).then(async (response) => {
+      if (response.ok) return;
+      patchGuest(guest.id, (current) => ({
+        ...current,
+        lines: current.lines.filter((line) => line.id !== lineIdLocal),
+      }));
+    });
+  }
+
   function confirmTime(guest: StaffGuest) {
     const when = guest.proposedWhen || guest.requestedWhen;
     const text = `${when} 可以，同事會再跟你說帶看的人。`;
@@ -514,6 +594,7 @@ export function LineRentalPreview({ listings, lineBasicId }: { listings: RentalM
       proposedWhen: "",
       lines: [...current.lines, { id, from: "staff", text, at }],
     }));
+    pushStaffLine(guest, text, id);
     setEditingTime(false);
   }
 
@@ -522,15 +603,14 @@ export function LineRentalPreview({ listings, lineBasicId }: { listings: RentalM
     if (!when) return;
     const id = lineId.current++;
     const at = formatLineClock(new Date().toISOString());
+    const text = `原本的時間暫無法安排，改 ${when} 可以嗎？`;
     patchGuest(guest.id, (current) => ({
       ...current,
       status: "reschedule_sent",
       proposedWhen: when,
-      lines: [
-        ...current.lines,
-        { id, from: "staff", text: `原本的時間暫無法安排，改 ${when} 可以嗎？`, at },
-      ],
+      lines: [...current.lines, { id, from: "staff", text, at }],
     }));
+    pushStaffLine(guest, text, id);
     setEditingTime(false);
     setSchedule(emptyViewingSchedule());
   }
@@ -560,17 +640,20 @@ export function LineRentalPreview({ listings, lineBasicId }: { listings: RentalM
 
   function sendDraft(event?: FormEvent) {
     event?.preventDefault();
-    if (!selected) return;
+    if (!selected?.lineUserId) return;
     const text = (drafts[selected.id] ?? "").trim();
     if (!text) return;
     const id = lineId.current++;
     const guestId = selected.id;
+    const lineUserId = selected.lineUserId;
     const at = formatLineClock(new Date().toISOString());
+    // 樂觀更新；輪詢會再以伺服器紀錄對齊
     patchGuest(guestId, (current) => ({
       ...current,
       lines: [...current.lines, { id, from: "staff", text, at }],
     }));
     setDrafts((current) => ({ ...current, [guestId]: "" }));
+    pushStaffLine({ ...selected, lineUserId }, text, id);
   }
 
   function onDraftKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {

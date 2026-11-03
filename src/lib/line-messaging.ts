@@ -1,5 +1,6 @@
 /** LINE Messaging API 推播／回覆（僅在 live + token 就緒時真送）。 */
 
+import { appendLineConversationBotMessages } from "@/lib/line-conversations";
 import { readLineChannelAccessTokenFromCloud } from "@/lib/line-runtime-secrets";
 
 function lineTokenFromEnv() {
@@ -71,7 +72,7 @@ export async function pushLineTextMessage(lineUserId: string, text: string) {
 export async function pushLineMessages(
   lineUserId: string,
   messages: LineMessage[],
-  options?: { force?: boolean },
+  options?: { force?: boolean; logAs?: "bot" | "staff" | false },
 ) {
   if (!lineUserId) {
     return { sent: false as const, reason: "missing_user_id" as const };
@@ -100,11 +101,38 @@ export async function pushLineMessages(
     const body = await response.text().catch(() => "");
     return { sent: false as const, reason: "api_error" as const, status: response.status, body };
   }
+  const logAs = options?.logAs === undefined ? "bot" : options.logAs;
+  if (logAs) {
+    try {
+      if (logAs === "staff") {
+        const { appendLineConversationMessage } = await import("@/lib/line-conversations");
+        for (const message of messages) {
+          const text =
+            message.type === "text"
+              ? message.text
+              : message.altText || "[訊息]";
+          await appendLineConversationMessage({
+            lineUserId,
+            from: "staff",
+            text,
+          });
+        }
+      } else {
+        await appendLineConversationBotMessages({ lineUserId, messages });
+      }
+    } catch (error) {
+      console.warn("[line-messaging] append conversation (push) failed", error);
+    }
+  }
   return { sent: true as const };
 }
 
 /** Webhook 用 replyToken 回覆（不需 live 旗標也可在測試時送，仍需 token） */
-export async function replyLineMessages(replyToken: string, messages: LineMessage[]) {
+export async function replyLineMessages(
+  replyToken: string,
+  messages: LineMessage[],
+  options?: { lineUserId?: string | null },
+) {
   const token = await resolveLineToken();
   if (!token || !replyToken || !messages.length) {
     return { sent: false as const, reason: "missing_token_or_reply" as const };
@@ -122,6 +150,16 @@ export async function replyLineMessages(replyToken: string, messages: LineMessag
   if (!response.ok) {
     const body = await response.text().catch(() => "");
     return { sent: false as const, reason: "api_error" as const, status: response.status, body };
+  }
+  if (options?.lineUserId) {
+    try {
+      await appendLineConversationBotMessages({
+        lineUserId: options.lineUserId,
+        messages,
+      });
+    } catch (error) {
+      console.warn("[line-messaging] append conversation (reply) failed", error);
+    }
   }
   return { sent: true as const };
 }
