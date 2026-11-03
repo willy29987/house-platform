@@ -10,6 +10,7 @@ import { loadLiffClient } from "@/lib/line-liff-client";
 import {
   EXTRA_OPTIONS,
   MATCH_LIST_LIMIT,
+  RENT_PRICE_OPTIONS,
   criteriaSummary,
   emptyCriteria,
   formatDateYmd,
@@ -77,23 +78,18 @@ function Chip({
   active: boolean;
   onClick: () => void;
 }) {
-  // 用原生 label + checkbox，LINE WebView 比 button onClick 穩
   return (
-    <label
-      className={`inline-flex min-h-11 cursor-pointer touch-manipulation items-center rounded-full border px-3 py-2 text-sm active:opacity-80 ${
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex min-h-11 shrink-0 touch-manipulation items-center rounded-full border px-3 py-2 text-sm active:opacity-80 ${
         active
           ? "border-[#06c755] bg-[#e8f8ef] font-semibold text-[#067a36]"
           : "border-zinc-200 bg-white text-zinc-700"
       }`}
     >
-      <input
-        type="checkbox"
-        className="sr-only"
-        checked={active}
-        onChange={() => onClick()}
-      />
       {label}
-    </label>
+    </button>
   );
 }
 
@@ -318,6 +314,8 @@ export function LineLiffRentForm({
   const [matched, setMatched] = useState<RentalMatchListing[]>([]);
   const [matchedRelaxed, setMatchedRelaxed] = useState<string[]>([]);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [priceMinOn, setPriceMinOn] = useState(false);
+  const [priceMaxOn, setPriceMaxOn] = useState(false);
   const [priceMin, setPriceMin] = useState("");
   const [priceMax, setPriceMax] = useState("");
   const [peopleCount, setPeopleCount] = useState(1);
@@ -361,12 +359,19 @@ export function LineLiffRentForm({
   }
 
   function budgetLabel() {
-    const min = priceMin.trim();
-    const max = priceMax.trim();
-    if (!min && !max) return "月租不限";
-    if (min && max) return `月租 ${Number(min).toLocaleString("zh-TW")}–${Number(max).toLocaleString("zh-TW")}`;
-    if (min) return `月租最低 ${Number(min).toLocaleString("zh-TW")}`;
-    return `月租最高 ${Number(max).toLocaleString("zh-TW")}`;
+    const parts: string[] = [];
+    if (criteria.priceKeys.length) {
+      parts.push(
+        ...criteria.priceKeys.map(
+          (key) => RENT_PRICE_OPTIONS.find((o) => o.value === key)?.label ?? key,
+        ),
+      );
+    }
+    const min = priceMinOn ? priceMin.trim() : "";
+    const max = priceMaxOn ? priceMax.trim() : "";
+    if (min) parts.push(`最低 ${Number(min).toLocaleString("zh-TW")}`);
+    if (max) parts.push(`最高 ${Number(max).toLocaleString("zh-TW")}`);
+    return parts.length ? `月租 ${parts.join("、")}` : "月租不限";
   }
 
   function goBack() {
@@ -385,16 +390,16 @@ export function LineLiffRentForm({
       setError("請選擇是否養寵物");
       return;
     }
-    const minRaw = priceMin.trim();
-    const maxRaw = priceMax.trim();
+    const minRaw = priceMinOn ? priceMin.trim() : "";
+    const maxRaw = priceMaxOn ? priceMax.trim() : "";
     const min = minRaw ? Number(minRaw) : 0;
     const max = maxRaw ? Number(maxRaw) : Number.POSITIVE_INFINITY;
-    if (minRaw && (!Number.isFinite(min) || min < 0)) {
-      setError("最低預算請填有效數字");
+    if (priceMinOn && (!minRaw || !Number.isFinite(min) || min < 0)) {
+      setError("請填寫最低預算");
       return;
     }
-    if (maxRaw && (!Number.isFinite(max) || max < 0)) {
-      setError("最高預算請填有效數字");
+    if (priceMaxOn && (!maxRaw || !Number.isFinite(max) || max < 0)) {
+      setError("請填寫最高預算");
       return;
     }
     if (minRaw && maxRaw && min > max) {
@@ -402,10 +407,13 @@ export function LineLiffRentForm({
       return;
     }
 
-    const matchCriteria: RentalMatchCriteria = { ...criteria, priceKeys: [] };
-    const result = matchRentals(listings, matchCriteria);
+    const result = matchRentals(listings, criteria);
     const items = result.items
-      .filter((item) => item.price >= min && item.price <= max)
+      .filter((item) => {
+        if (minRaw && item.price < min) return false;
+        if (maxRaw && item.price > max) return false;
+        return true;
+      })
       .slice(0, MATCH_LIST_LIMIT);
     setMatched(items);
     setMatchedRelaxed(result.relaxed);
@@ -473,6 +481,7 @@ export function LineLiffRentForm({
       budgetLabel(),
       petNote === "沒有" ? "沒有寵物" : `有養寵物（${petNote}）`,
     ].join(" · ");
+    // priceKeys 已併入 budgetLabel，避免重複
 
     const chatText = buildGuestChatMessage({
       displayName: name,
@@ -695,30 +704,67 @@ export function LineLiffRentForm({
             </div>
             <div>
               <p className="mb-2 text-xs font-medium text-zinc-500">月租預算</p>
-              <div className="grid grid-cols-2 gap-2">
-                <label className="block text-xs text-zinc-500">
-                  最低
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    min={0}
-                    value={priceMin}
-                    onChange={(e) => setPriceMin(e.target.value)}
-                    className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-900"
+              <div className="flex flex-wrap gap-2">
+                {RENT_PRICE_OPTIONS.map((o) => (
+                  <Chip
+                    key={o.value}
+                    label={o.label}
+                    active={criteria.priceKeys.includes(o.value)}
+                    onClick={() =>
+                      setCriteria((c) => ({
+                        ...c,
+                        priceKeys: toggleIn(c.priceKeys, o.value),
+                      }))
+                    }
                   />
-                </label>
-                <label className="block text-xs text-zinc-500">
-                  最高
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    min={0}
-                    value={priceMax}
-                    onChange={(e) => setPriceMax(e.target.value)}
-                    className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-900"
-                  />
-                </label>
+                ))}
+                <Chip
+                  label="最低"
+                  active={priceMinOn}
+                  onClick={() => {
+                    setPriceMinOn((on) => {
+                      if (on) setPriceMin("");
+                      return !on;
+                    });
+                  }}
+                />
+                <Chip
+                  label="最高"
+                  active={priceMaxOn}
+                  onClick={() => {
+                    setPriceMaxOn((on) => {
+                      if (on) setPriceMax("");
+                      return !on;
+                    });
+                  }}
+                />
               </div>
+              {priceMinOn || priceMaxOn ? (
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {priceMinOn ? (
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      value={priceMin}
+                      onChange={(e) => setPriceMin(e.target.value)}
+                      className="w-28 rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-900"
+                      aria-label="最低預算"
+                    />
+                  ) : null}
+                  {priceMaxOn ? (
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      value={priceMax}
+                      onChange={(e) => setPriceMax(e.target.value)}
+                      className="w-28 rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-900"
+                      aria-label="最高預算"
+                    />
+                  ) : null}
+                </div>
+              ) : null}
             </div>
             <div>
               <p className="mb-2 text-xs font-medium text-zinc-500">租補／報稅／入戶籍</p>
@@ -745,21 +791,37 @@ export function LineLiffRentForm({
             </div>
             <div>
               <p className="mb-2 text-xs font-medium text-zinc-500">寵物</p>
-              <div className="flex items-center gap-2">
-                <Chip
-                  label="沒有"
-                  active={petHas === "no"}
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
                   onClick={() => {
                     setPetHas("no");
                     setPetDraft("");
                   }}
-                />
-                <Chip label="有" active={petHas === "yes"} onClick={() => setPetHas("yes")} />
+                  className={`inline-flex min-h-11 shrink-0 touch-manipulation items-center rounded-full border px-3 py-2 text-sm ${
+                    petHas === "no"
+                      ? "border-[#06c755] bg-[#e8f8ef] font-semibold text-[#067a36]"
+                      : "border-zinc-200 bg-white text-zinc-700"
+                  }`}
+                >
+                  沒有
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPetHas("yes")}
+                  className={`inline-flex min-h-11 shrink-0 touch-manipulation items-center rounded-full border px-3 py-2 text-sm ${
+                    petHas === "yes"
+                      ? "border-[#06c755] bg-[#e8f8ef] font-semibold text-[#067a36]"
+                      : "border-zinc-200 bg-white text-zinc-700"
+                  }`}
+                >
+                  有
+                </button>
                 {petHas === "yes" ? (
                   <input
                     value={petDraft}
                     onChange={(e) => setPetDraft(e.target.value)}
-                    className="min-w-0 flex-1 rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-900"
+                    className="min-h-11 min-w-0 flex-1 rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-900"
                   />
                 ) : null}
               </div>
@@ -883,25 +945,37 @@ export function LineLiffRentForm({
               </div>
               <div>
                 <p className="mb-2 text-xs font-medium text-zinc-500">國籍</p>
-                <div className="flex items-center gap-2">
-                  <Chip
-                    label="本國"
-                    active={nationalityLocal === "local"}
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
                     onClick={() => {
                       setNationalityLocal("local");
                       setNationalityDraft("");
                     }}
-                  />
-                  <Chip
-                    label="其他"
-                    active={nationalityLocal === "other"}
+                    className={`inline-flex min-h-11 shrink-0 touch-manipulation items-center rounded-full border px-3 py-2 text-sm ${
+                      nationalityLocal === "local"
+                        ? "border-[#06c755] bg-[#e8f8ef] font-semibold text-[#067a36]"
+                        : "border-zinc-200 bg-white text-zinc-700"
+                    }`}
+                  >
+                    本國
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setNationalityLocal("other")}
-                  />
+                    className={`inline-flex min-h-11 shrink-0 touch-manipulation items-center rounded-full border px-3 py-2 text-sm ${
+                      nationalityLocal === "other"
+                        ? "border-[#06c755] bg-[#e8f8ef] font-semibold text-[#067a36]"
+                        : "border-zinc-200 bg-white text-zinc-700"
+                    }`}
+                  >
+                    其他
+                  </button>
                   {nationalityLocal === "other" ? (
                     <input
                       value={nationalityDraft}
                       onChange={(e) => setNationalityDraft(e.target.value)}
-                      className="min-w-0 flex-1 rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-900"
+                      className="min-h-11 min-w-0 flex-1 rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-900"
                     />
                   ) : null}
                 </div>
