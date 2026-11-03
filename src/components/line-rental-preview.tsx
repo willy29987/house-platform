@@ -581,8 +581,9 @@ export function LineRentalPreview({ listings, lineBasicId }: { listings: RentalM
   }
 
   return (
-    <div className="flex h-[min(52rem,calc(100dvh-8rem))] min-h-[32rem] flex-col overflow-hidden rounded-xl border border-[#c9ced6] bg-[#edf0f5] shadow-sm">
-      <div className="flex gap-1 overflow-x-auto border-b border-[#d8dde6] bg-white px-2 py-2">
+    <div className="flex h-[min(56rem,calc(100dvh-7rem))] min-h-[34rem] flex-col overflow-hidden rounded-lg border border-[#b7bcc6] bg-white shadow-[0_1px_4px_rgba(0,0,0,0.12)]">
+      {/* 篩選列（非 LINE 原生，僅內部用） */}
+      <div className="flex gap-1 overflow-x-auto border-b border-[#e5e5e5] bg-[#f7f7f7] px-2 py-1.5">
         {FILTERS.map((item) => {
           const count = guests.filter((guest) => matchesFilter(guest, item.id)).length;
           const active = filter === item.id;
@@ -595,19 +596,23 @@ export function LineRentalPreview({ listings, lineBasicId }: { listings: RentalM
                 setEditingTime(false);
                 setDetailsOpen(false);
               }}
-              className={`shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold ${
-                active ? "bg-[#06c755] text-white" : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+              className={`shrink-0 rounded px-2.5 py-1 text-xs font-semibold ${
+                active ? "bg-[#06c755] text-white" : "bg-white text-zinc-600 hover:bg-zinc-100"
               }`}
             >
               {item.label}
-              <span className={`ml-1 tabular-nums ${active ? "text-white/80" : "text-zinc-500"}`}>{count}</span>
+              <span className={`ml-1 tabular-nums ${active ? "text-white/85" : "text-zinc-400"}`}>{count}</span>
             </button>
           );
         })}
+        <p className="ml-auto hidden items-center text-[10px] text-zinc-400 sm:flex">
+          官方帳號視角（與 LINE 後台相同：客人在左）
+        </p>
       </div>
 
-      <div className="grid min-h-0 flex-1 lg:grid-cols-[17rem_minmax(0,1fr)_17rem]">
-        <ul className="max-h-40 overflow-y-auto border-b border-[#d8dde6] bg-white lg:max-h-none lg:border-r lg:border-b-0">
+      {/* LINE 電腦版：好友列表 + 對話窗（兩欄，不再塞第三欄破壞排版） */}
+      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)]">
+        <ul className="max-h-44 overflow-y-auto border-b border-[#e5e5e5] bg-white lg:max-h-none lg:border-r lg:border-b-0">
           {visible.length === 0 ? (
             <li className="px-4 py-8 text-center text-sm text-zinc-500">這個篩選目前沒有客人</li>
           ) : (
@@ -618,29 +623,25 @@ export function LineRentalPreview({ listings, lineBasicId }: { listings: RentalM
                 guest.lines[guest.lines.length - 1]?.text ||
                 "";
               return (
-                <li key={guest.id} className="border-b border-zinc-100 last:border-b-0">
+                <li key={guest.id} className="border-b border-[#f0f0f0] last:border-b-0">
                   <button
                     type="button"
                     onClick={() => selectGuest(guest.id)}
-                    className={`flex w-full items-center gap-3 px-3 py-3 text-left ${active ? "bg-[#e7f8ee]" : "hover:bg-zinc-50"}`}
+                    className={`flex w-full items-center gap-3 px-3 py-2.5 text-left ${
+                      active ? "bg-[#eef9f0]" : "hover:bg-[#f7f7f7]"
+                    }`}
                   >
-                    <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#06c755] text-sm font-bold text-white">
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#06c755] text-sm font-bold text-white">
                       {guest.lineName.slice(0, 1)}
-                      {guest.watching ? (
-                        <span
-                          title="之後新案會問"
-                          className="absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-sky-500"
-                        />
-                      ) : null}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="flex items-center gap-2">
-                        <span className="truncate text-sm font-bold text-zinc-900">{guest.lineName}</span>
-                        <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${statusPill(guest.status)}`}>
-                          {shortStatus(guest.status)}
+                      <span className="flex items-center justify-between gap-2">
+                        <span className="truncate text-[14px] font-semibold text-[#111]">{guest.lineName}</span>
+                        <span className="shrink-0 text-[10px] text-zinc-400">
+                          {formatLineClock(guest.createdAt)}
                         </span>
                       </span>
-                      <span className="mt-0.5 block truncate text-xs text-zinc-500">{preview}</span>
+                      <span className="mt-0.5 block truncate text-[12px] text-zinc-500">{preview}</span>
                     </span>
                   </button>
                 </li>
@@ -650,58 +651,52 @@ export function LineRentalPreview({ listings, lineBasicId }: { listings: RentalM
         </ul>
 
         {selected ? (
-          <section className="flex min-h-0 flex-col overflow-hidden border-b border-[#d8dde6] bg-[#7494c0] lg:border-b-0 lg:border-r lg:border-[#d8dde6]">
-            {/* LINE 電腦版頂欄風格 */}
-            <header className="shrink-0 border-b border-black/10 bg-[#432e1f] px-3 py-2.5 text-white">
-              <div className="flex items-center gap-3">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#06c755] text-sm font-bold text-white">
-                  {selected.lineName.slice(0, 1)}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[15px] font-semibold leading-tight">{selected.lineName}</p>
-                  <p className="truncate text-[11px] text-white/65">
-                    {shortStatus(selected.status)}
-                    {lineBasicId ? ` · ${lineBasicId}` : ""}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setDetailsOpen((open) => !open)}
-                  className="shrink-0 rounded-md bg-white/10 px-2.5 py-1 text-xs font-medium text-white hover:bg-white/15 lg:hidden"
-                >
-                  {detailsOpen ? "收起" : "處理"}
-                </button>
+          <section className="flex min-h-0 flex-col bg-[#8fabd4]">
+            {/* LINE 頂欄：只放對方名稱，不要塞狀態標籤 */}
+            <header className="flex shrink-0 items-center gap-3 border-b border-black/10 bg-[#463327] px-3 py-2 text-white">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#06c755] text-sm font-bold">
+                {selected.lineName.slice(0, 1)}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[15px] font-semibold">{selected.lineName}</p>
               </div>
-              {detailsOpen ? (
-                <div className="mt-3 rounded-lg bg-white p-3 text-zinc-900 lg:hidden">
-                  <GuestDecisionPanel
-                    guest={selected}
-                    needsConfirm={Boolean(needsConfirm)}
-                    editingTime={editingTime}
-                    schedule={schedule}
-                    today={today}
-                    onConfirm={() => confirmTime(selected)}
-                    onStartEdit={() => {
-                      setEditingTime(true);
-                      setSchedule(emptyViewingSchedule());
-                    }}
-                    onCancelEdit={() => {
-                      setEditingTime(false);
-                      setSchedule(emptyViewingSchedule());
-                    }}
-                    onScheduleChange={setSchedule}
-                    onSendNewTime={() => sendNewTime(selected)}
-                  />
-                </div>
-              ) : null}
+              <button
+                type="button"
+                onClick={() => setDetailsOpen((open) => !open)}
+                className="shrink-0 rounded bg-white/10 px-2.5 py-1 text-xs font-medium hover:bg-white/15"
+              >
+                {detailsOpen ? "收起處理" : "約看處理"}
+              </button>
             </header>
 
-            {/* LINE 對話區：日期分隔 + 氣泡 + 旁側時間 */}
-            <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
-              <div className="mx-auto flex w-full max-w-xl flex-col gap-3">
+            {detailsOpen ? (
+              <div className="shrink-0 border-b border-black/10 bg-white px-3 py-3">
+                <GuestDecisionPanel
+                  guest={selected}
+                  needsConfirm={Boolean(needsConfirm)}
+                  editingTime={editingTime}
+                  schedule={schedule}
+                  today={today}
+                  onConfirm={() => confirmTime(selected)}
+                  onStartEdit={() => {
+                    setEditingTime(true);
+                    setSchedule(emptyViewingSchedule());
+                  }}
+                  onCancelEdit={() => {
+                    setEditingTime(false);
+                    setSchedule(emptyViewingSchedule());
+                  }}
+                  onScheduleChange={setSchedule}
+                  onSendNewTime={() => sendNewTime(selected)}
+                />
+              </div>
+            ) : null}
+
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+              <div className="flex w-full flex-col gap-2.5">
                 {selected.createdAt ? (
                   <div className="flex justify-center py-1">
-                    <span className="rounded-full bg-black/20 px-3 py-0.5 text-[11px] font-medium text-white/95">
+                    <span className="rounded-full bg-[rgba(0,0,0,0.22)] px-3 py-0.5 text-[11px] text-white">
                       {formatLineDayLabel(selected.createdAt)}
                     </span>
                   </div>
@@ -714,27 +709,24 @@ export function LineRentalPreview({ listings, lineBasicId }: { listings: RentalM
                       className={`flex items-end gap-1.5 ${fromGuest ? "justify-start" : "justify-end"}`}
                     >
                       {fromGuest ? (
-                        <span className="mb-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#06c755] text-xs font-bold text-white">
+                        <span className="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#06c755] text-[12px] font-bold text-white">
                           {selected.lineName.slice(0, 1)}
                         </span>
                       ) : null}
                       {!fromGuest && line.at ? (
-                        <span className="mb-0.5 shrink-0 text-[10px] leading-none text-white/80">{line.at}</span>
+                        <span className="mb-0.5 shrink-0 self-end text-[10px] text-white/85">{line.at}</span>
                       ) : null}
                       <div
-                        className={`max-w-[min(78%,22rem)] whitespace-pre-wrap break-words px-3 py-2 text-[13.5px] leading-[1.55] text-zinc-900 shadow-sm ${
+                        className={`max-w-[70%] whitespace-pre-wrap break-words px-[12px] py-[8px] text-[14px] leading-[1.5] text-[#111] ${
                           fromGuest
-                            ? "rounded-[18px] rounded-bl-[4px] bg-white"
-                            : "rounded-[18px] rounded-br-[4px] bg-[#95ec69]"
+                            ? "rounded-[16px] rounded-bl-[6px] bg-white"
+                            : "rounded-[16px] rounded-br-[6px] bg-[#a0e75a]"
                         }`}
                       >
-                        {line.from === "staff" ? (
-                          <span className="mb-1 block text-[10px] font-semibold text-[#067a36]">官方帳號／同事</span>
-                        ) : null}
                         <LineMessageBody text={line.text} />
                       </div>
                       {fromGuest && line.at ? (
-                        <span className="mb-0.5 shrink-0 text-[10px] leading-none text-white/80">{line.at}</span>
+                        <span className="mb-0.5 shrink-0 self-end text-[10px] text-white/85">{line.at}</span>
                       ) : null}
                     </div>
                   );
@@ -743,80 +735,50 @@ export function LineRentalPreview({ listings, lineBasicId }: { listings: RentalM
             </div>
 
             {selected.status === "picking_time" ? (
-              <div className="flex max-h-[48%] min-h-[14rem] flex-col border-t border-zinc-200 bg-white px-3 py-3">
-                <div className="mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col">
-                  <ViewingSchedulePicker
-                    heading="客人選希望看屋時間"
-                    value={schedule}
-                    onChange={setSchedule}
-                    minDate={today}
-                    submitLabel="送出希望時間"
-                    onSubmit={() => submitGuestSchedule(selected)}
-                  />
-                </div>
+              <div className="flex max-h-[42%] min-h-[12rem] flex-col border-t border-zinc-200 bg-white px-3 py-3">
+                <ViewingSchedulePicker
+                  heading="客人選希望看屋時間"
+                  value={schedule}
+                  onChange={setSchedule}
+                  minDate={today}
+                  submitLabel="送出希望時間"
+                  onSubmit={() => submitGuestSchedule(selected)}
+                />
               </div>
             ) : null}
 
-            <form onSubmit={sendDraft} className="shrink-0 border-t border-black/10 bg-[#f5f5f5] px-3 py-2">
-              <div className="mx-auto flex w-full max-w-xl items-end gap-2">
-                <label className="min-w-0 flex-1">
-                  <span className="sr-only">輸入訊息</span>
-                  <textarea
-                    rows={1}
-                    value={draft}
-                    placeholder="輸入訊息"
-                    onChange={(event) => {
-                      const value = event.target.value;
-                      setDrafts((current) => ({ ...current, [selected.id]: value }));
-                    }}
-                    onKeyDown={onDraftKeyDown}
-                    className="max-h-28 min-h-10 w-full resize-none rounded-md border border-[#d0d3d9] bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-[#06c755]"
-                  />
-                </label>
+            <form onSubmit={sendDraft} className="shrink-0 border-t border-[#ddd] bg-[#f0f0f0] px-3 py-2">
+              <div className="flex items-end gap-2">
+                <textarea
+                  rows={1}
+                  value={draft}
+                  placeholder="輸入訊息"
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setDrafts((current) => ({ ...current, [selected.id]: value }));
+                  }}
+                  onKeyDown={onDraftKeyDown}
+                  className="max-h-28 min-h-[36px] w-full flex-1 resize-none rounded border border-[#ccc] bg-white px-3 py-2 text-[14px] text-[#111] outline-none focus:border-[#06c755]"
+                />
                 <button
                   type="submit"
                   disabled={!draft.trim()}
                   aria-label="傳送"
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#06c755] text-white disabled:opacity-40"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#06c755] text-white disabled:opacity-40"
                 >
                   <SendIcon />
                 </button>
               </div>
-              <p className="mx-auto mt-1 max-w-xl text-center text-[10px] text-zinc-500">
-                此輸入框僅供內部備註預覽，不會送到 LINE。上方氣泡＝客人真實對話內容。
+              <p className="mt-1 text-center text-[10px] text-zinc-400">
+                輸入框不會送到 LINE；上方白／綠氣泡才是與 LINE 相同的對話內容與排版。
               </p>
             </form>
           </section>
         ) : (
-          <div className="flex items-center justify-center border-b border-zinc-100 bg-[#7494c0] px-4 text-sm text-white/90 lg:border-b-0 lg:border-r">
+          <div className="flex items-center justify-center bg-[#8fabd4] px-4 text-sm text-white/90">
             選左邊的客人查看 LINE 對話
           </div>
         )}
-
-        <aside className="hidden min-h-0 overflow-y-auto px-4 py-4 lg:block">
-          {selected ? (
-            <GuestDecisionPanel
-              guest={selected}
-              needsConfirm={Boolean(needsConfirm)}
-              editingTime={editingTime}
-              schedule={schedule}
-              today={today}
-              onConfirm={() => confirmTime(selected)}
-              onStartEdit={() => {
-                setEditingTime(true);
-                setSchedule(emptyViewingSchedule());
-              }}
-              onCancelEdit={() => {
-                setEditingTime(false);
-                setSchedule(emptyViewingSchedule());
-              }}
-              onScheduleChange={setSchedule}
-              onSendNewTime={() => sendNewTime(selected)}
-            />
-          ) : (
-            <p className="text-sm text-zinc-500">選客人後，這裡會顯示條件與看屋時間。</p>
-          )}
-        </aside>
       </div>
     </div>
   );
