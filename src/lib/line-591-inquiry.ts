@@ -194,19 +194,15 @@ export async function handleImageInquiry(input: {
     criteriaText: "客人傳了物件截圖／照片",
     picked: [],
     requestedWhen: "",
-    summaryText: "客人傳圖片詢問物件，需人工辨識；已請對方補 591 連結。",
+    summaryText: "客人傳了圖片，待客服人工回覆。",
     source591Id: "",
     source591Url: "",
     guestMessage: input.imageMessageId ? `image:${input.imageMessageId}` : "image",
   });
 
+  // 不再自動回「請貼 591 連結」話術；圖片已進客服對話，改由人工回
   return {
     caseRecord: created,
-    messages: [
-      {
-        type: "text",
-        text: "收到圖片了。為了立刻幫你查能不能看，麻煩再貼一次 591 的完整連結；同時也已轉給同事，截圖我們會一併確認。",
-      },
-    ],
+    messages: [],
   };
 }

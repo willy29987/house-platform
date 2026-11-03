@@ -269,14 +269,13 @@ async function handleEvent(event: LineEvent) {
   }
 
   if (messageType === "image") {
-    // 即使是業務測試帳號，也要進客服對話；僅略過自動回覆流程
+    // 圖片已寫入對話；可建案件給客服，但不自動回客人話術
     if (userId && isViewingAgentUserId(userId)) return;
-    const result = await handleImageInquiry({
+    await handleImageInquiry({
       lineUserId: userId,
       displayName: "LINE 客人",
       imageMessageId: message.id,
     });
-    await replyLineMessages(event.replyToken, result.messages, { lineUserId: userId });
   }
 }
 
