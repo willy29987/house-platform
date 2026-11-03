@@ -10,6 +10,7 @@ export function LineLiffRentAssistant({
   liffId,
   listingBaseUrl,
   fallbackLineUserId = null,
+  lineBasicId = "@878thkii",
 }: {
   listings: RentalMatchListing[];
   lineBasicId?: string;
@@ -89,6 +90,7 @@ export function LineLiffRentAssistant({
       lineUserId={lineUserId}
       displayName={displayName}
       listingBaseUrl={listingBaseUrl}
+      lineBasicId={lineBasicId}
       onSubmitted={async () => {
         // 表單內已 closeWindow；此處僅備援
         if (!liffId) return;

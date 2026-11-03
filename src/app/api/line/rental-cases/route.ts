@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentAdmin } from "@/lib/admin-auth";
 import { appendLineRentalCase, readLineRentalCases } from "@/lib/line-rental-cases";
-import { pushLineMessages } from "@/lib/line-messaging";
 import { getViewingAgentUserIds, notifyAgentsOfNewViewing } from "@/lib/line-viewing-agent";
 
 export const dynamic = "force-dynamic";
@@ -109,48 +108,9 @@ export async function POST(request: Request) {
         ...listingLines,
       ].join("\n");
 
-    let pushSent = false;
-    let pushReason: string | null = null;
-    let queued = false;
-    const pushText =
-      confirmText.length > 4900 ? `${confirmText.slice(0, 4890)}…` : confirmText;
-
-    if (skipGuestPush) {
-      pushReason = "skipped_client_sent";
-    } else if (!created.lineUserId) {
-      pushReason = "missing_line_user_id";
-      console.warn("[line/rental-cases] skip guest push: missing lineUserId");
-    } else {
-      // force：表單確認必須推到對話，不依賴 LINE_ASSISTANT_LIVE
-      const pushed = await pushLineMessages(
-        created.lineUserId,
-        [{ type: "text", text: pushText }],
-        { force: true },
-      );
-      pushSent = pushed.sent;
-      pushReason = pushed.sent
-        ? "ok"
-        : "reason" in pushed
-          ? String(pushed.reason)
-          : "api_error";
-      if (!pushed.sent) {
-        console.warn("[line/rental-cases] guest confirm push failed", pushed);
-        // Vercel 若沒 token：寫入待補推佇列，由 GitHub Action／本機腳本補送
-        if (pushReason === "missing_token" || pushReason === "not_live") {
-          try {
-            const { enqueueLineGuestPush } = await import("@/lib/line-guest-push-queue");
-            await enqueueLineGuestPush({
-              caseId: created.id,
-              lineUserId: created.lineUserId,
-              text: pushText,
-            });
-            queued = true;
-          } catch (queueError) {
-            console.warn("[line/rental-cases] enqueue guest push failed", queueError);
-          }
-        }
-      }
-    }
+    // 對客人不做 push（避免扣群發額度）；對話內容改由 LIFF sendMessages／oaMessage 客人端傳送
+    const pushSent = false;
+    const pushReason = skipGuestPush ? "skipped_client_delivery" : "guest_push_disabled";
 
     const notify = await notifyAgentsOfNewViewing(created);
 
@@ -160,7 +120,6 @@ export async function POST(request: Request) {
       agentsNotified: notify.notified,
       pushSent,
       pushReason,
-      queued,
       hasLineUserId: Boolean(created.lineUserId),
       confirmText,
     });

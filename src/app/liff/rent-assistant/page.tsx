@@ -20,6 +20,12 @@ export default async function LiffRentAssistantPage({
   const listingBaseUrl =
     process.env.NEXT_PUBLIC_LISTING_BASE_URL?.replace(/\/$/, "") ||
     "https://house-platform.vercel.app";
+  const lineBasicId =
+    (
+      process.env.NEXT_PUBLIC_LINE_OA_ADD_FRIEND_URL ||
+      process.env.NEXT_PUBLIC_LINE_OA_URL ||
+      ""
+    ).match(/@[\w.-]+/)?.[0] ?? "@878thkii";
 
   // 一律多步驟表單（條件 → 物件 → 資料 → 時間）
   return (
@@ -28,6 +34,7 @@ export default async function LiffRentAssistantPage({
       liffId={liffId}
       listingBaseUrl={listingBaseUrl}
       fallbackLineUserId={fallbackLineUserId}
+      lineBasicId={lineBasicId}
     />
   );
 }

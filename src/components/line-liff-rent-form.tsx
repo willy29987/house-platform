@@ -291,12 +291,20 @@ function buildGuestChatMessage(input: {
   ].join("\n");
 }
 
+function buildOaComposeUrl(lineBasicId: string, text: string) {
+  const id = lineBasicId.startsWith("@") ? lineBasicId : `@${lineBasicId}`;
+  // URL 過長會失敗；留安全長度給客人一鍵傳訊（不算群發額度）
+  const body = text.length > 900 ? `${text.slice(0, 880)}\n…（完整資料已送出系統）` : text;
+  return `https://line.me/R/oaMessage/${encodeURIComponent(id)}/?text=${encodeURIComponent(body)}`;
+}
+
 export function LineLiffRentForm({
   listings,
   liffId,
   lineUserId,
   displayName,
   listingBaseUrl,
+  lineBasicId = "@878thkii",
   onSubmitted,
 }: {
   listings: RentalMatchListing[];
@@ -304,6 +312,7 @@ export function LineLiffRentForm({
   lineUserId: string | null;
   displayName: string | null;
   listingBaseUrl: string;
+  lineBasicId?: string;
   onSubmitted?: (caseId: string) => void;
 }) {
   const today = useMemo(() => taipeiTodayYmd(), []);
@@ -507,10 +516,10 @@ export function LineLiffRentForm({
     setSubmitting(true);
     setError("");
     try {
-      // 1) 客戶端 sendMessages 2) 後端 force push（有 userId 就一定試）
+      // 不走 Bot push（避免扣群發額度）：只用意圖「客人傳訊」
       let clientSent = false;
       let clientSendError = "";
-      // Messaging API userId（來自官方帳號 webhook 帶的 uid），不要用 LIFF Login profile.userId
+      let composeOpened = false;
       let resolvedUserId = lineUserId;
       try {
         const fromUrl = new URLSearchParams(window.location.search).get("uid")?.trim();
@@ -536,7 +545,6 @@ export function LineLiffRentForm({
             } catch {
               /* 可能已 init */
             }
-            // sendMessages 需 LIFF chat_message.write；失敗則改走後端 push
             if (liff.isInClient()) {
               try {
                 await liff.sendMessages([{ type: "text", text: outboundText }]);
@@ -579,35 +587,46 @@ export function LineLiffRentForm({
           picked,
           requestedWhen: when,
           summaryText: outboundText,
-          skipGuestPush: clientSent,
+          // 永遠略過對客人的 push，避免吃群發額度
+          skipGuestPush: true,
         }),
       });
       const data = (await response.json().catch(() => null)) as {
         id?: string;
         error?: string;
-        pushSent?: boolean;
-        pushReason?: string | null;
-        queued?: boolean;
-        hasLineUserId?: boolean;
         confirmText?: string;
       } | null;
       if (!response.ok || !data) {
         throw new Error(data?.error || "送出失敗");
       }
 
-      if (!clientSent && !data.pushSent && !data.queued) {
-        const why = [
-          !resolvedUserId && !data.hasLineUserId ? "缺少 LINE userId（請從官方帳號按鈕開啟）" : null,
-          clientSendError ? `客戶端：${clientSendError}` : null,
-          data.pushReason ? `伺服器：${data.pushReason}` : null,
-        ]
-          .filter(Boolean)
-          .join("；");
-        throw new Error(`無法送到 LINE 對話${why ? `（${why}）` : ""}`);
+      // sendMessages 失敗（常見：LIFF 未開 chat_message.write）→ 開官方帳號傳訊頁，仍由客人送出、不扣額度
+      if (!clientSent) {
+        const composeUrl = buildOaComposeUrl(
+          lineBasicId,
+          data.confirmText || outboundText,
+        );
+        try {
+          if (liff?.isInClient() && typeof liff.openWindow === "function") {
+            liff.openWindow({ url: composeUrl, external: false });
+          } else {
+            window.location.href = composeUrl;
+          }
+          composeOpened = true;
+        } catch (composeError) {
+          console.warn("[liff-rent-form] oa compose failed", composeError);
+          throw new Error(
+            `無法自動傳回對話${clientSendError ? `（${clientSendError}）` : ""}。請到 LINE Developers 為此 LIFF 勾選 chat_message.write。`,
+          );
+        }
+      }
+
+      if (!clientSent && !composeOpened) {
+        throw new Error("無法傳到 LINE 對話");
       }
 
       setDone({ when, titles: picked.map((item) => item.title) });
-      if (liff?.isInClient()) {
+      if (clientSent && liff?.isInClient()) {
         try {
           liff.closeWindow();
         } catch {
@@ -637,7 +656,9 @@ export function LineLiffRentForm({
             ))}
           </ul>
         </div>
-        <p className="text-sm text-zinc-600">請回到 LINE 與不動產實踐家的對話查看訊息。</p>
+        <p className="text-sm text-zinc-600">
+          請回到 LINE 對話；若跳出傳訊畫面，點傳送即可（不扣群發額度）。
+        </p>
       </div>
     );
   }
