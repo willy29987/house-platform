@@ -79,10 +79,12 @@ export function OwnerTrackingDetail({
   const nextContactSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    const local = loadOwnerTrackingStoreLocal();
+    setStore(local);
+    setHydrated(true);
     void hydrateOwnerTrackingStoreOnce(loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreLocal).then(
       (next) => {
         setStore(next);
-        setHydrated(true);
       },
     );
   }, [caseId]);
@@ -210,14 +212,6 @@ export function OwnerTrackingDetail({
     // 一律寫入表單上的下次聯繫日＋時間戳，避免雲端舊日期蓋回導致仍留在今日待聯繫
     const nextStore = patchOwnerCaseNextContact(withFollowUp, caseId, formYmd);
     persistLocalOnly(nextStore);
-    try {
-      await pushOwnerTrackingStoreNow(nextStore);
-    } catch {
-      setFlash("已記錄於本機；雲端同步失敗，請稍後重新整理");
-      setSubmitting(false);
-      window.setTimeout(() => setFlash(null), 4000);
-      return;
-    }
     setNote("");
     nextContactEditedByUser.current = false;
     setFlash(
@@ -227,6 +221,10 @@ export function OwnerTrackingDetail({
     );
     setSubmitting(false);
     window.setTimeout(() => setFlash(null), 3500);
+    void pushOwnerTrackingStoreNow(nextStore).catch(() => {
+      setFlash("已記錄於本機；雲端同步失敗，請稍後重新整理");
+      window.setTimeout(() => setFlash(null), 4000);
+    });
   }
 
   function handleDeleteFollowUp(followUpId: string) {
