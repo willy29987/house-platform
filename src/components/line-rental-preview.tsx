@@ -530,9 +530,18 @@ export function LineRentalPreview({
 
   useEffect(() => {
     let cancelled = false;
-    let timer: number | null = null;
+    let fallbackTimer: number | null = null;
+    let source: EventSource | null = null;
 
-    async function loadLive() {
+    function applySnapshot(data: {
+      conversations?: LineConversation[];
+      cases?: LineRentalCase[];
+    }) {
+      if (cancelled) return;
+      setLiveGuests(buildLiveGuests(data.conversations ?? [], data.cases ?? []));
+    }
+
+    async function loadLiveOnce() {
       try {
         const response = await fetch(`/api/line/conversations?ts=${Date.now()}`, {
           cache: "no-store",
@@ -543,38 +552,70 @@ export function LineRentalPreview({
           conversations?: LineConversation[];
           cases?: LineRentalCase[];
         };
-        if (cancelled) return;
-        setLiveGuests(buildLiveGuests(data.conversations ?? [], data.cases ?? []));
+        applySnapshot(data);
       } catch {
         /* ignore */
       }
     }
 
-    function schedule() {
-      if (timer != null) window.clearInterval(timer);
-      // 前景較密、背景較疏，避免一定要手動重整才看到新訊息
-      const ms = document.visibilityState === "visible" ? 2500 : 12000;
-      timer = window.setInterval(() => {
-        void loadLive();
-      }, ms);
+    function stopFallback() {
+      if (fallbackTimer != null) {
+        window.clearInterval(fallbackTimer);
+        fallbackTimer = null;
+      }
     }
 
-    void loadLive();
-    schedule();
+    function startFallback() {
+      if (fallbackTimer != null) return;
+      // SSE 失敗時才退回短輪詢
+      fallbackTimer = window.setInterval(() => {
+        if (document.visibilityState !== "visible") return;
+        void loadLiveOnce();
+      }, 1000);
+    }
+
+    function connectStream() {
+      if (cancelled) return;
+      source?.close();
+      source = new EventSource("/api/line/conversations/stream");
+      source.addEventListener("snapshot", (event) => {
+        try {
+          const data = JSON.parse((event as MessageEvent).data) as {
+            conversations?: LineConversation[];
+            cases?: LineRentalCase[];
+          };
+          applySnapshot(data);
+          stopFallback();
+        } catch {
+          /* ignore */
+        }
+      });
+      source.addEventListener("ready", () => {
+        stopFallback();
+      });
+      source.onerror = () => {
+        // 瀏覽器會自動重連；同時開短輪詢保底
+        startFallback();
+      };
+    }
+
+    void loadLiveOnce();
+    connectStream();
 
     function onFocus() {
-      void loadLive();
+      void loadLiveOnce();
+      if (!source || source.readyState === EventSource.CLOSED) connectStream();
     }
     function onVisibility() {
-      if (document.visibilityState === "visible") void loadLive();
-      schedule();
+      if (document.visibilityState === "visible") onFocus();
     }
 
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
       cancelled = true;
-      if (timer != null) window.clearInterval(timer);
+      stopFallback();
+      source?.close();
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisibility);
     };
