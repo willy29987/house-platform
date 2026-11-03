@@ -372,96 +372,32 @@ export async function handleGuestText(input: {
   const text = input.text.trim();
   if (!text) return false;
 
+  // 找房改為一頁式 LIFF；不再用聊天室追問人數／職業等
   if (/^開始找房$/.test(text) || text.includes("開始找房")) {
+    const session = await getGuestSessionByUserId(input.lineUserId);
+    if (session && session.step !== "done") {
+      session.step = "done";
+      await saveGuestSession(session);
+    }
     await startGuestFlow(input);
     return true;
   }
 
   // LIFF 送出的預約原文已進對話，勿再當找房流程文字處理
   if (text.includes("【找房預約】")) {
+    const session = await getGuestSessionByUserId(input.lineUserId);
+    if (session && session.step !== "done") {
+      session.step = "done";
+      await saveGuestSession(session);
+    }
     return true;
   }
 
+  // 結束舊版聊天問答進度，避免再跳出「幾個人住」
   const session = await getGuestSessionByUserId(input.lineUserId);
-  if (!session) return false;
-
-  const listings = await loadRentListings();
-
-  if (session.step === "pet") {
-    session.petNote = text;
-    session.step = "awaiting_liff";
+  if (session && session.step !== "done") {
+    session.step = "done";
     await saveGuestSession(session);
-    await replyGuest(input.replyToken, input.lineUserId, openLiffMessage(session));
-    return true;
-  }
-
-  if (session.step === "awaiting_liff") {
-    await replyGuest(input.replyToken, input.lineUserId, openLiffMessage(session));
-    return true;
-  }
-
-  if (session.step === "people") {
-    const n = Number.parseInt(text.replace(/[^\d]/g, ""), 10);
-    if (!Number.isFinite(n) || n < 1 || n > 20) {
-      await replyGuest(input.replyToken, input.lineUserId, [
-        { type: "text", text: "請回覆 1–20 的數字。" },
-        askPeople(),
-      ]);
-      return true;
-    }
-    session.peopleCount = n;
-    session.step = "occupation";
-    await saveGuestSession(session);
-    await replyGuest(input.replyToken, input.lineUserId, [askOccupation()]);
-    return true;
-  }
-
-  if (session.step === "occupation") {
-    session.occupation = text.slice(0, 80);
-    session.step = "moveIn";
-    await saveGuestSession(session);
-    await replyGuest(input.replyToken, input.lineUserId, [askMoveIn()]);
-    return true;
-  }
-
-  if (session.step === "moveIn") {
-    session.moveInDate = text.slice(0, 40);
-    session.step = "nationality";
-    await saveGuestSession(session);
-    await replyGuest(input.replyToken, input.lineUserId, [askNationality()]);
-    return true;
-  }
-
-  if (session.step === "nationality") {
-    session.nationality = text.slice(0, 40);
-    session.step = "phone";
-    await saveGuestSession(session);
-    await replyGuest(input.replyToken, input.lineUserId, [askPhone()]);
-    return true;
-  }
-
-  if (session.step === "phone") {
-    const phone = text.replace(/\s/g, "");
-    if (!/^09\d{8}$/.test(phone) && !/^0\d{8,12}$/.test(phone)) {
-      await replyGuest(input.replyToken, input.lineUserId, [
-        { type: "text", text: "請留下有效電話（例如 0912345678）。" },
-        askPhone(),
-      ]);
-      return true;
-    }
-    session.phone = phone;
-    const done = await finishCase(session);
-    await replyGuest(input.replyToken, input.lineUserId, [done]);
-    return true;
-  }
-
-  // 多選步驟若打字，提示用按鈕
-  if (["city", "district", "rooms", "price", "extras"].includes(session.step)) {
-    await replyGuest(input.replyToken, input.lineUserId, [
-      { type: "text", text: "請用下方按鈕選擇，選完按「下一步」。" },
-      ...promptForStep(session, listings),
-    ]);
-    return true;
   }
 
   return false;
@@ -474,93 +410,15 @@ export async function handleGuestPostback(input: {
   displayName?: string;
 }): Promise<boolean> {
   if (!input.data.startsWith("guest:")) return false;
-  const listings = await loadRentListings();
-  let session = await getGuestSessionByUserId(input.lineUserId);
 
-  if (input.data === "guest:start") {
-    await startGuestFlow(input);
-    return true;
-  }
-
-  if (!session) {
-    await startGuestFlow(input);
-    return true;
-  }
-
-  const parts = input.data.split(":");
-  // guest:toggle:city:台北市
-  // guest:clear:city
-  // guest:next:city
-  // guest:pet:none
-  // guest:people:2
-  // guest:nationality:台灣
-
-  if (parts[1] === "toggle" && parts[2] && parts[3]) {
-    const field = parts[2];
-    const value = parts.slice(3).join(":");
-    if (field === "city") session.cities = toggle(session.cities, value);
-    if (field === "district") session.districts = toggle(session.districts, value);
-    if (field === "rooms") session.rooms = toggle(session.rooms, value);
-    if (field === "price") session.priceKeys = toggle(session.priceKeys, value);
-    if (field === "extras" && (value === "subsidy" || value === "tax" || value === "household")) {
-      session.extras = toggle(session.extras, value) as RentalExtra[];
-    }
+  // 舊按鈕（人數／縣市等）一律結束問答，改開一頁式表單
+  const session = await getGuestSessionByUserId(input.lineUserId);
+  if (session && session.step !== "done") {
+    session.step = "done";
     await saveGuestSession(session);
-    await replyGuest(input.replyToken, input.lineUserId, promptForStep(session, listings));
-    return true;
   }
 
-  if (parts[1] === "clear" && parts[2]) {
-    const field = parts[2];
-    if (field === "city") {
-      session.cities = [];
-      session.districts = [];
-    }
-    if (field === "district") session.districts = [];
-    if (field === "rooms") session.rooms = [];
-    if (field === "price") session.priceKeys = [];
-    if (field === "extras") session.extras = [];
-    await saveGuestSession(session);
-    await replyGuest(input.replyToken, input.lineUserId, promptForStep(session, listings));
-    return true;
-  }
-
-  if (parts[1] === "next" && parts[2]) {
-    const from = parts[2] as GuestFlowStep;
-    const order: GuestFlowStep[] = ["city", "district", "rooms", "price", "extras", "pet"];
-    const idx = order.indexOf(from);
-    if (idx >= 0 && session.step === from) {
-      session.step = order[idx + 1] ?? "pet";
-      await saveGuestSession(session);
-    }
-    await replyGuest(input.replyToken, input.lineUserId, promptForStep(session, listings));
-    return true;
-  }
-
-  if (parts[1] === "pet" && parts[2] === "none") {
-    session.petNote = "沒有";
-    session.step = "awaiting_liff";
-    await saveGuestSession(session);
-    await replyGuest(input.replyToken, input.lineUserId, openLiffMessage(session));
-    return true;
-  }
-
-  if (parts[1] === "people" && parts[2]) {
-    session.peopleCount = Number.parseInt(parts[2], 10) || 1;
-    session.step = "occupation";
-    await saveGuestSession(session);
-    await replyGuest(input.replyToken, input.lineUserId, [askOccupation()]);
-    return true;
-  }
-
-  if (parts[1] === "nationality" && parts[2]) {
-    session.nationality = parts.slice(2).join(":") || "台灣";
-    session.step = "phone";
-    await saveGuestSession(session);
-    await replyGuest(input.replyToken, input.lineUserId, [askPhone()]);
-    return true;
-  }
-
+  await startGuestFlow(input);
   return true;
 }
 
@@ -580,7 +438,8 @@ export async function completeGuestLiffPick(input: {
 
   session.picked = input.picked;
   session.requestedWhen = input.requestedWhen.trim();
-  session.step = "people";
+  // 基本資料已在 LIFF 表單填完，不再聊天追問人數等
+  session.step = "done";
   await saveGuestSession(session);
 
   const confirmText = [
@@ -588,13 +447,11 @@ export async function completeGuestLiffPick(input: {
     "",
     formatGuestPickSummary(session),
     "",
-    "時間需同事確認後會再回覆你。接著再問幾題基本資料。",
+    "時間需同事確認後會再回覆你。",
   ].join("\n");
-  const followUpMessages: LineMessage[] = [
-    { type: "text", text: confirmText },
-    askPeople(),
-  ];
+  const followUpMessages: LineMessage[] = [{ type: "text", text: confirmText }];
 
+  // 客人端 sendMessages 已會把完整預約貼進對話；這裡不強制 push，避免扣額度與重複追問
   const pushed = await pushLineMessages(session.lineUserId, followUpMessages);
   if (!pushed.sent) {
     console.warn("[line-guest-flow] push after LIFF pick failed", pushed);
