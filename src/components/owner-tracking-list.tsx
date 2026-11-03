@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   backfillOwnerCaseLinkedListingsFrom591,
   formatOwnerCaseAddress,
@@ -75,8 +75,10 @@ type Props = {
   staffLabels?: Record<string, string>;
 };
 
-const PAGE_SIZE = 100;
+const PAGE_SIZE = 40;
 const MAX_591_CHECK_BATCH = 30;
+const SITE_LISTING_BACKFILL_SESSION_KEY = "ot:site-listing-backfill:v1";
+const FOCUS_REFRESH_MIN_MS = 60_000;
 
 const COMPACT_FILTER_LABEL = "block min-w-0";
 /** 桌機等寬、剛好容納最長選項（屋主已出租／River（我））；不再撐滿整排 */
@@ -201,6 +203,7 @@ function OwnerTrackingListInner({
   const [checking591Ids, setChecking591Ids] = useState<Set<string>>(() => new Set());
   const [check591Error, setCheck591Error] = useState<string | null>(null);
   const autoCheckSigRef = useRef("");
+  const lastFocusRefreshAt = useRef(0);
 
   const assigneeOptions = useMemo(() => {
     const names = new Set(staffUsernames.map((u) => u.trim()).filter(Boolean));
@@ -212,22 +215,29 @@ function OwnerTrackingListInner({
   }, [store.cases, staffUsernames]);
 
   useEffect(() => {
+    // 先畫本機快取，避免等雲端才可操作
+    const local = normalizeOwnerTrackingStore(loadOwnerTrackingStoreLocal());
+    setStore(local);
+    setHydrated(true);
     void hydrateOwnerTrackingStoreOnce(loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreLocal)
       .then((next) => {
         setStore(next);
         setSyncError(null);
-        setHydrated(true);
       })
       .catch((e) => {
         setSyncError(e instanceof Error ? e.message : "雲端同步失敗");
         setStore(loadOwnerTrackingStoreLocal());
-        setHydrated(true);
       });
   }, []);
 
-  /** 歷史案件：以本站已上架物件（591／電話+地址／電話+社區）回填 linkedListingId */
+  /** 歷史案件回填：每分頁工作階段最多一次，且不上阻塞 UI */
   useEffect(() => {
     if (!hydrated) return;
+    try {
+      if (sessionStorage.getItem(SITE_LISTING_BACKFILL_SESSION_KEY) === "1") return;
+    } catch {
+      /* ignore */
+    }
     let cancelled = false;
     void (async () => {
       try {
@@ -248,11 +258,18 @@ function OwnerTrackingListInner({
           byPhoneAddress: json.byPhoneAddress ?? {},
           byPhoneCommunity: json.byPhoneCommunity ?? {},
         });
+        try {
+          sessionStorage.setItem(SITE_LISTING_BACKFILL_SESSION_KEY, "1");
+        } catch {
+          /* ignore */
+        }
         if (cancelled || changed === 0) return;
         persistOwnerTrackingStoreLocal(next);
         invalidateOwnerTrackingHydrateCache();
         setStore(next);
-        await pushOwnerTrackingStoreNow(next);
+        void pushOwnerTrackingStoreNow(next).catch((e) => {
+          console.warn("[owner-tracking] site listing backfill push failed", e);
+        });
       } catch (e) {
         console.warn("[owner-tracking] site listing backfill failed", e);
       }
@@ -265,6 +282,7 @@ function OwnerTrackingListInner({
   useEffect(() => {
     const local = loadOwnerTrackingListingChecksLocal();
     setCheckStore(local);
+    setChecksHydrated(true);
     void fetch(`/api/admin/cloud-data/${ADMIN_CLOUD_DATA_KEYS.ownerTrackingListingChecks}`, {
       credentials: "same-origin",
     })
@@ -278,7 +296,9 @@ function OwnerTrackingListInner({
         setCheckStore(merged);
         persistOwnerTrackingListingChecksLocal(merged);
       })
-      .finally(() => setChecksHydrated(true));
+      .catch(() => {
+        /* keep local */
+      });
   }, []);
 
   const postListing591Check = useCallback(async (items: { caseId: string; url: string }[]) => {
@@ -342,7 +362,11 @@ function OwnerTrackingListInner({
   useEffect(() => {
     if (!hydrated) return;
     const refresh = () => {
-      if (Date.now() - getOwnerTrackingLocalPersistedAt() < 3000) return;
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      const now = Date.now();
+      if (now - lastFocusRefreshAt.current < FOCUS_REFRESH_MIN_MS) return;
+      if (now - getOwnerTrackingLocalPersistedAt() < 3000) return;
+      lastFocusRefreshAt.current = now;
       void refreshOwnerTrackingFromCloud(loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreLocal).then(
         setStore,
       );
@@ -447,8 +471,12 @@ function OwnerTrackingListInner({
 
   const pageRows = useMemo(() => {
     const start = (safePage - 1) * PAGE_SIZE;
-    return rows.slice(start, start + PAGE_SIZE);
-  }, [rows, safePage]);
+    return rows.slice(start, start + PAGE_SIZE).map((row) => ({
+      ...row,
+      effectiveStatus: resolveOwnerCaseEffectiveStatus(store, row.case),
+      upcomingRelease: isOwnerCaseUpcomingRelease(store, row.case),
+    }));
+  }, [rows, safePage, store]);
 
   useEffect(() => {
     if (!hydrated || !checksHydrated || checking591) return;
@@ -460,7 +488,31 @@ function OwnerTrackingListInner({
       .join(",")}`;
     if (autoCheckSigRef.current === sig) return;
     autoCheckSigRef.current = sig;
-    void postListing591Check(items);
+    // 延後自動檢查，避免搶佔首屏點擊／捲動
+    const run = () => {
+      void postListing591Check(items);
+    };
+    let idleId: number | null = null;
+    let timeoutId: number | null = null;
+    const ric = (
+      window as Window & {
+        requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+        cancelIdleCallback?: (id: number) => void;
+      }
+    ).requestIdleCallback;
+    if (typeof ric === "function") {
+      idleId = ric(run, { timeout: 2500 });
+    } else {
+      timeoutId = window.setTimeout(run, 1200);
+    }
+    return () => {
+      if (idleId != null) {
+        (
+          window as Window & { cancelIdleCallback?: (id: number) => void }
+        ).cancelIdleCallback?.(idleId);
+      }
+      if (timeoutId != null) window.clearTimeout(timeoutId);
+    };
   }, [hydrated, checksHydrated, checking591, pageRows, checkStore.byCaseId, safePage, postListing591Check]);
 
   const check591OnPageCount = useMemo(
@@ -468,33 +520,36 @@ function OwnerTrackingListInner({
     [pageRows, checkStore.byCaseId],
   );
 
-  async function handleDeleteCase(caseId: string) {
-    if (!isSuperAdmin || deletingId) return;
-    if (!window.confirm("確定刪除此案件？追蹤紀錄一併刪除，且無法復原。")) return;
-    setDeletingId(caseId);
-    try {
-      cancelScheduledPushCloudPayload(ADMIN_CLOUD_DATA_KEYS.ownerTracking);
-      const next = deleteOwnerCase(store, caseId);
-      persistOwnerTrackingStoreLocal(next);
-      setStore(next);
-      invalidateOwnerTrackingHydrateCache();
-      const res = await pushCloudPayload(ADMIN_CLOUD_DATA_KEYS.ownerTracking, next);
-      if (!res.ok) {
-        throw new Error("雲端儲存失敗，請重新整理後再試");
+  const handleDeleteCase = useCallback(
+    async (caseId: string) => {
+      if (!isSuperAdmin || deletingId) return;
+      if (!window.confirm("確定刪除此案件？追蹤紀錄一併刪除，且無法復原。")) return;
+      setDeletingId(caseId);
+      try {
+        cancelScheduledPushCloudPayload(ADMIN_CLOUD_DATA_KEYS.ownerTracking);
+        const next = deleteOwnerCase(store, caseId);
+        persistOwnerTrackingStoreLocal(next);
+        setStore(next);
+        invalidateOwnerTrackingHydrateCache();
+        const res = await pushCloudPayload(ADMIN_CLOUD_DATA_KEYS.ownerTracking, next);
+        if (!res.ok) {
+          throw new Error("雲端儲存失敗，請重新整理後再試");
+        }
+      } catch (e) {
+        window.alert(e instanceof Error ? e.message : "刪除失敗");
+        void refreshOwnerTrackingFromCloud(loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreLocal).then(
+          setStore,
+        );
+      } finally {
+        setDeletingId(null);
       }
-    } catch (e) {
-      window.alert(e instanceof Error ? e.message : "刪除失敗");
-      void refreshOwnerTrackingFromCloud(loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreLocal).then(
-        setStore,
-      );
-    } finally {
-      setDeletingId(null);
-    }
-  }
+    },
+    [isSuperAdmin, deletingId, store],
+  );
 
-  function handleToggleMarked591Posted(caseId: string, marked: boolean) {
+  const handleToggleMarked591Posted = useCallback((caseId: string, marked: boolean) => {
     cancelScheduledPushCloudPayload(ADMIN_CLOUD_DATA_KEYS.ownerTracking);
-    const next = patchOwnerCaseMarked591Posted(store, caseId, marked);
+    const next = patchOwnerCaseMarked591Posted(loadOwnerTrackingStoreLocal(), caseId, marked);
     persistOwnerTrackingStoreLocal(next);
     setStore(next);
     invalidateOwnerTrackingHydrateCache();
@@ -503,7 +558,7 @@ function OwnerTrackingListInner({
         setStore,
       );
     });
-  }
+  }, []);
 
   async function onExportExcel() {
     setExporting(true);
@@ -829,20 +884,20 @@ function OwnerTrackingListInner({
               )}
             </li>
           ) : (
-            pageRows.map(({ case: c, last, contactCount }) => (
+            pageRows.map(({ case: c, last, contactCount, effectiveStatus, upcomingRelease }) => (
               <CaseRow
                 key={c.id}
                 item={c}
                 last={last}
-                effectiveStatus={resolveOwnerCaseEffectiveStatus(store, c)}
+                effectiveStatus={effectiveStatus}
                 contactCount={contactCount}
                 isSuperAdmin={isSuperAdmin}
                 listQuery={listQuery}
                 checkEntry={checkStore.byCaseId[c.id]}
                 checking591={checking591Ids.has(c.id)}
-                upcomingRelease={isOwnerCaseUpcomingRelease(store, c)}
+                upcomingRelease={upcomingRelease}
                 staffLabels={staffLabels}
-                onDelete={() => handleDeleteCase(c.id)}
+                onDelete={handleDeleteCase}
                 onToggleMarked591Posted={handleToggleMarked591Posted}
               />
             ))
@@ -1152,7 +1207,7 @@ function TrashIcon({ className }: { className?: string }) {
   );
 }
 
-function CaseRow({
+const CaseRow = memo(function CaseRow({
   item,
   last,
   effectiveStatus,
@@ -1176,7 +1231,7 @@ function CaseRow({
   checking591: boolean;
   upcomingRelease?: boolean;
   staffLabels?: Record<string, string>;
-  onDelete: () => void;
+  onDelete: (caseId: string) => void;
   onToggleMarked591Posted: (caseId: string, marked: boolean) => void;
 }) {
   const caseHref = appendOwnerTrackingListContext(`/admin/owner-tracking/${item.id}`, listQuery);
@@ -1326,7 +1381,7 @@ function CaseRow({
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                onDelete();
+                onDelete(item.id);
               }}
             >
               <TrashIcon className="h-4 w-4" />
@@ -1336,4 +1391,4 @@ function CaseRow({
       </div>
     </li>
   );
-}
+});

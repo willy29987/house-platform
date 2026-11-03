@@ -460,13 +460,10 @@ export function AdminListingForm({
 
     setStatus(mode === "create" ? "建立成功！" : "更新成功！");
     setLoading(false);
-    router.refresh();
-    setTimeout(() => {
-      const typeParam = isRent ? "rent" : "sale";
-      const published = Boolean(payload.isPublished);
-      const qs = published ? "mine=1" : "mine=1&off=1";
-      router.push(`/admin?type=${typeParam}&${qs}`);
-    }, 500);
+    const typeParam = isRent ? "rent" : "sale";
+    const published = Boolean(payload.isPublished);
+    const qs = published ? "mine=1" : "mine=1&off=1";
+    router.push(`/admin?type=${typeParam}&${qs}`);
   }
 
   const field =
