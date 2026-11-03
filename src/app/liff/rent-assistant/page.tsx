@@ -16,7 +16,12 @@ export default async function LiffRentAssistantPage({
 
   const listings = await getListings({ listingType: ListingType.RENT });
   const cards = listings.map(toRentalMatchListing);
+  const listingBaseUrl =
+    process.env.NEXT_PUBLIC_LISTING_BASE_URL?.replace(/\/$/, "") ||
+    "https://house-platform.vercel.app";
 
-  // 一律一頁式表單（不再走對話／mode=pick）
-  return <LineLiffRentAssistant listings={cards} liffId={liffId} />;
+  // 一律多步驟表單（條件 → 物件 → 資料 → 時間）
+  return (
+    <LineLiffRentAssistant listings={cards} liffId={liffId} listingBaseUrl={listingBaseUrl} />
+  );
 }

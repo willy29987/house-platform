@@ -19,6 +19,8 @@ type PostBody = {
   picked?: { id: string; title: string; price: number }[];
   requestedWhen?: string;
   summaryText?: string;
+  /** 客戶端已用 liff.sendMessages 送過時略過重複 push */
+  skipGuestPush?: boolean;
 };
 
 export async function GET() {
@@ -47,10 +49,14 @@ export async function POST(request: Request) {
 
   const hasAgents = getViewingAgentUserIds().length > 0;
   const status = hasAgents ? "awaiting_agent" : "pending_confirm";
-  const summaryText = hasAgents
-    ? `已記下想看時間（${requestedWhen}），已送業務確認。`
-    : (typeof body.summaryText === "string" && body.summaryText.trim()) ||
-      `已記下想看時間（${requestedWhen}），待同事確認。`;
+  const clientSummary =
+    typeof body.summaryText === "string" ? body.summaryText.trim() : "";
+  const summaryText =
+    clientSummary ||
+    (hasAgents
+      ? `已記下想看時間（${requestedWhen}），已送業務確認。`
+      : `已記下想看時間（${requestedWhen}），待同事確認。`);
+  const skipGuestPush = body.skipGuestPush === true;
 
   try {
     const created = await appendLineRentalCase({
@@ -74,27 +80,37 @@ export async function POST(request: Request) {
       summaryText,
     });
 
+    const listingBase =
+      process.env.NEXT_PUBLIC_LISTING_BASE_URL?.replace(/\/$/, "") ||
+      "https://house-platform.vercel.app";
     const listingLines = created.picked.map((item, index) => {
       const price =
         item.price > 0 ? `（${item.price.toLocaleString("zh-TW")} 元/月）` : "";
-      return `${index + 1}. ${item.title}${price}`;
+      return `${index + 1}. ${item.title}${price}\n${listingBase}/listings/${item.id}`;
     });
-    const confirmText = [
-      "已收到你的找房資料，整理如下：",
-      "",
-      `看屋時間：${created.requestedWhen}`,
-      "",
-      "想看的物件：",
-      ...listingLines,
-      "",
-      `條件：${created.criteriaText}`,
-      `電話：${created.phone}`,
-      "",
-      "時間需同事確認後會再回覆你。",
-    ].join("\n");
+    const confirmText =
+      clientSummary ||
+      [
+        "【找房預約】已收到你的資料：",
+        "",
+        `看屋時間：${created.requestedWhen}`,
+        "",
+        "客戶資料：",
+        `暱稱：${created.displayName}`,
+        `電話：${created.phone}`,
+        `人數：${created.peopleCount} 人`,
+        `職業：${created.occupation || "未填"}`,
+        `預計入住：${created.moveInDate || "未填"}`,
+        `國籍：${created.nationality || "未填"}`,
+        `寵物：${created.petNote || "未填"}`,
+        `條件：${created.criteriaText}`,
+        "",
+        "想看的物件（網頁）：",
+        ...listingLines,
+      ].join("\n");
 
     let pushSent = false;
-    if (created.lineUserId) {
+    if (created.lineUserId && !skipGuestPush) {
       const pushed = await pushLineMessages(created.lineUserId, [
         { type: "text", text: confirmText },
       ]);
