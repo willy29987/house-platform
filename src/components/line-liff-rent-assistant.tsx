@@ -15,8 +15,13 @@ export function LineLiffRentAssistant({
   liffId: string;
   listingBaseUrl: string;
 }) {
+  const [hydrated, setHydrated] = useState(false);
   const [lineUserId, setLineUserId] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState<string | null>(null);
+
+  useEffect(() => {
+    setHydrated(true);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -58,6 +63,15 @@ export function LineLiffRentAssistant({
       cancelled = true;
     };
   }, [liffId]);
+
+  if (!hydrated) {
+    return (
+      <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col items-center justify-center bg-zinc-100 px-6 text-center">
+        <p className="text-sm font-semibold text-zinc-900">載入找房表單中…</p>
+        <p className="mt-2 text-xs text-zinc-500">請稍候，選項準備好才能點選</p>
+      </div>
+    );
+  }
 
   return (
     <LineLiffRentForm

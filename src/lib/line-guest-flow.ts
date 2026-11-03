@@ -340,12 +340,15 @@ async function finishCase(session: GuestSession) {
   };
 }
 
+function buildStableRentFormUrl() {
+  // 表單必須走穩定 CDN（Vercel）。localhost.run 常 502 / JS 下不完 → 按鈕假可點。
+  const fromEnv = process.env.LINE_FORM_PUBLIC_BASE_URL?.replace(/\/$/, "") ?? "";
+  if (fromEnv) return `${fromEnv}/liff/rent-assistant`;
+  return "https://house-platform.vercel.app/liff/rent-assistant";
+}
+
 function openFullLiffFormMessages(): LineMessage[] {
-  // 優先用公開網址（本機隧道／正式站），避免官方 LIFF endpoint 還卡在舊對話版
-  const base = buildPublicBaseUrl();
-  const uri = base
-    ? `${base.replace(/\/$/, "")}/liff/rent-assistant`
-    : buildLiffRentAssistantUrl();
+  const uri = buildStableRentFormUrl();
   return [
     { type: "text", text: WELCOME },
     {
