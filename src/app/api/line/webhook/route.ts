@@ -6,6 +6,7 @@ import { handle591LinkInquiry, handleImageInquiry } from "@/lib/line-591-inquiry
 import { appendLineConversationMessage } from "@/lib/line-conversations";
 import { handleGuestPostback, handleGuestText } from "@/lib/line-guest-flow";
 import { replyLineMessages } from "@/lib/line-messaging";
+import { readLineChannelSecretFromCloud } from "@/lib/line-runtime-secrets";
 import {
   handleAgentProposeText,
   handleViewingAgentPostback,
@@ -40,6 +41,11 @@ type LineEvent = {
     type?: string;
     id?: string;
     text?: string;
+    packageId?: string;
+    stickerId?: string;
+    title?: string;
+    address?: string;
+    fileName?: string;
   };
   postback?: {
     data?: string;
@@ -50,9 +56,8 @@ type LineWebhookBody = {
   events?: LineEvent[];
 };
 
-function verifyLineSignature(rawBody: string, signature: string | null): boolean {
-  const secret = process.env.LINE_CHANNEL_SECRET?.trim() ?? "";
-  if (!secret || !signature) return false;
+function signatureMatches(rawBody: string, signature: string, secret: string): boolean {
+  if (!secret) return false;
   const digest = createHmac("sha256", secret).update(rawBody).digest("base64");
   try {
     const a = Buffer.from(digest);
@@ -61,6 +66,15 @@ function verifyLineSignature(rawBody: string, signature: string | null): boolean
   } catch {
     return false;
   }
+}
+
+async function verifyLineSignature(rawBody: string, signature: string | null): Promise<boolean> {
+  if (!signature) return false;
+  const envSecret = process.env.LINE_CHANNEL_SECRET?.trim() ?? "";
+  if (signatureMatches(rawBody, signature, envSecret)) return true;
+  // Vercel env 可能過期／缺漏：改比對雲端備份的 channel secret
+  const cloudSecret = await readLineChannelSecretFromCloud();
+  return signatureMatches(rawBody, signature, cloudSecret);
 }
 
 /** 依 postback data 還原聊天室大致會出現的 displayText（與送出時 label 對齊） */
@@ -85,28 +99,60 @@ function guessPostbackDisplayText(data: string): string | null {
   return data.length <= 40 ? data : null;
 }
 
+function previewForIncomingMessage(message: NonNullable<LineEvent["message"]>): string | null {
+  const type = message.type;
+  if (type === "text") {
+    const text = message.text?.trim() ?? "";
+    return text || null;
+  }
+  if (type === "image") return "［圖片］";
+  if (type === "video") return "［影片］";
+  if (type === "audio") return "［語音］";
+  if (type === "file") return `［檔案］${message.fileName?.trim() || ""}`.trim();
+  if (type === "location") {
+    const title = message.title?.trim();
+    const address = message.address?.trim();
+    if (title && address) return `［位置］${title}（${address}）`;
+    if (title || address) return `［位置］${title || address}`;
+    return "［位置］";
+  }
+  if (type === "sticker") return "［貼圖］";
+  return type ? `［${type}］` : null;
+}
+
+async function storeGuestMessage(input: {
+  lineUserId: string;
+  text: string;
+  messageId?: string;
+}) {
+  try {
+    await appendLineConversationMessage({
+      lineUserId: input.lineUserId,
+      from: "guest",
+      text: input.text,
+      messageId: input.messageId,
+    });
+  } catch (error) {
+    console.error("[line/webhook] append guest message failed", error);
+  }
+}
+
 async function handleEvent(event: LineEvent) {
-  if (!event.replyToken) return;
   const userId = event.source?.userId ?? null;
   rememberLineUserId(userId, event.type);
 
   if (event.type === "postback") {
+    if (!event.replyToken) return;
     const data = event.postback?.data?.trim() ?? "";
     if (!data || !userId) return;
 
-    // LINE 聊天室會顯示按鈕的 displayText；webhook 只有 data，還原成客服可見文字
     const postbackLabel = guessPostbackDisplayText(data);
     if (postbackLabel) {
-      try {
-        await appendLineConversationMessage({
-          lineUserId: userId,
-          from: "guest",
-          text: postbackLabel,
-          messageId: `postback:${event.replyToken}:${data}`,
-        });
-      } catch (error) {
-        console.error("[line/webhook] append postback message failed", error);
-      }
+      await storeGuestMessage({
+        lineUserId: userId,
+        text: postbackLabel,
+        messageId: `postback:${event.replyToken}:${data}`,
+      });
     }
 
     if (data.startsWith("guest:")) {
@@ -140,27 +186,27 @@ async function handleEvent(event: LineEvent) {
 
   if (event.type !== "message") return;
 
-  const messageType = event.message?.type;
+  const message = event.message;
+  if (!message) return;
+  const preview = previewForIncomingMessage(message);
+
+  // 先寫入客服對話（不因業務帳號／缺 replyToken 而跳過）
+  if (userId && preview) {
+    await storeGuestMessage({
+      lineUserId: userId,
+      text: preview,
+      messageId: message.id,
+    });
+  }
+
+  if (!event.replyToken) return;
+
+  const messageType = message.type;
 
   if (messageType === "text") {
-    const text = event.message?.text?.trim() ?? "";
+    const text = message.text?.trim() ?? "";
     if (!text) return;
 
-    // 先寫入真實對話（含 LIFF sendMessages 進到聊天室的內容）
-    if (userId) {
-      try {
-        await appendLineConversationMessage({
-          lineUserId: userId,
-          from: "guest",
-          text,
-          messageId: event.message?.id,
-        });
-      } catch (error) {
-        console.error("[line/webhook] append guest message failed", error);
-      }
-    }
-
-    // 配對員改時間優先；未命中則同一帳號仍可走客人找房（方便自測）
     if (userId && isViewingAgentUserId(userId)) {
       const handled = await handleAgentProposeText({
         replyToken: event.replyToken,
@@ -190,23 +236,12 @@ async function handleEvent(event: LineEvent) {
   }
 
   if (messageType === "image") {
+    // 即使是業務測試帳號，也要進客服對話；僅略過自動回覆流程
     if (userId && isViewingAgentUserId(userId)) return;
-    if (userId) {
-      try {
-        await appendLineConversationMessage({
-          lineUserId: userId,
-          from: "guest",
-          text: "［圖片］",
-          messageId: event.message?.id,
-        });
-      } catch (error) {
-        console.error("[line/webhook] append guest image failed", error);
-      }
-    }
     const result = await handleImageInquiry({
       lineUserId: userId,
       displayName: "LINE 客人",
-      imageMessageId: event.message?.id,
+      imageMessageId: message.id,
     });
     await replyLineMessages(event.replyToken, result.messages, { lineUserId: userId });
   }
@@ -217,7 +252,8 @@ export async function POST(request: Request) {
   const signature = request.headers.get("x-line-signature");
   const skipVerify = process.env.LINE_WEBHOOK_SKIP_VERIFY === "true";
 
-  if (!skipVerify && !verifyLineSignature(rawBody, signature)) {
+  if (!skipVerify && !(await verifyLineSignature(rawBody, signature))) {
+    console.warn("[line/webhook] invalid signature");
     return NextResponse.json({ error: "invalid signature" }, { status: 401 });
   }
 
