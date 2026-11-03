@@ -67,7 +67,7 @@ function Chip({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-full border px-3 py-1.5 text-sm ${
+      className={`touch-manipulation rounded-full border px-3 py-1.5 text-sm active:opacity-80 ${
         active
           ? "border-[#06c755] bg-[#e8f8ef] font-semibold text-[#067a36]"
           : "border-zinc-200 bg-white text-zinc-700"
@@ -548,14 +548,14 @@ export function LineLiffRentForm({
   }
 
   return (
-    <div className="relative mx-auto flex min-h-dvh w-full max-w-md flex-col bg-zinc-100">
-      <header className="border-b border-zinc-200 bg-white px-4 py-3">
+    <div className="relative z-0 mx-auto flex h-dvh w-full max-w-md flex-col overflow-hidden bg-zinc-100">
+      <header className="shrink-0 border-b border-zinc-200 bg-white px-4 py-3">
         <div className="flex items-center gap-2">
           {step !== "criteria" ? (
             <button
               type="button"
               onClick={goBack}
-              className="rounded-full border border-zinc-200 px-2.5 py-1 text-xs font-medium text-zinc-700"
+              className="touch-manipulation rounded-full border border-zinc-200 px-2.5 py-1 text-xs font-medium text-zinc-700"
             >
               返回
             </button>
@@ -576,7 +576,7 @@ export function LineLiffRentForm({
         <StepDots step={step} />
       </header>
 
-      <div className="flex-1 space-y-3 overflow-y-auto px-3 py-3 pb-28">
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-3">
         {step === "criteria" ? (
           <Section title="找房條件">
             <div>
@@ -866,14 +866,14 @@ export function LineLiffRentForm({
         ) : null}
       </div>
 
-      <footer className="fixed inset-x-0 bottom-0 z-10 border-t border-zinc-200 bg-white px-3 py-3">
+      <footer className="shrink-0 border-t border-zinc-200 bg-white px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <div className="mx-auto max-w-md">
           {error ? <p className="mb-2 text-center text-sm text-red-600">{error}</p> : null}
           <button
             type="button"
             disabled={submitting || (step === "listings" && matched.length === 0)}
             onClick={onPrimary}
-            className="w-full rounded-full bg-[#06c755] py-3 text-sm font-bold text-white disabled:opacity-50"
+            className="touch-manipulation w-full rounded-full bg-[#06c755] py-3 text-sm font-bold text-white disabled:opacity-50"
           >
             {primaryLabel}
           </button>
