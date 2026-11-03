@@ -27,11 +27,20 @@ export async function readLineChannelAccessTokenFromCloud(): Promise<string> {
     : "";
 }
 
+let cachedChannelSecret: { value: string; expiresAt: number } | null = null;
+
 export async function readLineChannelSecretFromCloud(): Promise<string> {
+  const now = Date.now();
+  if (cachedChannelSecret && cachedChannelSecret.expiresAt > now) {
+    return cachedChannelSecret.value;
+  }
   const payload = await readSecrets();
-  return typeof payload.lineChannelSecret === "string"
-    ? payload.lineChannelSecret.trim()
-    : "";
+  const value =
+    typeof payload.lineChannelSecret === "string"
+      ? payload.lineChannelSecret.trim()
+      : "";
+  cachedChannelSecret = { value, expiresAt: now + 5 * 60_000 };
+  return value;
 }
 
 export async function writeLineRuntimeSecretsToCloud(input: {
