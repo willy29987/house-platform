@@ -594,9 +594,7 @@ function OwnerTrackingListInner({
       ) : null}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="text-sm text-zinc-600">屋主開發／委託追蹤</p>
           <h1 className="text-2xl font-bold text-zinc-900">屋主追蹤</h1>
-          <p className="mt-1 text-xs text-zinc-500">列表看最新狀態，進入案件後可多次送出追蹤並形成時間軸。</p>
         </div>
         {isSuperAdmin ? (
           <div className="w-full sm:w-auto">
@@ -619,23 +617,6 @@ function OwnerTrackingListInner({
         isSuperAdmin={isSuperAdmin}
         staffLabels={staffLabels}
       />
-      {contactDueCount > 0 && !isContactDueTodayView(contactFilter) ? (
-        <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-          <p>
-            你有{" "}
-            <span className="font-bold tabular-nums">{contactDueCount}</span>{" "}
-            件屋主案今日待聯繫或已逾期。
-            <Link
-              href={contactDueHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="ml-2 font-semibold text-[#0b2545] underline hover:no-underline"
-            >
-              查看列表
-            </Link>
-          </p>
-        </div>
-      ) : null}
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
         <label className="block min-w-[12rem] flex-1">
           <span className="mb-1 block text-xs font-medium text-zinc-600">搜尋</span>
