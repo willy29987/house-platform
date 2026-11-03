@@ -55,9 +55,16 @@ export async function pushLineTextMessage(lineUserId: string, text: string) {
   return pushLineMessages(lineUserId, [{ type: "text", text }]);
 }
 
-export async function pushLineMessages(lineUserId: string, messages: LineMessage[]) {
+export async function pushLineMessages(
+  lineUserId: string,
+  messages: LineMessage[],
+  options?: { force?: boolean },
+) {
   const token = lineToken();
-  if (!token || !lineLive() || !lineUserId || !messages.length) {
+  if (!token || !lineUserId || !messages.length) {
+    return { sent: false as const, reason: "not_live_or_missing_token" as const };
+  }
+  if (!options?.force && !lineLive()) {
     return { sent: false as const, reason: "not_live_or_missing_token" as const };
   }
 

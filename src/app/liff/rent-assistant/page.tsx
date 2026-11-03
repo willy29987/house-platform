@@ -9,10 +9,11 @@ export const dynamic = "force-dynamic";
 export default async function LiffRentAssistantPage({
   searchParams,
 }: {
-  searchParams: Promise<{ liffId?: string }>;
+  searchParams: Promise<{ liffId?: string; uid?: string }>;
 }) {
   const params = await searchParams;
   const liffId = params.liffId?.trim() || LINE_LIFF_RENT_ASSISTANT_ID;
+  const fallbackLineUserId = params.uid?.trim() || null;
 
   const listings = await getListings({ listingType: ListingType.RENT });
   const cards = listings.map(toRentalMatchListing);
@@ -22,6 +23,11 @@ export default async function LiffRentAssistantPage({
 
   // 一律多步驟表單（條件 → 物件 → 資料 → 時間）
   return (
-    <LineLiffRentAssistant listings={cards} liffId={liffId} listingBaseUrl={listingBaseUrl} />
+    <LineLiffRentAssistant
+      listings={cards}
+      liffId={liffId}
+      listingBaseUrl={listingBaseUrl}
+      fallbackLineUserId={fallbackLineUserId}
+    />
   );
 }

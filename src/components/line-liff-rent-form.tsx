@@ -507,20 +507,39 @@ export function LineLiffRentForm({
     setSubmitting(true);
     setError("");
     try {
-      // 客戶端把資料與物件送回官方帳號對話，再關閉 LIFF
+      // 1) 盡量用客戶端 sendMessages；2) 失敗則靠後端 force push
       let clientSent = false;
+      let resolvedUserId = lineUserId;
       let liff: Awaited<ReturnType<typeof loadLiffClient>> = null;
       if (liffId) {
         try {
           liff = await loadLiffClient();
-          if (liff?.isInClient()) {
+          if (liff) {
             try {
               await liff.init({ liffId });
             } catch {
               /* 可能已 init */
             }
-            await liff.sendMessages([{ type: "text", text: chatText }]);
-            clientSent = true;
+            if (!resolvedUserId) {
+              try {
+                const ctx = liff.getContext();
+                if (ctx?.userId) resolvedUserId = ctx.userId;
+              } catch {
+                /* ignore */
+              }
+              if (!resolvedUserId && liff.isLoggedIn()) {
+                try {
+                  const profile = await liff.getProfile();
+                  resolvedUserId = profile.userId;
+                } catch {
+                  /* ignore */
+                }
+              }
+            }
+            if (liff.isInClient()) {
+              await liff.sendMessages([{ type: "text", text: chatText }]);
+              clientSent = true;
+            }
           }
         } catch (sendError) {
           console.warn("[liff-rent-form] sendMessages failed", sendError);
@@ -531,7 +550,7 @@ export function LineLiffRentForm({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          lineUserId,
+          lineUserId: resolvedUserId,
           displayName: name,
           phone: phoneTrim,
           occupation: occupation.trim(),
@@ -549,6 +568,7 @@ export function LineLiffRentForm({
           picked,
           requestedWhen: when,
           summaryText: chatText,
+          // 只有確定客戶端已送出才略過 push，避免對話空白
           skipGuestPush: clientSent,
         }),
       });
@@ -573,8 +593,13 @@ export function LineLiffRentForm({
         }
       }
 
+      if (!clientSent && !data.pushSent) {
+        throw new Error(
+          "無法送到 LINE 對話。請從官方帳號的「打開找房表單」重新開啟後再送一次。",
+        );
+      }
+
       setDone({ when, titles: picked.map((item) => item.title) });
-      // 立刻關 LIFF 回對話；訊息已用客戶端送出
       if (liff?.isInClient()) {
         try {
           liff.closeWindow();

@@ -9,14 +9,16 @@ export function LineLiffRentAssistant({
   listings,
   liffId,
   listingBaseUrl,
+  fallbackLineUserId = null,
 }: {
   listings: RentalMatchListing[];
   lineBasicId?: string;
   liffId: string;
   listingBaseUrl: string;
+  fallbackLineUserId?: string | null;
 }) {
   const [hydrated, setHydrated] = useState(false);
-  const [lineUserId, setLineUserId] = useState<string | null>(null);
+  const [lineUserId, setLineUserId] = useState<string | null>(fallbackLineUserId);
   const [displayName, setDisplayName] = useState<string | null>(null);
 
   useEffect(() => {

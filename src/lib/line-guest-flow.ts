@@ -340,15 +340,11 @@ async function finishCase(session: GuestSession) {
   };
 }
 
-function buildStableRentFormUrl() {
-  // 表單必須走穩定 CDN（Vercel）。localhost.run 常 502 / JS 下不完 → 按鈕假可點。
-  const fromEnv = process.env.LINE_FORM_PUBLIC_BASE_URL?.replace(/\/$/, "") ?? "";
-  if (fromEnv) return `${fromEnv}/liff/rent-assistant`;
-  return "https://house-platform.vercel.app/liff/rent-assistant";
-}
-
-function openFullLiffFormMessages(): LineMessage[] {
-  const uri = buildStableRentFormUrl();
+function openFullLiffFormMessages(lineUserId?: string): LineMessage[] {
+  // 必須走 liff.line.me，sendMessages 才會進對話；Endpoint 請指向 Vercel 表單頁
+  const uri = buildLiffRentAssistantUrl(
+    lineUserId ? { uid: lineUserId } : undefined,
+  );
   return [
     { type: "text", text: WELCOME },
     {
@@ -369,7 +365,7 @@ export async function startGuestFlow(input: {
   lineUserId: string;
   displayName?: string;
 }) {
-  await replyLineMessages(input.replyToken, openFullLiffFormMessages());
+  await replyLineMessages(input.replyToken, openFullLiffFormMessages(input.lineUserId));
 }
 
 export async function handleGuestText(input: {

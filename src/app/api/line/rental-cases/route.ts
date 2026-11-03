@@ -111,9 +111,12 @@ export async function POST(request: Request) {
 
     let pushSent = false;
     if (created.lineUserId && !skipGuestPush) {
-      const pushed = await pushLineMessages(created.lineUserId, [
-        { type: "text", text: confirmText },
-      ]);
+      // force：表單確認必須推到對話，不依賴 LINE_ASSISTANT_LIVE
+      const pushed = await pushLineMessages(
+        created.lineUserId,
+        [{ type: "text", text: confirmText }],
+        { force: true },
+      );
       pushSent = pushed.sent;
       if (!pushed.sent) {
         console.warn("[line/rental-cases] guest confirm push failed", pushed);
