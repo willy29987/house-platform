@@ -5,11 +5,17 @@ import { pushLineMessages } from "@/lib/line-messaging";
 import { readLineRentalCases } from "@/lib/line-rental-cases";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+const NO_STORE = {
+  "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+  Pragma: "no-cache",
+} as const;
 
 export async function GET() {
   const admin = await getCurrentAdmin();
   if (!admin) {
-    return NextResponse.json({ error: "未登入" }, { status: 401 });
+    return NextResponse.json({ error: "未登入" }, { status: 401, headers: NO_STORE });
   }
 
   const [conversations, cases] = await Promise.all([
@@ -17,7 +23,10 @@ export async function GET() {
     readLineRentalCases(),
   ]);
 
-  return NextResponse.json({ conversations, cases });
+  return NextResponse.json(
+    { conversations, cases, fetchedAt: new Date().toISOString() },
+    { headers: NO_STORE },
+  );
 }
 
 /** 客服從網頁回覆 → 推到 LINE，並寫入同一份對話紀錄 */

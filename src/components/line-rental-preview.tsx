@@ -25,7 +25,7 @@ type GuestStatus =
 type ListFilter = "all" | "pending" | "active" | "confirmed";
 
 type ChatLine = {
-  id: number;
+  id: string | number;
   from: "guest" | "bot" | "staff";
   text: string;
   at?: string;
@@ -428,8 +428,8 @@ function conversationToStaffGuest(
   const latest = related[0] ?? null;
   const base = latest ? caseToStaffGuest(latest) : null;
 
-  const lines: ChatLine[] = conversation.messages.map((message, index) => ({
-    id: index + 1,
+  const lines: ChatLine[] = conversation.messages.map((message) => ({
+    id: message.id,
     from: message.from === "guest" ? "guest" : message.from === "staff" ? "staff" : "bot",
     text: message.text,
     at: formatLineClock(message.createdAt),
@@ -524,13 +524,20 @@ export function LineRentalPreview({
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const lineId = useRef(500);
+  const chatScrollRef = useRef<HTMLDivElement | null>(null);
+  const lastThreadKeyRef = useRef("");
   const today = useMemo(() => taipeiTodayYmd(), []);
 
   useEffect(() => {
     let cancelled = false;
+    let timer: number | null = null;
+
     async function loadLive() {
       try {
-        const response = await fetch("/api/line/conversations", { cache: "no-store" });
+        const response = await fetch(`/api/line/conversations?ts=${Date.now()}`, {
+          cache: "no-store",
+          headers: { Pragma: "no-cache", "Cache-Control": "no-cache" },
+        });
         if (!response.ok) return;
         const data = (await response.json()) as {
           conversations?: LineConversation[];
@@ -542,13 +549,34 @@ export function LineRentalPreview({
         /* ignore */
       }
     }
+
+    function schedule() {
+      if (timer != null) window.clearInterval(timer);
+      // 前景較密、背景較疏，避免一定要手動重整才看到新訊息
+      const ms = document.visibilityState === "visible" ? 2500 : 12000;
+      timer = window.setInterval(() => {
+        void loadLive();
+      }, ms);
+    }
+
     void loadLive();
-    const timer = window.setInterval(() => {
+    schedule();
+
+    function onFocus() {
       void loadLive();
-    }, 8000);
+    }
+    function onVisibility() {
+      if (document.visibilityState === "visible") void loadLive();
+      schedule();
+    }
+
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      if (timer != null) window.clearInterval(timer);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, []);
 
@@ -571,6 +599,16 @@ export function LineRentalPreview({
 
   const visible = guests.filter((guest) => matchesFilter(guest, filter));
   const selected = visible.find((guest) => guest.id === selectedId) ?? visible[0] ?? null;
+
+  useEffect(() => {
+    if (!selected) return;
+    const threadKey = `${selected.id}:${selected.lines.length}:${selected.lines.at(-1)?.id ?? ""}`;
+    if (threadKey === lastThreadKeyRef.current) return;
+    lastThreadKeyRef.current = threadKey;
+    const node = chatScrollRef.current;
+    if (!node) return;
+    node.scrollTop = node.scrollHeight;
+  }, [selected]);
   const draft = selected ? (drafts[selected.id] ?? "") : "";
   const needsConfirm =
     (selected?.status === "pending_confirm" || selected?.status === "reschedule_sent") &&
@@ -799,7 +837,7 @@ export function LineRentalPreview({
               ) : null}
             </header>
 
-            <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+            <div ref={chatScrollRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
               <div className="mx-auto flex w-full max-w-xl flex-col gap-3">
                 {selected.createdAt ? (
                   <div className="flex justify-center py-1">
