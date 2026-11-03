@@ -10,7 +10,6 @@ import { loadLiffClient } from "@/lib/line-liff-client";
 import {
   EXTRA_OPTIONS,
   MATCH_LIST_LIMIT,
-  RENT_PRICE_OPTIONS,
   criteriaSummary,
   emptyCriteria,
   formatDateYmd,
@@ -22,14 +21,29 @@ import {
 } from "@/lib/line-rental-assistant";
 import { taipeiTodayYmd } from "@/lib/owner-tracking-next-contact";
 
-type Step = "criteria" | "listings" | "profile" | "time";
+type Step = "criteria" | "listings" | "profile";
 
 const STEPS: { id: Step; label: string }[] = [
   { id: "criteria", label: "條件" },
   { id: "listings", label: "物件" },
   { id: "profile", label: "資料" },
-  { id: "time", label: "時間" },
 ];
+
+function CalendarIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      aria-hidden
+    >
+      <rect x="3.5" y="5" width="17" height="15.5" rx="2" />
+      <path d="M3.5 10h17M8 3.5v4M16 3.5v4" strokeLinecap="round" />
+    </svg>
+  );
+}
 
 const ROOM_OPTS = [
   { id: "1", label: "1 房" },
@@ -304,6 +318,8 @@ export function LineLiffRentForm({
   const [matched, setMatched] = useState<RentalMatchListing[]>([]);
   const [matchedRelaxed, setMatchedRelaxed] = useState<string[]>([]);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [priceMin, setPriceMin] = useState("");
+  const [priceMax, setPriceMax] = useState("");
   const [peopleCount, setPeopleCount] = useState(1);
   const [occupation, setOccupation] = useState("");
   const [moveIn, setMoveIn] = useState("");
@@ -344,12 +360,20 @@ export function LineLiffRentForm({
     setPickedIds((current) => toggleIn(current, id));
   }
 
+  function budgetLabel() {
+    const min = priceMin.trim();
+    const max = priceMax.trim();
+    if (!min && !max) return "月租不限";
+    if (min && max) return `月租 ${Number(min).toLocaleString("zh-TW")}–${Number(max).toLocaleString("zh-TW")}`;
+    if (min) return `月租最低 ${Number(min).toLocaleString("zh-TW")}`;
+    return `月租最高 ${Number(max).toLocaleString("zh-TW")}`;
+  }
+
   function goBack() {
     setError("");
     setDetailId(null);
     if (step === "listings") setStep("criteria");
     else if (step === "profile") setStep("listings");
-    else if (step === "time") setStep("profile");
   }
 
   function confirmCriteria() {
@@ -361,8 +385,28 @@ export function LineLiffRentForm({
       setError("請選擇是否養寵物");
       return;
     }
-    const result = matchRentals(listings, criteria);
-    const items = result.items.slice(0, MATCH_LIST_LIMIT);
+    const minRaw = priceMin.trim();
+    const maxRaw = priceMax.trim();
+    const min = minRaw ? Number(minRaw) : 0;
+    const max = maxRaw ? Number(maxRaw) : Number.POSITIVE_INFINITY;
+    if (minRaw && (!Number.isFinite(min) || min < 0)) {
+      setError("最低預算請填有效數字");
+      return;
+    }
+    if (maxRaw && (!Number.isFinite(max) || max < 0)) {
+      setError("最高預算請填有效數字");
+      return;
+    }
+    if (minRaw && maxRaw && min > max) {
+      setError("最低預算不可高於最高預算");
+      return;
+    }
+
+    const matchCriteria: RentalMatchCriteria = { ...criteria, priceKeys: [] };
+    const result = matchRentals(listings, matchCriteria);
+    const items = result.items
+      .filter((item) => item.price >= min && item.price <= max)
+      .slice(0, MATCH_LIST_LIMIT);
     setMatched(items);
     setMatchedRelaxed(result.relaxed);
     setPickedIds([]);
@@ -381,9 +425,9 @@ export function LineLiffRentForm({
     setStep("profile");
   }
 
-  function confirmProfile() {
+  function confirmProfileAndSubmit() {
     if (!occupation.trim()) {
-      setError("請填寫職業");
+      setError("請填寫分別職業");
       return;
     }
     if (!moveIn) {
@@ -396,11 +440,14 @@ export function LineLiffRentForm({
     }
     const phoneTrim = phone.trim();
     if (!/^09\d{8}$/.test(phoneTrim) && !/^0\d{8,12}$/.test(phoneTrim)) {
-      setError("請留下有效電話（例如 0912345678）");
+      setError("請留下有效電話");
       return;
     }
-    setError("");
-    setStep("time");
+    if (!formatViewingRange(schedule.date, schedule.start)) {
+      setError("請選擇看屋時間");
+      return;
+    }
+    void submit();
   }
 
   async function submit() {
@@ -420,9 +467,10 @@ export function LineLiffRentForm({
     const phoneTrim = phone.trim();
     const name = displayName || "LINE 客人";
     const criteriaText = [
-      ...criteriaSummary(criteria)
+      ...criteriaSummary({ ...criteria, priceKeys: [] })
         .split(" · ")
-        .filter((part) => !part.includes("衛浴")),
+        .filter((part) => !part.includes("衛浴") && !part.includes("月租")),
+      budgetLabel(),
       petNote === "沒有" ? "沒有寵物" : `有養寵物（${petNote}）`,
     ].join(" · ");
 
@@ -541,17 +589,14 @@ export function LineLiffRentForm({
       ? "確認條件，看物件"
       : step === "listings"
         ? "下一步：填基本資料"
-        : step === "profile"
-          ? "下一步：選看屋時間"
-          : submitting
-            ? "送出中…"
-            : "確認送出到對話";
+        : submitting
+          ? "送出中…"
+          : "確認送出到對話";
 
   function onPrimary() {
     if (step === "criteria") confirmCriteria();
     else if (step === "listings") confirmListings();
-    else if (step === "profile") confirmProfile();
-    else void submit();
+    else confirmProfileAndSubmit();
   }
 
   return (
@@ -574,9 +619,7 @@ export function LineLiffRentForm({
                 ? "先填找房條件"
                 : step === "listings"
                   ? "點物件看詳情，右側點「想看」"
-                  : step === "profile"
-                    ? "填寫入住基本資料"
-                    : "選擇看屋時間並送回對話"}
+                  : "填基本資料與看屋時間後送出"}
             </p>
           </div>
         </div>
@@ -652,25 +695,29 @@ export function LineLiffRentForm({
             </div>
             <div>
               <p className="mb-2 text-xs font-medium text-zinc-500">月租預算</p>
-              <div className="flex flex-wrap gap-2">
-                {RENT_PRICE_OPTIONS.map((o) => (
-                  <Chip
-                    key={o.value}
-                    label={o.label}
-                    active={criteria.priceKeys.includes(o.value)}
-                    onClick={() =>
-                      setCriteria((c) => ({
-                        ...c,
-                        priceKeys: toggleIn(c.priceKeys, o.value),
-                      }))
-                    }
+              <div className="grid grid-cols-2 gap-2">
+                <label className="block text-xs text-zinc-500">
+                  最低
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    value={priceMin}
+                    onChange={(e) => setPriceMin(e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-900"
                   />
-                ))}
-                <Chip
-                  label="不限"
-                  active={criteria.priceKeys.length === 0}
-                  onClick={() => setCriteria((c) => ({ ...c, priceKeys: [] }))}
-                />
+                </label>
+                <label className="block text-xs text-zinc-500">
+                  最高
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    value={priceMax}
+                    onChange={(e) => setPriceMax(e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-900"
+                  />
+                </label>
               </div>
             </div>
             <div>
@@ -698,18 +745,24 @@ export function LineLiffRentForm({
             </div>
             <div>
               <p className="mb-2 text-xs font-medium text-zinc-500">寵物</p>
-              <div className="flex flex-wrap gap-2">
-                <Chip label="沒有" active={petHas === "no"} onClick={() => setPetHas("no")} />
-                <Chip label="有" active={petHas === "yes"} onClick={() => setPetHas("yes")} />
-              </div>
-              {petHas === "yes" ? (
-                <input
-                  value={petDraft}
-                  onChange={(e) => setPetDraft(e.target.value)}
-                  placeholder="什麼寵物？"
-                  className="mt-2 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm"
+              <div className="flex items-center gap-2">
+                <Chip
+                  label="沒有"
+                  active={petHas === "no"}
+                  onClick={() => {
+                    setPetHas("no");
+                    setPetDraft("");
+                  }}
                 />
-              ) : null}
+                <Chip label="有" active={petHas === "yes"} onClick={() => setPetHas("yes")} />
+                {petHas === "yes" ? (
+                  <input
+                    value={petDraft}
+                    onChange={(e) => setPetDraft(e.target.value)}
+                    className="min-w-0 flex-1 rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-900"
+                  />
+                ) : null}
+              </div>
             </div>
           </Section>
         ) : null}
@@ -781,95 +834,109 @@ export function LineLiffRentForm({
         ) : null}
 
         {step === "profile" ? (
-          <Section title="基本資料">
-            <div>
-              <p className="mb-2 text-xs font-medium text-zinc-500">幾個人住</p>
-              <div className="flex flex-wrap gap-2">
-                {[1, 2, 3, 4, 5, 6].map((n) => (
-                  <Chip
-                    key={n}
-                    label={`${n} 人`}
-                    active={peopleCount === n}
-                    onClick={() => setPeopleCount(n)}
-                  />
-                ))}
+          <>
+            <Section title="基本資料">
+              <div>
+                <p className="mb-2 text-xs font-medium text-zinc-500">幾個人住</p>
+                <div className="flex flex-nowrap gap-1.5">
+                  {[1, 2, 3, 4, 5, 6].map((n) => (
+                    <label
+                      key={n}
+                      className={`inline-flex min-h-11 flex-1 cursor-pointer touch-manipulation items-center justify-center rounded-full border px-1 text-sm ${
+                        peopleCount === n
+                          ? "border-[#06c755] bg-[#e8f8ef] font-semibold text-[#067a36]"
+                          : "border-zinc-200 bg-white text-zinc-700"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="peopleCount"
+                        className="sr-only"
+                        checked={peopleCount === n}
+                        onChange={() => setPeopleCount(n)}
+                      />
+                      {n}人
+                    </label>
+                  ))}
+                </div>
               </div>
-            </div>
-            <label className="block text-xs font-medium text-zinc-500">
-              職業
-              <input
-                value={occupation}
-                onChange={(e) => setOccupation(e.target.value)}
-                placeholder="例如：上班族、學生"
-                className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-900"
-              />
-            </label>
-            <label className="block text-xs font-medium text-zinc-500">
-              預計入住日
-              <input
-                type="date"
-                min={today}
-                value={moveIn}
-                onChange={(e) => setMoveIn(e.target.value)}
-                className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-900"
-              />
-            </label>
-            <div>
-              <p className="mb-2 text-xs font-medium text-zinc-500">國籍</p>
-              <div className="flex flex-wrap gap-2">
-                <Chip
-                  label="本國"
-                  active={nationalityLocal === "local"}
-                  onClick={() => setNationalityLocal("local")}
-                />
-                <Chip
-                  label="其他"
-                  active={nationalityLocal === "other"}
-                  onClick={() => setNationalityLocal("other")}
-                />
-              </div>
-              {nationalityLocal === "other" ? (
+              <label className="block text-xs font-medium text-zinc-500">
+                分別職業
                 <input
-                  value={nationalityDraft}
-                  onChange={(e) => setNationalityDraft(e.target.value)}
-                  placeholder="請輸入國籍"
-                  className="mt-2 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm"
+                  value={occupation}
+                  onChange={(e) => setOccupation(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-900"
                 />
-              ) : null}
-            </div>
-            <label className="block text-xs font-medium text-zinc-500">
-              電話
-              <input
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                inputMode="tel"
-                placeholder="0912345678"
-                className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-900"
-              />
-            </label>
-          </Section>
-        ) : null}
+              </label>
+              <div>
+                <p className="mb-2 text-xs font-medium text-zinc-500">預計入住日</p>
+                <label className="flex cursor-pointer touch-manipulation items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2.5">
+                  <CalendarIcon className="h-5 w-5 shrink-0 text-zinc-500" />
+                  <input
+                    type="date"
+                    min={today}
+                    value={moveIn}
+                    onChange={(e) => setMoveIn(e.target.value)}
+                    className="min-w-0 flex-1 bg-transparent text-sm text-zinc-900 outline-none"
+                  />
+                </label>
+              </div>
+              <div>
+                <p className="mb-2 text-xs font-medium text-zinc-500">國籍</p>
+                <div className="flex items-center gap-2">
+                  <Chip
+                    label="本國"
+                    active={nationalityLocal === "local"}
+                    onClick={() => {
+                      setNationalityLocal("local");
+                      setNationalityDraft("");
+                    }}
+                  />
+                  <Chip
+                    label="其他"
+                    active={nationalityLocal === "other"}
+                    onClick={() => setNationalityLocal("other")}
+                  />
+                  {nationalityLocal === "other" ? (
+                    <input
+                      value={nationalityDraft}
+                      onChange={(e) => setNationalityDraft(e.target.value)}
+                      className="min-w-0 flex-1 rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-900"
+                    />
+                  ) : null}
+                </div>
+              </div>
+              <label className="block text-xs font-medium text-zinc-500">
+                電話
+                <input
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  inputMode="tel"
+                  className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-900"
+                />
+              </label>
+            </Section>
 
-        {step === "time" ? (
-          <Section title="看屋時間">
-            <p className="text-xs text-zinc-500">
-              已選 {pickedIds.length} 間想看物件，選時間後會把資料與物件網頁送到對話。
-            </p>
-            <ViewingSchedulePicker
-              heading="選擇日期與開始時間"
-              value={schedule}
-              onChange={setSchedule}
-              minDate={today}
-              submitLabel="時間已選"
-              onSubmit={() => {
-                if (!formatViewingRange(schedule.date, schedule.start)) {
-                  setError("請選擇日期與開始時間");
-                } else {
-                  setError("");
-                }
-              }}
-            />
-          </Section>
+            <Section title="看屋時間">
+              <p className="text-xs text-zinc-500">
+                已選 {pickedIds.length} 間想看物件，選時間後送出會傳到對話。
+              </p>
+              <ViewingSchedulePicker
+                heading="選擇日期與開始時間"
+                value={schedule}
+                onChange={setSchedule}
+                minDate={today}
+                submitLabel="時間已選"
+                onSubmit={() => {
+                  if (!formatViewingRange(schedule.date, schedule.start)) {
+                    setError("請選擇日期與開始時間");
+                  } else {
+                    setError("");
+                  }
+                }}
+              />
+            </Section>
+          </>
         ) : null}
       </div>
 
