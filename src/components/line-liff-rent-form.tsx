@@ -314,8 +314,7 @@ export function LineLiffRentForm({
   const [matched, setMatched] = useState<RentalMatchListing[]>([]);
   const [matchedRelaxed, setMatchedRelaxed] = useState<string[]>([]);
   const [detailId, setDetailId] = useState<string | null>(null);
-  const [priceMinOn, setPriceMinOn] = useState(false);
-  const [priceMaxOn, setPriceMaxOn] = useState(false);
+  const [priceCustomOn, setPriceCustomOn] = useState(false);
   const [priceMin, setPriceMin] = useState("");
   const [priceMax, setPriceMax] = useState("");
   const [peopleCount, setPeopleCount] = useState(1);
@@ -367,10 +366,12 @@ export function LineLiffRentForm({
         ),
       );
     }
-    const min = priceMinOn ? priceMin.trim() : "";
-    const max = priceMaxOn ? priceMax.trim() : "";
-    if (min) parts.push(`最低 ${Number(min).toLocaleString("zh-TW")}`);
-    if (max) parts.push(`最高 ${Number(max).toLocaleString("zh-TW")}`);
+    if (priceCustomOn) {
+      const min = priceMin.trim();
+      const max = priceMax.trim();
+      if (min) parts.push(`最低 ${Number(min).toLocaleString("zh-TW")}`);
+      if (max) parts.push(`最高 ${Number(max).toLocaleString("zh-TW")}`);
+    }
     return parts.length ? `月租 ${parts.join("、")}` : "月租不限";
   }
 
@@ -390,21 +391,27 @@ export function LineLiffRentForm({
       setError("請選擇是否養寵物");
       return;
     }
-    const minRaw = priceMinOn ? priceMin.trim() : "";
-    const maxRaw = priceMaxOn ? priceMax.trim() : "";
+    const minRaw = priceCustomOn ? priceMin.trim() : "";
+    const maxRaw = priceCustomOn ? priceMax.trim() : "";
     const min = minRaw ? Number(minRaw) : 0;
     const max = maxRaw ? Number(maxRaw) : Number.POSITIVE_INFINITY;
-    if (priceMinOn && (!minRaw || !Number.isFinite(min) || min < 0)) {
-      setError("請填寫最低預算");
-      return;
-    }
-    if (priceMaxOn && (!maxRaw || !Number.isFinite(max) || max < 0)) {
-      setError("請填寫最高預算");
-      return;
-    }
-    if (minRaw && maxRaw && min > max) {
-      setError("最低預算不可高於最高預算");
-      return;
+    if (priceCustomOn) {
+      if (!minRaw && !maxRaw) {
+        setError("請填寫最低或最高預算");
+        return;
+      }
+      if (minRaw && (!Number.isFinite(min) || min < 0)) {
+        setError("請填寫有效的最低預算");
+        return;
+      }
+      if (maxRaw && (!Number.isFinite(max) || max < 0)) {
+        setError("請填寫有效的最高預算");
+        return;
+      }
+      if (minRaw && maxRaw && min > max) {
+        setError("最低預算不可高於最高預算");
+        return;
+      }
     }
 
     const result = matchRentals(listings, criteria);
@@ -721,8 +728,7 @@ export function LineLiffRentForm({
                     label={o.label}
                     active={criteria.priceKeys.includes(o.value)}
                     onClick={() => {
-                      setPriceMinOn(false);
-                      setPriceMaxOn(false);
+                      setPriceCustomOn(false);
                       setPriceMin("");
                       setPriceMax("");
                       setCriteria((c) => ({
@@ -735,48 +741,42 @@ export function LineLiffRentForm({
               </div>
               <div className="mt-2 flex flex-nowrap items-center gap-1.5">
                 <Chip
-                  label="最低"
-                  active={priceMinOn}
+                  label="自訂"
+                  active={priceCustomOn}
                   onClick={() => {
                     setCriteria((c) => ({ ...c, priceKeys: [] }));
-                    setPriceMinOn((on) => {
-                      if (on) setPriceMin("");
+                    setPriceCustomOn((on) => {
+                      if (on) {
+                        setPriceMin("");
+                        setPriceMax("");
+                      }
                       return !on;
                     });
                   }}
                 />
-                {priceMinOn ? (
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    min={0}
-                    value={priceMin}
-                    onChange={(e) => setPriceMin(e.target.value)}
-                    className="min-h-11 min-w-0 flex-1 rounded-xl border border-zinc-200 px-2 py-2 text-sm text-zinc-900"
-                    aria-label="最低預算"
-                  />
-                ) : null}
-                <Chip
-                  label="最高"
-                  active={priceMaxOn}
-                  onClick={() => {
-                    setCriteria((c) => ({ ...c, priceKeys: [] }));
-                    setPriceMaxOn((on) => {
-                      if (on) setPriceMax("");
-                      return !on;
-                    });
-                  }}
-                />
-                {priceMaxOn ? (
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    min={0}
-                    value={priceMax}
-                    onChange={(e) => setPriceMax(e.target.value)}
-                    className="min-h-11 min-w-0 flex-1 rounded-xl border border-zinc-200 px-2 py-2 text-sm text-zinc-900"
-                    aria-label="最高預算"
-                  />
+                {priceCustomOn ? (
+                  <>
+                    <span className="shrink-0 text-xs text-zinc-500">最低</span>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      value={priceMin}
+                      onChange={(e) => setPriceMin(e.target.value)}
+                      className="min-h-11 min-w-0 flex-1 rounded-xl border border-zinc-200 px-2 py-2 text-sm text-zinc-900"
+                      aria-label="最低預算"
+                    />
+                    <span className="shrink-0 text-xs text-zinc-500">最高</span>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      value={priceMax}
+                      onChange={(e) => setPriceMax(e.target.value)}
+                      className="min-h-11 min-w-0 flex-1 rounded-xl border border-zinc-200 px-2 py-2 text-sm text-zinc-900"
+                      aria-label="最高預算"
+                    />
+                  </>
                 ) : null}
               </div>
             </div>
