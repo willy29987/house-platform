@@ -81,17 +81,14 @@ export function LineLiffRentAssistant({
       displayName={displayName}
       listingBaseUrl={listingBaseUrl}
       onSubmitted={async () => {
+        // 表單內已 closeWindow；此處僅備援
         if (!liffId) return;
-        window.setTimeout(() => {
-          void (async () => {
-            try {
-              const liff = await loadLiffClient();
-              if (liff?.isInClient()) liff.closeWindow();
-            } catch {
-              /* ignore */
-            }
-          })();
-        }, 1400);
+        try {
+          const liff = await loadLiffClient();
+          if (liff?.isInClient()) liff.closeWindow();
+        } catch {
+          /* ignore */
+        }
       }}
     />
   );

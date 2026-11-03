@@ -500,12 +500,18 @@ export function LineLiffRentForm({
     setSubmitting(true);
     setError("");
     try {
-      // 先由客戶端把完整內容丟回與官方帳號的對話
+      // 客戶端把資料與物件送回官方帳號對話，再關閉 LIFF
       let clientSent = false;
+      let liff: Awaited<ReturnType<typeof loadLiffClient>> = null;
       if (liffId) {
         try {
-          const liff = await loadLiffClient();
+          liff = await loadLiffClient();
           if (liff?.isInClient()) {
+            try {
+              await liff.init({ liffId });
+            } catch {
+              /* 可能已 init */
+            }
             await liff.sendMessages([{ type: "text", text: chatText }]);
             clientSent = true;
           }
@@ -536,7 +542,6 @@ export function LineLiffRentForm({
           picked,
           requestedWhen: when,
           summaryText: chatText,
-          // 客戶端已送出時，後端可略過重複 push
           skipGuestPush: clientSent,
         }),
       });
@@ -550,21 +555,26 @@ export function LineLiffRentForm({
         throw new Error(data?.error || "送出失敗");
       }
 
-      // 客戶端沒送成功時，再用 server push / sendMessages 備援
-      if (!clientSent && !data.pushSent && liffId) {
+      if (!clientSent && liff?.isInClient()) {
         try {
-          const liff = await loadLiffClient();
-          if (liff?.isInClient()) {
-            await liff.sendMessages([
-              { type: "text", text: data.confirmText || chatText },
-            ]);
-          }
+          await liff.sendMessages([
+            { type: "text", text: data.confirmText || chatText },
+          ]);
+          clientSent = true;
         } catch {
           /* ignore */
         }
       }
 
       setDone({ when, titles: picked.map((item) => item.title) });
+      // 立刻關 LIFF 回對話；訊息已用客戶端送出
+      if (liff?.isInClient()) {
+        try {
+          liff.closeWindow();
+        } catch {
+          /* ignore */
+        }
+      }
       if (data.id) onSubmitted?.(data.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "送出失敗");
@@ -710,61 +720,65 @@ export function LineLiffRentForm({
                     key={o.value}
                     label={o.label}
                     active={criteria.priceKeys.includes(o.value)}
-                    onClick={() =>
+                    onClick={() => {
+                      setPriceMinOn(false);
+                      setPriceMaxOn(false);
+                      setPriceMin("");
+                      setPriceMax("");
                       setCriteria((c) => ({
                         ...c,
                         priceKeys: toggleIn(c.priceKeys, o.value),
-                      }))
-                    }
+                      }));
+                    }}
                   />
                 ))}
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
                 <Chip
                   label="最低"
                   active={priceMinOn}
                   onClick={() => {
+                    setCriteria((c) => ({ ...c, priceKeys: [] }));
                     setPriceMinOn((on) => {
                       if (on) setPriceMin("");
                       return !on;
                     });
                   }}
                 />
+                {priceMinOn ? (
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    value={priceMin}
+                    onChange={(e) => setPriceMin(e.target.value)}
+                    className="w-28 rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-900"
+                    aria-label="最低預算"
+                  />
+                ) : null}
                 <Chip
                   label="最高"
                   active={priceMaxOn}
                   onClick={() => {
+                    setCriteria((c) => ({ ...c, priceKeys: [] }));
                     setPriceMaxOn((on) => {
                       if (on) setPriceMax("");
                       return !on;
                     });
                   }}
                 />
+                {priceMaxOn ? (
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    value={priceMax}
+                    onChange={(e) => setPriceMax(e.target.value)}
+                    className="w-28 rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-900"
+                    aria-label="最高預算"
+                  />
+                ) : null}
               </div>
-              {priceMinOn || priceMaxOn ? (
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  {priceMinOn ? (
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      min={0}
-                      value={priceMin}
-                      onChange={(e) => setPriceMin(e.target.value)}
-                      className="w-28 rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-900"
-                      aria-label="最低預算"
-                    />
-                  ) : null}
-                  {priceMaxOn ? (
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      min={0}
-                      value={priceMax}
-                      onChange={(e) => setPriceMax(e.target.value)}
-                      className="w-28 rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-900"
-                      aria-label="最高預算"
-                    />
-                  ) : null}
-                </div>
-              ) : null}
             </div>
             <div>
               <p className="mb-2 text-xs font-medium text-zinc-500">租補／報稅／入戶籍</p>
