@@ -686,8 +686,6 @@ export function LineRentalPreview({
   const lastThreadKeyRef = useRef("");
   const knownGuestMsgKeysRef = useRef<Set<string> | null>(null);
   const pageTitleRef = useRef("");
-  /** 連續 Enter 次數；連按兩次才送出（比照 LINE） */
-  const enterStreakRef = useRef(0);
   /** 送出後短暫忽略 onChange，避免 IME／Enter 把字又填回來 */
   const ignoreDraftChangeRef = useRef<string | null>(null);
   const draftInputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -696,9 +694,10 @@ export function LineRentalPreview({
   function resizeDraftInput(node?: HTMLTextAreaElement | null) {
     const el = node ?? draftInputRef.current;
     if (!el) return;
-    el.style.height = "auto";
+    el.style.height = "0px";
     const max = 7 * 20; // 約 7 行
-    el.style.height = `${Math.min(el.scrollHeight, max)}px`;
+    const next = Math.max(el.scrollHeight, 40);
+    el.style.height = `${Math.min(next, max)}px`;
   }
 
   useEffect(() => {
@@ -1082,7 +1081,6 @@ export function LineRentalPreview({
     const id = lineId.current++;
     const lineUserId = selected.lineUserId;
     const at = formatLineClock(new Date().toISOString());
-    enterStreakRef.current = 0;
     ignoreDraftChangeRef.current = guestId;
     // 樂觀更新；輪詢會再以伺服器紀錄對齊
     patchGuest(guestId, (current) => {
@@ -1105,18 +1103,11 @@ export function LineRentalPreview({
 
   function onDraftKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+    // Enter 直接送出；Shift+Enter 換行（不會先跳下一排）
     if (event.key === "Enter" && !event.shiftKey) {
-      // 連按兩次 Enter 才送出；單次 Enter 換行（比照 LINE）
-      if (enterStreakRef.current >= 1) {
-        event.preventDefault();
-        enterStreakRef.current = 0;
-        sendDraft();
-        return;
-      }
-      enterStreakRef.current = 1;
-      return;
+      event.preventDefault();
+      sendDraft();
     }
-    enterStreakRef.current = 0;
   }
 
   return (
@@ -1355,7 +1346,7 @@ export function LineRentalPreview({
                 </button>
               </div>
               <p className="mx-auto mt-1 max-w-xl text-center text-[10px] text-zinc-500">
-                連按兩次 Enter 送出。請用這裡回覆才會兩邊同步；用官方帳號 App
+                Enter 送出、Shift+Enter 換行。請用這裡回覆才會兩邊同步；用官方帳號 App
                 回的訊息，網頁看不到。
               </p>
             </form>
