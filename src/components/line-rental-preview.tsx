@@ -682,7 +682,6 @@ export function LineRentalPreview({
           const popup = new Notification(latest.name || "LINE 客人", {
             body: latest.text || "傳了一則新訊息",
             tag: `line-cs-${latest.guestId}`,
-            renotify: true,
           });
           popup.onclick = () => {
             window.focus();
