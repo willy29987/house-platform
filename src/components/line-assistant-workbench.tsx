@@ -35,7 +35,7 @@ export function LineAssistantWorkbench({
   const [tab, setTab] = useState<TabId>("staff");
 
   return (
-    <div className="flex h-full min-h-[calc(100dvh-10rem)] flex-col gap-2">
+    <div className="flex h-full min-h-0 flex-col gap-2 overflow-hidden">
       <div className="flex shrink-0 flex-wrap gap-1 self-start rounded-full border border-zinc-200 bg-zinc-50 p-1">
         {TABS.map((item) => {
           const on = tab === item.id;
@@ -54,7 +54,7 @@ export function LineAssistantWorkbench({
         })}
       </div>
 
-      <div className="min-h-0 flex-1">
+      <div className="min-h-0 flex-1 overflow-hidden">
         {tab === "staff" ? (
           <LineRentalPreview
             listings={listings}
@@ -65,9 +65,13 @@ export function LineAssistantWorkbench({
             initialSessions={initialSessions}
           />
         ) : tab === "guest" ? (
-          <LineGuestChatPreview listings={listings} lineBasicId={lineBasicId} />
+          <div className="h-full overflow-y-auto">
+            <LineGuestChatPreview listings={listings} lineBasicId={lineBasicId} />
+          </div>
         ) : (
-          <LineNativeChatPreview listings={listings} lineBasicId={lineBasicId} />
+          <div className="h-full overflow-y-auto">
+            <LineNativeChatPreview listings={listings} lineBasicId={lineBasicId} />
+          </div>
         )}
       </div>
     </div>

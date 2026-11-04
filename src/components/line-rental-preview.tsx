@@ -193,7 +193,8 @@ function LineMessageBody({ line }: { line: ChatLine }) {
     return <span className="text-zinc-600">［貼圖］</span>;
   }
 
-  const parts = line.text.split(/(https?:\/\/[^\s]+)/g);
+  const text = line.text.replace(/\s+$/u, "");
+  const parts = text.split(/(https?:\/\/[^\s]+)/g);
   return (
     <>
       {parts.map((part, index) =>
@@ -1359,7 +1360,7 @@ export function LineRentalPreview({
     LINE_CS_STICKER_PACKS[0];
 
   return (
-    <div className="flex h-full min-h-[32rem] flex-col overflow-hidden rounded-xl border border-[#c9ced6] bg-[#edf0f5] shadow-sm">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-[#c9ced6] bg-[#edf0f5] shadow-sm">
       <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-[#d8dde6] bg-white px-2 py-2">
         {FILTERS.map((item) => {
           const count = guests.filter((guest) => matchesFilter(guest, item.id)).length;
@@ -1401,8 +1402,8 @@ export function LineRentalPreview({
         ) : null}
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 max-lg:auto-rows-auto lg:grid-cols-[minmax(16rem,20%)_minmax(0,1fr)_minmax(18rem,22%)]">
-        <ul className="max-h-40 overflow-y-auto border-b border-[#d8dde6] bg-white max-lg:max-h-40 lg:max-h-none lg:border-r lg:border-b-0">
+      <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,9rem)_minmax(0,1fr)] overflow-hidden lg:grid-cols-[minmax(16rem,20%)_minmax(0,1fr)_minmax(18rem,22%)] lg:grid-rows-1">
+        <ul className="min-h-0 overflow-y-auto border-b border-[#d8dde6] bg-white lg:border-r lg:border-b-0">
           {visible.length === 0 ? (
             <li className="px-4 py-8 text-center text-sm text-zinc-500">這個篩選目前沒有客人</li>
           ) : (
@@ -1457,7 +1458,7 @@ export function LineRentalPreview({
         </ul>
 
         {selected ? (
-          <section className="flex min-h-0 flex-col overflow-hidden border-b border-[#d8dde6] bg-[#7494c0] lg:border-b-0 lg:border-r lg:border-[#d8dde6]">
+          <section className="flex min-h-0 min-w-0 flex-col overflow-hidden border-b border-[#d8dde6] bg-[#7494c0] lg:border-b-0 lg:border-r lg:border-[#d8dde6]">
             <header className="shrink-0 border-b border-black/10 bg-[#432e1f] px-3 py-2.5 text-white">
               <div className="flex items-center gap-3">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#06c755] text-sm font-bold text-white">
@@ -1511,7 +1512,7 @@ export function LineRentalPreview({
               ) : null}
             </header>
 
-            <div ref={chatScrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+            <div ref={chatScrollRef} className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 py-3">
               <div className="mx-auto flex w-full max-w-3xl flex-col gap-3">
                 {selected.createdAt ? (
                   <div className="flex justify-center py-1">
@@ -1722,14 +1723,14 @@ export function LineRentalPreview({
             </form>
           </section>
         ) : (
-          <div className="flex items-center justify-center border-b border-zinc-100 bg-[#7494c0] px-4 text-sm text-white/90 lg:border-b-0 lg:border-r">
+          <div className="flex min-h-0 items-center justify-center border-b border-zinc-100 bg-[#7494c0] px-4 text-sm text-white/90 lg:border-b-0 lg:border-r">
             選左邊的客人查看 LINE 對話
           </div>
         )}
 
         <aside
           ref={rightPanelRef}
-          className="hidden min-h-0 overflow-y-auto bg-white px-4 py-4 lg:block"
+          className="hidden min-h-0 min-w-0 overflow-y-auto overscroll-contain bg-white px-4 py-4 lg:block"
         >
           {selected ? (
             <GuestDecisionPanel

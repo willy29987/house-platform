@@ -22,7 +22,7 @@ export default async function LineAssistantPreviewPage() {
   ]);
 
   return (
-    <div className="flex w-full min-h-[calc(100dvh-7.5rem)] flex-col gap-2">
+    <div className="flex h-[calc(100dvh-7.25rem)] max-h-[calc(100dvh-7.25rem)] w-full flex-col gap-2 overflow-hidden sm:h-[calc(100dvh-8.5rem)] sm:max-h-[calc(100dvh-8.5rem)]">
       <div className="flex shrink-0 flex-wrap items-end justify-between gap-2">
         <div>
           <h1 className="text-xl font-bold text-zinc-900 sm:text-2xl">租屋配對客服</h1>
@@ -44,7 +44,7 @@ export default async function LineAssistantPreviewPage() {
           </a>
         ) : null}
       </div>
-      <div className="min-h-0 flex-1">
+      <div className="min-h-0 flex-1 overflow-hidden">
         <LineAssistantWorkbench
           listings={cards}
           lineBasicId={lineAccount.basicId}
