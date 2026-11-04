@@ -81,6 +81,16 @@ export type LineMessage =
       };
     }
   | {
+      type: "sticker";
+      packageId: string;
+      stickerId: string;
+    }
+  | {
+      type: "image";
+      originalContentUrl: string;
+      previewImageUrl: string;
+    }
+  | {
       type: "template";
       altText: string;
       template:
@@ -142,6 +152,27 @@ export async function pushLineMessages(
       if (logAs === "staff") {
         const { appendLineConversationMessage } = await import("@/lib/line-conversations");
         for (const message of messages) {
+          if (message.type === "sticker") {
+            await appendLineConversationMessage({
+              lineUserId,
+              from: "staff",
+              text: "［貼圖］",
+              mediaType: "sticker",
+              stickerId: message.stickerId,
+              packageId: message.packageId,
+            });
+            continue;
+          }
+          if (message.type === "image") {
+            await appendLineConversationMessage({
+              lineUserId,
+              from: "staff",
+              text: "［圖片］",
+              mediaType: "image",
+              messageId: message.originalContentUrl,
+            });
+            continue;
+          }
           const text =
             message.type === "text"
               ? message.text

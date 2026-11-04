@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+} from "react";
 import { taipeiTodayYmd } from "@/lib/owner-tracking-next-contact";
 import { formatViewingRange, RENT_PRICE_OPTIONS, type RentalMatchListing } from "@/lib/line-rental-assistant";
 import type {
@@ -19,6 +26,11 @@ import {
   ViewingSchedulePicker,
   type ViewingScheduleValue,
 } from "@/components/viewing-schedule-picker";
+import {
+  LINE_CS_STICKER_PACKS,
+  stickerPreviewUrl,
+  type LineCsSticker,
+} from "@/lib/line-cs-stickers";
 
 type GuestStatus =
   | "selecting"
@@ -141,19 +153,25 @@ function LineMessageBody({ line }: { line: ChatLine }) {
     );
   }
 
-  if (mediaType === "image" && line.messageId && /^\d+$/.test(line.messageId)) {
-    const href = lineContentUrl(line.messageId);
-    return (
-      <a href={href} target="_blank" rel="noopener noreferrer" className="block">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={href}
-          alt="圖片"
-          className="max-h-64 max-w-full rounded-lg object-contain"
-          loading="lazy"
-        />
-      </a>
-    );
+  if (mediaType === "image" && line.messageId) {
+    const href = /^https?:\/\//i.test(line.messageId)
+      ? line.messageId
+      : /^\d+$/.test(line.messageId)
+        ? lineContentUrl(line.messageId)
+        : null;
+    if (href) {
+      return (
+        <a href={href} target="_blank" rel="noopener noreferrer" className="block">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={href}
+            alt="圖片"
+            className="max-h-64 max-w-full rounded-lg object-contain"
+            loading="lazy"
+          />
+        </a>
+      );
+    }
   }
 
   if (mediaType === "video" && line.messageId && /^\d+$/.test(line.messageId)) {
@@ -738,6 +756,9 @@ export function LineRentalPreview({
   const [notifyState, setNotifyState] = useState<"default" | "granted" | "denied" | "unsupported">(
     "default",
   );
+  const [stickerOpen, setStickerOpen] = useState(false);
+  const [stickerPackId, setStickerPackId] = useState(LINE_CS_STICKER_PACKS[0]?.packageId ?? "");
+  const [uploadingMedia, setUploadingMedia] = useState(false);
   const lineId = useRef(500);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const lastThreadKeyRef = useRef("");
@@ -746,6 +767,9 @@ export function LineRentalPreview({
   /** 送出後短暫忽略 onChange，避免 IME／Enter 把字又填回來 */
   const ignoreDraftChangeRef = useRef<string | null>(null);
   const draftInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const rightPanelRef = useRef<HTMLElement | null>(null);
   const today = useMemo(() => taipeiTodayYmd(), []);
 
   function resizeDraftInput(node?: HTMLTextAreaElement | null) {
@@ -1046,18 +1070,27 @@ export function LineRentalPreview({
     setEditingTime(false);
     setSchedule(emptyViewingSchedule());
     setDetailsOpen(false);
+    setStickerOpen(false);
   }
 
   function patchGuest(id: string, update: (guest: StaffGuest) => StaffGuest) {
     setGuests((current) => current.map((guest) => (guest.id === id ? update(guest) : guest)));
   }
 
-  function pushStaffLine(guest: StaffGuest, text: string, lineIdLocal: number) {
+  function pushStaffPayload(
+    guest: StaffGuest,
+    lineIdLocal: number,
+    payload: {
+      text?: string;
+      sticker?: { packageId: string; stickerId: string };
+      imageUrl?: string;
+    },
+  ) {
     if (!guest.lineUserId) return;
     void fetch("/api/line/conversations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lineUserId: guest.lineUserId, text }),
+      body: JSON.stringify({ lineUserId: guest.lineUserId, ...payload }),
     }).then(async (response) => {
       if (response.ok) return;
       patchGuest(guest.id, (current) => ({
@@ -1065,6 +1098,96 @@ export function LineRentalPreview({
         lines: current.lines.filter((line) => line.id !== lineIdLocal),
       }));
     });
+  }
+
+  function pushStaffLine(guest: StaffGuest, text: string, lineIdLocal: number) {
+    pushStaffPayload(guest, lineIdLocal, { text });
+  }
+
+  function focusListingPanel() {
+    setDetailsOpen(true);
+    setStickerOpen(false);
+    window.requestAnimationFrame(() => {
+      rightPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+  }
+
+  function sendSticker(guest: StaffGuest, sticker: LineCsSticker) {
+    if (!guest.lineUserId) return;
+    const id = lineId.current++;
+    const at = formatLineClock(new Date().toISOString());
+    patchGuest(guest.id, (current) =>
+      attachPipelineAndReply({
+        ...current,
+        lines: [
+          ...current.lines,
+          {
+            id,
+            from: "staff",
+            text: "［貼圖］",
+            at,
+            mediaType: "sticker",
+            stickerId: sticker.stickerId,
+            packageId: sticker.packageId,
+          },
+        ],
+        replyStatus: "replied",
+      }),
+    );
+    setStickerOpen(false);
+    pushStaffPayload(guest, id, {
+      sticker: { packageId: sticker.packageId, stickerId: sticker.stickerId },
+    });
+  }
+
+  async function uploadAndSendImage(guest: StaffGuest, file: File) {
+    if (!guest.lineUserId || uploadingMedia) return;
+    setUploadingMedia(true);
+    try {
+      const form = new FormData();
+      form.append("files", file);
+      const uploadRes = await fetch("/api/admin/upload", { method: "POST", body: form });
+      const uploadJson = (await uploadRes.json().catch(() => null)) as
+        | { ok?: boolean; urls?: string[]; message?: string }
+        | null;
+      const url = uploadJson?.urls?.[0];
+      if (!uploadRes.ok || !url) {
+        window.alert(uploadJson?.message || "上傳失敗");
+        return;
+      }
+      const id = lineId.current++;
+      const at = formatLineClock(new Date().toISOString());
+      patchGuest(guest.id, (current) =>
+        attachPipelineAndReply({
+          ...current,
+          lines: [
+            ...current.lines,
+            {
+              id,
+              from: "staff",
+              text: "［圖片］",
+              at,
+              mediaType: "image",
+              messageId: url.startsWith("http") ? url : `${window.location.origin}${url}`,
+            },
+          ],
+          replyStatus: "replied",
+        }),
+      );
+      pushStaffPayload(guest, id, { imageUrl: url });
+    } finally {
+      setUploadingMedia(false);
+    }
+  }
+
+  function onPickMedia(guest: StaffGuest, files: FileList | null) {
+    const file = files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      window.alert("目前僅支援傳送圖片到 LINE");
+      return;
+    }
+    void uploadAndSendImage(guest, file);
   }
 
   function listingBaseUrl() {
@@ -1231,9 +1354,13 @@ export function LineRentalPreview({
     }
   }
 
+  const activeStickerPack =
+    LINE_CS_STICKER_PACKS.find((pack) => pack.packageId === stickerPackId) ||
+    LINE_CS_STICKER_PACKS[0];
+
   return (
-    <div className="flex h-[min(52rem,calc(100dvh-8rem))] min-h-[32rem] flex-col overflow-hidden rounded-xl border border-[#c9ced6] bg-[#edf0f5] shadow-sm">
-      <div className="flex gap-1 overflow-x-auto border-b border-[#d8dde6] bg-white px-2 py-2">
+    <div className="flex h-[min(56rem,calc(100dvh-7rem))] min-h-[34rem] flex-col overflow-hidden rounded-lg border border-[#e0e0e0] bg-[#f4f4f4] shadow-sm">
+      <div className="flex gap-1 overflow-x-auto border-b border-[#e8e8e8] bg-white px-3 py-2">
         {FILTERS.map((item) => {
           const count = guests.filter((guest) => matchesFilter(guest, item.id)).length;
           const active = filter === item.id;
@@ -1245,13 +1372,18 @@ export function LineRentalPreview({
                 setFilter(item.id);
                 setEditingTime(false);
                 setDetailsOpen(false);
+                setStickerOpen(false);
               }}
-              className={`shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold ${
-                active ? "bg-[#06c755] text-white" : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+              className={`shrink-0 rounded px-3 py-1.5 text-[13px] font-semibold transition-colors ${
+                active
+                  ? "bg-[#06c755] text-white"
+                  : "bg-transparent text-[#555] hover:bg-[#f5f5f5]"
               }`}
             >
               {item.label}
-              <span className={`ml-1 tabular-nums ${active ? "text-white/80" : "text-zinc-500"}`}>{count}</span>
+              <span className={`ml-1 tabular-nums ${active ? "text-white/85" : "text-[#999]"}`}>
+                {count}
+              </span>
             </button>
           );
         })}
@@ -1259,23 +1391,23 @@ export function LineRentalPreview({
           <button
             type="button"
             onClick={() => void enableDesktopNotify()}
-            className={`ml-auto shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold ${
+            className={`ml-auto shrink-0 rounded px-3 py-1.5 text-xs font-medium ${
               notifyState === "granted"
-                ? "bg-emerald-50 text-emerald-800"
-                : "border border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50"
+                ? "bg-[#eefaf2] text-[#1a7a3c]"
+                : "text-[#666] hover:bg-[#f5f5f5]"
             }`}
-            title="開啟後，即使關掉客服分頁也能收到客人新訊推播（iPhone 建議加到主畫面）"
+            title="開啟後，即使關掉客服分頁也能收到客人新訊推播"
           >
             {notifyState === "granted" ? "背景通知已開啟" : "開啟背景新訊提醒"}
           </button>
         ) : null}
       </div>
 
-      {/* 左：名單｜中：LINE 對話｜右：約看處理 */}
-      <div className="grid min-h-0 flex-1 grid-cols-1 max-lg:auto-rows-auto lg:grid-cols-[17rem_minmax(0,1fr)_17rem]">
-        <ul className="max-h-40 overflow-y-auto border-b border-[#d8dde6] bg-white max-lg:max-h-40 lg:max-h-none lg:border-r lg:border-b-0">
+      <div className="grid min-h-0 flex-1 grid-cols-1 max-lg:auto-rows-auto lg:grid-cols-[17.5rem_minmax(0,1fr)_18rem]">
+        {/* 左側名單 */}
+        <ul className="max-h-40 overflow-y-auto border-b border-[#ebebeb] bg-white max-lg:max-h-40 lg:max-h-none lg:border-r lg:border-b-0">
           {visible.length === 0 ? (
-            <li className="px-4 py-8 text-center text-sm text-zinc-500">這個篩選目前沒有客人</li>
+            <li className="px-4 py-10 text-center text-sm text-[#999]">這個篩選目前沒有客人</li>
           ) : (
             visible.map((guest) => {
               const active = guest.id === selected?.id;
@@ -1283,28 +1415,37 @@ export function LineRentalPreview({
                 guest.summaryText.split("\n").find((row) => row.trim()) ||
                 guest.lines[guest.lines.length - 1]?.text ||
                 "";
+              const clock =
+                guest.lines[guest.lines.length - 1]?.at ||
+                (guest.createdAt ? formatLineClock(guest.createdAt) : "");
               return (
-                <li key={guest.id} className="border-b border-zinc-100 last:border-b-0">
+                <li key={guest.id}>
                   <button
                     type="button"
                     onClick={() => selectGuest(guest.id)}
-                    className={`flex w-full items-center gap-3 px-3 py-3 text-left ${active ? "bg-[#e7f8ee]" : "hover:bg-zinc-50"}`}
+                    className={`flex w-full items-start gap-3 border-b border-[#f0f0f0] px-3 py-3 text-left transition-colors ${
+                      active ? "bg-[#f0faf4]" : "hover:bg-[#fafafa]"
+                    }`}
                   >
-                    <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#06c755] text-sm font-bold text-white">
+                    <span className="relative mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#06c755] text-sm font-bold text-white">
                       {guest.lineName.slice(0, 1)}
-                      {guest.watching ? (
-                        <span
-                          title="之後新案會問"
-                          className="absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-sky-500"
-                        />
+                      {guest.replyStatus === "awaiting_staff" ? (
+                        <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-[#06c755]" />
                       ) : null}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="truncate text-sm font-bold text-zinc-900">{guest.lineName}</span>
-                      <span className="mt-0.5 block truncate text-xs text-zinc-500">{preview}</span>
+                      <span className="flex items-center gap-2">
+                        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-[#222]">
+                          {guest.lineName}
+                        </span>
+                        {clock ? (
+                          <span className="shrink-0 text-[11px] text-[#aaa]">{clock}</span>
+                        ) : null}
+                      </span>
+                      <span className="mt-0.5 block truncate text-[12px] text-[#888]">{preview}</span>
                     </span>
                     <span
-                      className={`ml-auto shrink-0 self-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${statusPill(guest.replyStatus)}`}
+                      className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold ${statusPill(guest.replyStatus)}`}
                     >
                       {shortReplyStatus(guest.replyStatus)}
                     </span>
@@ -1315,16 +1456,17 @@ export function LineRentalPreview({
           )}
         </ul>
 
+        {/* 中間對話 */}
         {selected ? (
-          <section className="flex min-h-0 flex-col overflow-hidden border-b border-[#d8dde6] bg-[#7494c0] lg:border-b-0 lg:border-r lg:border-[#d8dde6]">
-            <header className="shrink-0 border-b border-black/10 bg-[#432e1f] px-3 py-2.5 text-white">
+          <section className="flex min-h-0 flex-col overflow-hidden border-b border-[#ebebeb] bg-[#f7f7f7] lg:border-b-0 lg:border-r">
+            <header className="shrink-0 border-b border-[#ebebeb] bg-white px-4 py-3">
               <div className="flex items-center gap-3">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#06c755] text-sm font-bold text-white">
                   {selected.lineName.slice(0, 1)}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-[15px] font-semibold leading-tight">{selected.lineName}</p>
-                  <p className="truncate text-[11px] text-white/65">
+                  <p className="truncate text-[15px] font-semibold text-[#222]">{selected.lineName}</p>
+                  <p className="truncate text-[11px] text-[#888]">
                     {shortReplyStatus(selected.replyStatus)}
                     {selected.pipeline !== "none"
                       ? ` · ${selected.pipeline === "active" ? "進行中" : selected.pipeline === "pending" ? "待確認" : "已確認"}`
@@ -1336,14 +1478,20 @@ export function LineRentalPreview({
                 </div>
                 <button
                   type="button"
-                  onClick={() => setDetailsOpen((open) => !open)}
-                  className="shrink-0 rounded-md bg-white/10 px-2.5 py-1 text-xs font-medium text-white hover:bg-white/15 lg:hidden"
+                  onClick={() => {
+                    setDetailsOpen((open) => !open);
+                    setStickerOpen(false);
+                  }}
+                  className="shrink-0 rounded border border-[#e0e0e0] bg-white px-2.5 py-1 text-xs font-medium text-[#555] hover:bg-[#fafafa] lg:hidden"
                 >
-                  {detailsOpen ? "收起" : "處理"}
+                  {detailsOpen ? "收起" : "物件／時間"}
                 </button>
               </div>
+              <div className="mt-2 rounded bg-[#f3f4f6] px-3 py-1.5 text-[12px] text-[#666]">
+                人工回覆中 · 請從此頁傳送，官方帳號 App 回覆不會同步到這裡
+              </div>
               {detailsOpen ? (
-                <div className="mt-3 rounded-lg bg-white p-3 text-zinc-900 lg:hidden">
+                <div className="mt-3 rounded-lg border border-[#ebebeb] bg-white p-3 lg:hidden">
                   <GuestDecisionPanel
                     guest={selected}
                     needsConfirm={Boolean(needsConfirm)}
@@ -1367,11 +1515,11 @@ export function LineRentalPreview({
               ) : null}
             </header>
 
-            <div ref={chatScrollRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
-              <div className="mx-auto flex w-full max-w-xl flex-col gap-3">
+            <div ref={chatScrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+              <div className="mx-auto flex w-full max-w-2xl flex-col gap-3">
                 {selected.createdAt ? (
                   <div className="flex justify-center py-1">
-                    <span className="rounded-full bg-black/20 px-3 py-0.5 text-[11px] font-medium text-white/95">
+                    <span className="rounded bg-[#e8e8e8] px-3 py-0.5 text-[11px] font-medium text-[#666]">
                       {formatLineDayLabel(selected.createdAt)}
                     </span>
                   </div>
@@ -1387,7 +1535,7 @@ export function LineRentalPreview({
                   return (
                     <div
                       key={line.id}
-                      className={`flex items-end gap-1.5 ${fromGuest ? "justify-start" : "justify-end"}`}
+                      className={`flex items-end gap-2 ${fromGuest ? "justify-start" : "justify-end"}`}
                     >
                       {fromGuest ? (
                         <span className="mb-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#06c755] text-xs font-bold text-white">
@@ -1395,28 +1543,32 @@ export function LineRentalPreview({
                         </span>
                       ) : null}
                       {!fromGuest && line.at ? (
-                        <span className="mb-0.5 shrink-0 text-[10px] leading-none text-white/80">{line.at}</span>
+                        <span className="mb-0.5 shrink-0 text-[10px] leading-none text-[#aaa]">
+                          {line.at}
+                        </span>
                       ) : null}
                       <div
-                        className={`max-w-[min(78%,22rem)] break-words text-[13.5px] leading-[1.55] text-zinc-900 ${
+                        className={`max-w-[min(72%,24rem)] break-words text-[13.5px] leading-[1.55] text-[#222] ${
                           mediaBubble
-                            ? "bg-transparent p-0 shadow-none"
-                            : `whitespace-pre-wrap px-3 py-2 shadow-sm ${
+                            ? "bg-transparent p-0"
+                            : `whitespace-pre-wrap border px-3 py-2 ${
                                 fromGuest
-                                  ? "rounded-[18px] rounded-bl-[4px] bg-white"
-                                  : "rounded-[18px] rounded-br-[4px] bg-[#95ec69]"
+                                  ? "rounded-lg rounded-bl-sm border-[#e5e5e5] bg-white"
+                                  : "rounded-lg rounded-br-sm border-[#c8dff5] bg-[#d6ebff]"
                               }`
                         }`}
                       >
                         {line.from === "staff" && !mediaBubble ? (
-                          <span className="mb-1 block text-[10px] font-semibold text-[#067a36]">
+                          <span className="mb-1 block text-[10px] font-semibold text-[#2f6fad]">
                             {staffDisplayName}
                           </span>
                         ) : null}
                         <LineMessageBody line={line} />
                       </div>
                       {fromGuest && line.at ? (
-                        <span className="mb-0.5 shrink-0 text-[10px] leading-none text-white/80">{line.at}</span>
+                        <span className="mb-0.5 shrink-0 text-[10px] leading-none text-[#aaa]">
+                          {line.at}
+                        </span>
                       ) : null}
                     </div>
                   );
@@ -1425,7 +1577,7 @@ export function LineRentalPreview({
             </div>
 
             {selected.status === "picking_time" ? (
-              <div className="flex max-h-[48%] min-h-[14rem] flex-col border-t border-zinc-200 bg-white px-3 py-3">
+              <div className="flex max-h-[48%] min-h-[14rem] flex-col border-t border-[#ebebeb] bg-white px-3 py-3">
                 <div className="mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col">
                   <ViewingSchedulePicker
                     heading="客人選希望看屋時間"
@@ -1439,15 +1591,78 @@ export function LineRentalPreview({
               </div>
             ) : null}
 
-            <form onSubmit={sendDraft} className="shrink-0 border-t border-black/10 bg-[#f5f5f5] px-3 py-2">
-              <div className="mx-auto flex w-full max-w-xl items-end gap-2">
-                <label className="min-w-0 flex-1">
+            {stickerOpen ? (
+              <div className="shrink-0 border-t border-[#ebebeb] bg-white px-3 py-2">
+                <div className="mb-2 flex gap-1 overflow-x-auto">
+                  {LINE_CS_STICKER_PACKS.map((pack) => (
+                    <button
+                      key={pack.packageId}
+                      type="button"
+                      onClick={() => setStickerPackId(pack.packageId)}
+                      className={`shrink-0 rounded px-2.5 py-1 text-[12px] font-medium ${
+                        activeStickerPack?.packageId === pack.packageId
+                          ? "bg-[#eefaf2] text-[#1a7a3c]"
+                          : "text-[#666] hover:bg-[#f5f5f5]"
+                      }`}
+                    >
+                      {pack.title}
+                    </button>
+                  ))}
+                </div>
+                <div className="grid max-h-44 grid-cols-5 gap-1 overflow-y-auto sm:grid-cols-8">
+                  {(activeStickerPack?.stickers ?? []).map((sticker) => (
+                    <button
+                      key={`${sticker.packageId}-${sticker.stickerId}`}
+                      type="button"
+                      title={sticker.label}
+                      onClick={() => sendSticker(selected, sticker)}
+                      className="flex aspect-square items-center justify-center rounded-md p-1 hover:bg-[#f5f5f5]"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={stickerPreviewUrl(sticker.stickerId)}
+                        alt={sticker.label}
+                        className="h-full w-full object-contain"
+                        loading="lazy"
+                      />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <form
+              onSubmit={sendDraft}
+              className="shrink-0 border-t border-[#ebebeb] bg-white px-3 py-2.5"
+            >
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(event) => {
+                  onPickMedia(selected, event.target.files);
+                  event.target.value = "";
+                }}
+              />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(event) => {
+                  onPickMedia(selected, event.target.files);
+                  event.target.value = "";
+                }}
+              />
+              <div className="rounded-lg border border-[#e5e5e5] bg-white">
+                <label className="block px-3 pt-2.5">
                   <span className="sr-only">輸入訊息</span>
                   <textarea
                     ref={draftInputRef}
                     rows={1}
                     value={draft}
-                    placeholder=""
+                    placeholder="Enter: 傳送 / Shift + Enter: 換行"
                     onChange={(event) => {
                       if (ignoreDraftChangeRef.current === selected.id) return;
                       const value = event.target.value;
@@ -1455,31 +1670,72 @@ export function LineRentalPreview({
                       resizeDraftInput(event.target);
                     }}
                     onKeyDown={onDraftKeyDown}
-                    className="max-h-28 min-h-10 w-full resize-none overflow-y-auto rounded-md border border-[#d0d3d9] bg-white px-3 py-2 text-sm leading-5 text-zinc-900 outline-none focus:border-[#06c755]"
+                    className="max-h-32 min-h-[2.5rem] w-full resize-none overflow-y-auto bg-transparent text-[14px] leading-6 text-[#222] outline-none placeholder:text-[#bbb]"
                   />
                 </label>
-                <button
-                  type="submit"
-                  disabled={!draft.trim() || !selected.lineUserId}
-                  aria-label="傳送"
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#06c755] text-white disabled:opacity-40"
-                >
-                  <SendIcon />
-                </button>
+                <div className="flex items-center gap-1 px-2 pb-2 pt-1">
+                  <button
+                    type="button"
+                    aria-label="貼圖"
+                    title="貼圖"
+                    onClick={() => setStickerOpen((open) => !open)}
+                    className={`flex h-8 w-8 items-center justify-center rounded text-[#777] hover:bg-[#f5f5f5] ${
+                      stickerOpen ? "bg-[#eefaf2] text-[#06c755]" : ""
+                    }`}
+                  >
+                    <ComposerSmileIcon />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="附加檔案"
+                    title="附加圖片"
+                    disabled={!selected.lineUserId || uploadingMedia}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex h-8 w-8 items-center justify-center rounded text-[#777] hover:bg-[#f5f5f5] disabled:opacity-40"
+                  >
+                    <ComposerClipIcon />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="傳送圖片"
+                    title="傳送圖片"
+                    disabled={!selected.lineUserId || uploadingMedia}
+                    onClick={() => imageInputRef.current?.click()}
+                    className="flex h-8 w-8 items-center justify-center rounded text-[#777] hover:bg-[#f5f5f5] disabled:opacity-40"
+                  >
+                    <ComposerImageIcon />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="物件與時間"
+                    title="物件選擇與時間"
+                    onClick={focusListingPanel}
+                    className="flex h-8 w-8 items-center justify-center rounded text-[#777] hover:bg-[#f5f5f5]"
+                  >
+                    <ComposerListingIcon />
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!draft.trim() || !selected.lineUserId}
+                    className="ml-auto rounded bg-[#06c755] px-4 py-1.5 text-[13px] font-semibold text-white hover:bg-[#05b34c] disabled:opacity-40"
+                  >
+                    傳送
+                  </button>
+                </div>
               </div>
-              <p className="mx-auto mt-1 max-w-xl text-center text-[10px] text-zinc-500">
-                Enter 送出、Shift+Enter 換行。請用這裡回覆才會兩邊同步；用官方帳號 App
-                回的訊息，網頁看不到。
-              </p>
             </form>
           </section>
         ) : (
-          <div className="flex items-center justify-center border-b border-zinc-100 bg-[#7494c0] px-4 text-sm text-white/90 lg:border-b-0 lg:border-r">
-            選左邊的客人查看 LINE 對話
+          <div className="flex items-center justify-center border-b border-[#ebebeb] bg-[#f7f7f7] px-4 text-sm text-[#888] lg:border-b-0 lg:border-r">
+            選左邊的客人查看對話
           </div>
         )}
 
-        <aside className="hidden min-h-0 overflow-y-auto bg-white px-4 py-4 lg:block">
+        {/* 右側：物件選擇與時間 */}
+        <aside
+          ref={rightPanelRef}
+          className="hidden min-h-0 overflow-y-auto border-l border-[#ebebeb] bg-white px-4 py-4 lg:block"
+        >
           {selected ? (
             <GuestDecisionPanel
               guest={selected}
@@ -1501,7 +1757,7 @@ export function LineRentalPreview({
               onSendNewTime={() => sendNewTime(selected)}
             />
           ) : (
-            <p className="text-sm text-zinc-500">選客人後，這裡會顯示條件與看屋時間。</p>
+            <p className="text-sm text-[#999]">選客人後，這裡顯示物件選擇與時間。</p>
           )}
         </aside>
       </div>
@@ -1570,101 +1826,101 @@ function GuestDecisionPanel({
   );
 
   return (
-    <div className="space-y-4 text-sm">
-      <div>
-        <p className="text-xs font-semibold text-zinc-500">這位客人</p>
-        <p className="mt-1 font-bold text-zinc-900">{guest.lineName}</p>
-        <p className="mt-0.5 text-xs text-zinc-500">
-          {shortReplyStatus(guest.replyStatus)}
-          {guest.pipeline !== "none"
-            ? ` · ${guest.pipeline === "active" ? "進行中" : guest.pipeline === "pending" ? "待確認" : "已確認"}`
-            : ""}
-          {guest.watching ? " · 之後新案會問" : ""}
-          {guest.followedAt ? ` · 加入 ${formatLineDayLabel(guest.followedAt)}` : ""}
-          {guest.unfollowedAt ? " · 已封鎖／刪除" : ""}
-        </p>
-      </div>
-
-      <div>
-        <p className="text-xs font-semibold text-zinc-500">基本資料</p>
-        <dl className="mt-1 space-y-1 text-zinc-800">
-          <div className="flex gap-2">
-            <dt className="w-16 shrink-0 text-zinc-500">電話</dt>
-            <dd className="min-w-0 break-all font-medium">{guest.phone || "未填"}</dd>
+    <div className="space-y-0 text-[13px] text-[#333]">
+      <div className="border-b border-[#f0f0f0] pb-4">
+        <div className="flex items-center gap-3">
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#06c755] text-base font-bold text-white">
+            {guest.lineName.slice(0, 1)}
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-[15px] font-semibold text-[#222]">{guest.lineName}</p>
+            <p className="mt-0.5 text-[11px] text-[#888]">
+              {shortReplyStatus(guest.replyStatus)}
+              {guest.pipeline !== "none"
+                ? ` · ${guest.pipeline === "active" ? "進行中" : guest.pipeline === "pending" ? "待確認" : "已確認"}`
+                : ""}
+              {guest.watching ? " · 之後新案會問" : ""}
+            </p>
           </div>
-          <div className="flex gap-2">
-            <dt className="w-16 shrink-0 text-zinc-500">人數</dt>
-            <dd className="min-w-0 font-medium">{guest.peopleCount || 1} 人</dd>
-          </div>
-          <div className="flex gap-2">
-            <dt className="w-16 shrink-0 text-zinc-500">職業</dt>
-            <dd className="min-w-0 break-words font-medium">{guest.occupation || "未填"}</dd>
-          </div>
-          <div className="flex gap-2">
-            <dt className="w-16 shrink-0 text-zinc-500">預計入住</dt>
-            <dd className="min-w-0 font-medium">{guest.moveInDate || "未填"}</dd>
-          </div>
-          <div className="flex gap-2">
-            <dt className="w-16 shrink-0 text-zinc-500">國籍</dt>
-            <dd className="min-w-0 font-medium">{guest.nationality || "未填"}</dd>
-          </div>
-          <div className="flex gap-2">
-            <dt className="w-16 shrink-0 text-zinc-500">寵物</dt>
-            <dd className="min-w-0 break-words font-medium">{guest.petNote || "未填"}</dd>
-          </div>
-          {guest.criteriaText ? (
-            <div className="flex gap-2">
-              <dt className="w-16 shrink-0 text-zinc-500">條件</dt>
-              <dd className="min-w-0 break-words font-medium">{guest.criteriaText}</dd>
-            </div>
-          ) : null}
-        </dl>
-      </div>
-
-      <div>
-        <p className="text-xs font-semibold text-zinc-500">已勾物件（快捷連結）</p>
-        <div className="mt-1 space-y-1 text-zinc-800">
-          {guest.picked.length
-            ? guest.picked.map((item) => (
-                <a
-                  key={item.id}
-                  href={`/listings/${item.id}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block text-[#1e3a8a] hover:underline"
-                >
-                  {item.title}
-                  <span className="text-zinc-500"> · {formatRent(item.price)}</span>
-                </a>
-              ))
-            : "還沒勾"}
         </div>
       </div>
 
-      <div>
-        <p className="text-xs font-semibold text-zinc-500">希望時間</p>
-        <p className="mt-1 font-medium text-[#0b2545]">{guest.requestedWhen || "還沒選"}</p>
-        {guest.proposedWhen ? <p className="mt-1 text-sky-900">改問 {guest.proposedWhen}</p> : null}
-      </div>
+      <section className="border-b border-[#f0f0f0] py-4">
+        <p className="text-[12px] font-semibold text-[#888]">基本資料</p>
+        <dl className="mt-2 space-y-1.5">
+          {(
+            [
+              ["電話", guest.phone || "未填"],
+              ["人數", `${guest.peopleCount || 1} 人`],
+              ["職業", guest.occupation || "未填"],
+              ["預計入住", guest.moveInDate || "未填"],
+              ["國籍", guest.nationality || "未填"],
+              ["寵物", guest.petNote || "未填"],
+              ...(guest.criteriaText ? [["條件", guest.criteriaText] as const] : []),
+              ...(guest.followedAt
+                ? [["加入", formatLineDayLabel(guest.followedAt)] as const]
+                : []),
+            ] as Array<[string, string]>
+          ).map(([label, value]) => (
+            <div key={label} className="flex gap-2">
+              <dt className="w-14 shrink-0 text-[#999]">{label}</dt>
+              <dd className="min-w-0 break-words font-medium text-[#333]">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+
+      <section className="border-b border-[#f0f0f0] py-4">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[12px] font-semibold text-[#888]">物件選擇</p>
+          <span className="text-[11px] text-[#aaa]">{guest.picked.length} 筆</span>
+        </div>
+        <div className="mt-2 space-y-1.5">
+          {guest.picked.length ? (
+            guest.picked.map((item) => (
+              <a
+                key={item.id}
+                href={`/listings/${item.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block rounded-md border border-[#f0f0f0] px-2.5 py-2 text-[#1e3a8a] hover:border-[#06c755]/40 hover:bg-[#f8fdf9]"
+              >
+                <span className="block truncate text-[13px] font-medium">{item.title}</span>
+                <span className="text-[11px] text-[#888]">{formatRent(item.price)}</span>
+              </a>
+            ))
+          ) : (
+            <p className="text-[13px] text-[#aaa]">還沒勾選物件</p>
+          )}
+        </div>
+      </section>
+
+      <section className="border-b border-[#f0f0f0] py-4">
+        <p className="text-[12px] font-semibold text-[#888]">時間</p>
+        <p className="mt-2 text-[14px] font-semibold text-[#222]">
+          {guest.requestedWhen || "還沒選"}
+        </p>
+        {guest.proposedWhen ? (
+          <p className="mt-1 text-[12px] text-[#2f6fad]">改問 {guest.proposedWhen}</p>
+        ) : null}
+      </section>
 
       {needsConfirm ? (
-        <div className="space-y-2 rounded-xl border border-[#c5d4e8] bg-[#eef3f9] p-3">
-          <p className="text-xs font-semibold text-[#0b2545]">待確認看屋</p>
+        <section className="space-y-3 py-4">
+          <p className="text-[12px] font-semibold text-[#1a7a3c]">待確認看屋</p>
           {orderedPicked.length > 0 ? (
             <div className="space-y-2">
-              <p className="text-[11px] font-medium text-zinc-600">
-                帶看順序（傳給客人時：標題 → 網址 → 地圖）
-              </p>
+              <p className="text-[11px] text-[#888]">帶看順序（標題 → 網址 → 地圖）</p>
               <ul className="space-y-1.5">
                 {orderedPicked.map((item, index) => (
                   <li
                     key={item.id}
-                    className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-2 py-1.5"
+                    className="flex items-center gap-2 rounded-md border border-[#ebebeb] bg-[#fafafa] px-2 py-1.5"
                   >
-                    <span className="w-5 shrink-0 text-center text-[11px] font-bold text-zinc-500">
+                    <span className="w-5 shrink-0 text-center text-[11px] font-bold text-[#999]">
                       {index + 1}
                     </span>
-                    <span className="min-w-0 flex-1 truncate text-xs font-medium text-zinc-900">
+                    <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-[#222]">
                       {item.title}
                     </span>
                     <button
@@ -1672,7 +1928,7 @@ function GuestDecisionPanel({
                       aria-label="上移"
                       disabled={index === 0}
                       onClick={() => movePicked(item.id, -1)}
-                      className="rounded border border-zinc-200 px-1.5 py-0.5 text-[11px] font-semibold text-zinc-700 disabled:opacity-30"
+                      className="rounded border border-[#e5e5e5] bg-white px-1.5 py-0.5 text-[11px] text-[#555] disabled:opacity-30"
                     >
                       ↑
                     </button>
@@ -1681,7 +1937,7 @@ function GuestDecisionPanel({
                       aria-label="下移"
                       disabled={index === orderedPicked.length - 1}
                       onClick={() => movePicked(item.id, 1)}
-                      className="rounded border border-zinc-200 px-1.5 py-0.5 text-[11px] font-semibold text-zinc-700 disabled:opacity-30"
+                      className="rounded border border-[#e5e5e5] bg-white px-1.5 py-0.5 text-[11px] text-[#555] disabled:opacity-30"
                     >
                       ↓
                     </button>
@@ -1695,14 +1951,14 @@ function GuestDecisionPanel({
               <button
                 type="button"
                 onClick={() => onConfirm(orderIds)}
-                className="rounded-full bg-[#0b2545] px-3 py-2 text-sm font-semibold text-white"
+                className="rounded bg-[#06c755] px-3 py-2 text-[13px] font-semibold text-white hover:bg-[#05b34c]"
               >
                 可以這個時間
               </button>
               <button
                 type="button"
                 onClick={onAskOtherTime}
-                className="rounded-full border border-zinc-300 bg-white px-3 py-2 text-sm font-semibold text-zinc-800"
+                className="rounded border border-[#e0e0e0] bg-white px-3 py-2 text-[13px] font-semibold text-[#444] hover:bg-[#fafafa]"
               >
                 改時間
               </button>
@@ -1710,32 +1966,64 @@ function GuestDecisionPanel({
           ) : (
             rescheduleForm
           )}
-        </div>
+        </section>
       ) : null}
 
       {guest.status === "confirmed" ? (
-        <div className="space-y-2">
+        <section className="space-y-2 py-4">
           {!editingTime ? (
             <button
               type="button"
               onClick={onAskOtherTime}
-              className="w-full rounded-full border border-zinc-300 bg-white px-3 py-2 text-sm font-semibold text-zinc-800"
+              className="w-full rounded border border-[#e0e0e0] bg-white px-3 py-2 text-[13px] font-semibold text-[#444] hover:bg-[#fafafa]"
             >
               改時間
             </button>
           ) : (
             rescheduleForm
           )}
-        </div>
+        </section>
       ) : null}
     </div>
   );
 }
 
-function SendIcon() {
+function ComposerSmileIcon() {
   return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" aria-hidden>
-      <path d="M3.4 11.2 20.2 4.2c.7-.3 1.4.4 1.1 1.1l-7 16.8c-.3.8-1.4.8-1.7 0l-2.4-6.2-6.2-2.4c-.8-.3-.8-1.4 0-1.7z" />
+    <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden>
+      <circle cx="12" cy="12" r="8.25" />
+      <path d="M8.5 10.2h.01M15.5 10.2h.01" strokeLinecap="round" />
+      <path d="M8.8 14c1 1.3 2.4 2 3.2 2s2.2-.7 3.2-2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function ComposerClipIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden>
+      <path
+        d="M15.2 7.3 9.4 13a2.4 2.4 0 1 0 3.4 3.4l6.7-6.7a3.8 3.8 0 0 0-5.4-5.4L7.3 11a5.2 5.2 0 0 0 7.4 7.4l5.2-5.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function ComposerImageIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden>
+      <rect x="3.75" y="5.25" width="16.5" height="13.5" rx="2" />
+      <circle cx="9" cy="10" r="1.4" />
+      <path d="m7.5 16.2 3.2-3.2 2.3 2.3 3-3.4 3 4.3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function ComposerListingIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden>
+      <path d="M4.5 10.5 12 4.5l7.5 6V19a1.5 1.5 0 0 1-1.5 1.5h-4.2v-5.2H10.2V20.5H6A1.5 1.5 0 0 1 4.5 19v-8.5Z" strokeLinejoin="round" />
     </svg>
   );
 }

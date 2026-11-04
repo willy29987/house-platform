@@ -47,7 +47,7 @@ async function replyGuest(
 const WELCOME =
   "您好～請問最近有在找房子嗎？如果有需要找房子可以點選「 開始找房 」，點選您要的需求就可以推薦您合適的房源哦！";
 
-function qr(actions: LineMessageAction[]): LineMessage["quickReply"] {
+function qr(actions: LineMessageAction[]) {
   return {
     items: actions.slice(0, 13).map((action) => ({ type: "action" as const, action })),
   };

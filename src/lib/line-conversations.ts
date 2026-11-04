@@ -101,12 +101,14 @@ function normalizeStore(payload: unknown): Store {
 
 function previewTextFromLineMessage(message: LineMessage): string {
   if (message.type === "text") return message.text;
+  if (message.type === "sticker") return "［貼圖］";
+  if (message.type === "image") return "［圖片］";
   if (message.type === "template") {
     const t = message.template;
     if (t.type === "buttons") return message.altText || t.text || t.title || "[卡片訊息]";
     if (t.type === "confirm") return message.altText || t.text || "[確認訊息]";
   }
-  return message.altText || "[訊息]";
+  return ("altText" in message && message.altText) || "[訊息]";
 }
 
 function toIsoFromLineTimestamp(timestamp?: number): string {
@@ -286,6 +288,29 @@ export async function appendLineConversationBotMessages(input: {
 }) {
   for (const message of input.messages) {
     const text = previewTextFromLineMessage(message);
+    if (message.type === "sticker") {
+      await appendLineConversationMessage({
+        lineUserId: input.lineUserId,
+        from: "bot",
+        text,
+        displayName: input.displayName,
+        mediaType: "sticker",
+        stickerId: message.stickerId,
+        packageId: message.packageId,
+      });
+      continue;
+    }
+    if (message.type === "image") {
+      await appendLineConversationMessage({
+        lineUserId: input.lineUserId,
+        from: "bot",
+        text,
+        displayName: input.displayName,
+        mediaType: "image",
+        messageId: message.originalContentUrl,
+      });
+      continue;
+    }
     await appendLineConversationMessage({
       lineUserId: input.lineUserId,
       from: "bot",
