@@ -21,6 +21,7 @@ type GuestStatus =
   | "reschedule_sent"
   | "confirmed"
   | "saved"
+  | "replied"
   | "awaiting_staff"
   | "awaiting_agent"
   | "agent_proposing";
@@ -184,10 +185,43 @@ const STATUS_LABEL: Record<GuestStatus, string> = {
   reschedule_sent: "待客人確認改約",
   confirmed: "已確認",
   saved: "進行中",
+  replied: "已回覆",
   awaiting_staff: "待回覆",
   awaiting_agent: "待業務確認",
   agent_proposing: "業務改約中",
 };
+
+/** 帶看流程狀態：優先於一般聊天回覆狀態 */
+const WORKFLOW_STATUS = new Set<GuestStatus>([
+  "pending_confirm",
+  "reschedule_sent",
+  "awaiting_agent",
+  "agent_proposing",
+  "confirmed",
+  "selecting",
+  "picking_time",
+]);
+
+/** 依最後一則訊息決定待回覆／已回覆；流程案件狀態另保留 */
+function resolveGuestStatus(
+  lines: ChatLine[],
+  caseStatus: GuestStatus | null | undefined,
+): GuestStatus {
+  const last = lines[lines.length - 1];
+  const waitingOnStaff = !last || last.from === "guest";
+
+  if (waitingOnStaff) {
+    if (caseStatus && WORKFLOW_STATUS.has(caseStatus) && caseStatus !== "confirmed") {
+      return caseStatus;
+    }
+    return "awaiting_staff";
+  }
+
+  if (caseStatus && WORKFLOW_STATUS.has(caseStatus)) {
+    return caseStatus;
+  }
+  return "replied";
+}
 
 const FILTERS: { id: ListFilter; label: string }[] = [
   { id: "all", label: "全部" },
@@ -521,12 +555,24 @@ function conversationToStaffGuest(
     base?.summaryText ||
     "";
 
+  const resolvedLines =
+    lines.length > 0
+      ? lines
+      : base?.lines ?? [
+          {
+            id: 1,
+            from: "guest" as const,
+            text: lastGuestText || "（尚無訊息）",
+            at: formatLineClock(conversation.updatedAt),
+          },
+        ];
+
   return {
     id: conversation.lineUserId,
     lineUserId: conversation.lineUserId,
     caseId: latest?.id,
     lineName: conversation.displayName || base?.lineName || "LINE 客人",
-    status: base?.status ?? "awaiting_staff",
+    status: resolveGuestStatus(resolvedLines, base?.status),
     watching: true,
     criteriaText: base?.criteriaText || "",
     summaryText: lastGuestText,
@@ -537,17 +583,7 @@ function conversationToStaffGuest(
     requestedWhen: base?.requestedWhen ?? "",
     proposedWhen: base?.proposedWhen ?? "",
     asks: [],
-    lines:
-      lines.length > 0
-        ? lines
-        : base?.lines ?? [
-            {
-              id: 1,
-              from: "guest",
-              text: lastGuestText || "（尚無訊息）",
-              at: formatLineClock(conversation.updatedAt),
-            },
-          ],
+    lines: resolvedLines,
   };
 }
 
@@ -563,11 +599,16 @@ function matchesFilter(guest: StaffGuest, filter: ListFilter) {
     );
   }
   if (filter === "confirmed") return guest.status === "confirmed";
-  return guest.status === "selecting" || guest.status === "picking_time" || guest.status === "saved";
+  return (
+    guest.status === "selecting" ||
+    guest.status === "picking_time" ||
+    guest.status === "saved" ||
+    guest.status === "replied"
+  );
 }
 
 function statusPill(status: GuestStatus) {
-  if (status === "confirmed") return "bg-emerald-100 text-emerald-950";
+  if (status === "confirmed" || status === "replied") return "bg-emerald-100 text-emerald-950";
   if (
     status === "pending_confirm" ||
     status === "reschedule_sent" ||
@@ -614,6 +655,10 @@ export function LineRentalPreview({
   const lastThreadKeyRef = useRef("");
   const knownGuestMsgKeysRef = useRef<Set<string> | null>(null);
   const pageTitleRef = useRef("");
+  /** 連續 Enter 次數；連按兩次才送出（比照 LINE） */
+  const enterStreakRef = useRef(0);
+  /** 送出後短暫忽略 onChange，避免 IME／Enter 把字又填回來 */
+  const ignoreDraftChangeRef = useRef<string | null>(null);
   const today = useMemo(() => taipeiTodayYmd(), []);
 
   useEffect(() => {
@@ -975,26 +1020,46 @@ export function LineRentalPreview({
   function sendDraft(event?: FormEvent) {
     event?.preventDefault();
     if (!selected?.lineUserId) return;
-    const text = (drafts[selected.id] ?? "").trim();
+    const guestId = selected.id;
+    const text = (drafts[guestId] ?? "").trim();
     if (!text) return;
     const id = lineId.current++;
-    const guestId = selected.id;
     const lineUserId = selected.lineUserId;
     const at = formatLineClock(new Date().toISOString());
+    enterStreakRef.current = 0;
+    ignoreDraftChangeRef.current = guestId;
     // 樂觀更新；輪詢會再以伺服器紀錄對齊
-    patchGuest(guestId, (current) => ({
-      ...current,
-      lines: [...current.lines, { id, from: "staff", text, at }],
-    }));
+    patchGuest(guestId, (current) => {
+      const lines = [...current.lines, { id, from: "staff" as const, text, at }];
+      return {
+        ...current,
+        lines,
+        status: resolveGuestStatus(lines, current.status),
+      };
+    });
     setDrafts((current) => ({ ...current, [guestId]: "" }));
+    window.setTimeout(() => {
+      if (ignoreDraftChangeRef.current === guestId) {
+        ignoreDraftChangeRef.current = null;
+      }
+    }, 400);
     pushStaffLine({ ...selected, lineUserId }, text, id);
   }
 
   function onDraftKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return;
     if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      sendDraft();
+      // 連按兩次 Enter 才送出；單次 Enter 換行（比照 LINE）
+      if (enterStreakRef.current >= 1) {
+        event.preventDefault();
+        enterStreakRef.current = 0;
+        sendDraft();
+        return;
+      }
+      enterStreakRef.current = 1;
+      return;
     }
+    enterStreakRef.current = 0;
   }
 
   return (
@@ -1204,10 +1269,11 @@ export function LineRentalPreview({
                 <label className="min-w-0 flex-1">
                   <span className="sr-only">輸入訊息</span>
                   <textarea
-                    rows={1}
+                    rows={2}
                     value={draft}
-                    placeholder="輸入訊息"
+                    placeholder="輸入訊息（連按兩次 Enter 送出）"
                     onChange={(event) => {
+                      if (ignoreDraftChangeRef.current === selected.id) return;
                       const value = event.target.value;
                       setDrafts((current) => ({ ...current, [selected.id]: value }));
                     }}
@@ -1225,8 +1291,8 @@ export function LineRentalPreview({
                 </button>
               </div>
               <p className="mx-auto mt-1 max-w-xl text-center text-[10px] text-zinc-500">
-                請用這裡回覆才會兩邊同步。用手機／電腦「官方帳號」聊天室回的訊息，LINE
-                不會通知我們，網頁看不到。
+                連按兩次 Enter 送出。請用這裡回覆才會兩邊同步；用官方帳號 App
+                回的訊息，網頁看不到。
               </p>
             </form>
           </section>
