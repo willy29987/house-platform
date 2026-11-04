@@ -1179,13 +1179,13 @@ export function LineRentalPreview({
                       ) : null}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="flex items-center gap-2">
-                        <span className="truncate text-sm font-bold text-zinc-900">{guest.lineName}</span>
-                        <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${statusPill(guest.replyStatus)}`}>
-                          {shortReplyStatus(guest.replyStatus)}
-                        </span>
-                      </span>
+                      <span className="truncate text-sm font-bold text-zinc-900">{guest.lineName}</span>
                       <span className="mt-0.5 block truncate text-xs text-zinc-500">{preview}</span>
+                    </span>
+                    <span
+                      className={`ml-auto shrink-0 self-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${statusPill(guest.replyStatus)}`}
+                    >
+                      {shortReplyStatus(guest.replyStatus)}
                     </span>
                   </button>
                 </li>
