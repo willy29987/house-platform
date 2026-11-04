@@ -601,22 +601,109 @@ export function LineRentalPreview({
   const [schedule, setSchedule] = useState<ViewingScheduleValue>(emptyViewingSchedule);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [notifyState, setNotifyState] = useState<"default" | "granted" | "denied" | "unsupported">(
+    "default",
+  );
   const lineId = useRef(500);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const lastThreadKeyRef = useRef("");
+  const knownGuestMsgKeysRef = useRef<Set<string> | null>(null);
+  const pageTitleRef = useRef("");
   const today = useMemo(() => taipeiTodayYmd(), []);
+
+  useEffect(() => {
+    pageTitleRef.current = document.title;
+    if (typeof Notification === "undefined") {
+      setNotifyState("unsupported");
+      return;
+    }
+    setNotifyState(Notification.permission);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
     let fallbackTimer: number | null = null;
     let source: EventSource | null = null;
 
+    function playNotifyBeep() {
+      try {
+        const AudioCtx =
+          window.AudioContext ||
+          (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (!AudioCtx) return;
+        const ctx = new AudioCtx();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.value = 880;
+        gain.gain.value = 0.04;
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.12);
+        window.setTimeout(() => void ctx.close(), 300);
+      } catch {
+        /* ignore */
+      }
+    }
+
+    function notifyNewGuestMessages(nextGuests: StaffGuest[]) {
+      const nextKeys = new Set<string>();
+      const fresh: Array<{ guestId: string; name: string; text: string }> = [];
+      for (const guest of nextGuests) {
+        for (const line of guest.lines) {
+          if (line.from !== "guest") continue;
+          const key = `${guest.id}:${String(line.id)}`;
+          nextKeys.add(key);
+          if (knownGuestMsgKeysRef.current && !knownGuestMsgKeysRef.current.has(key)) {
+            fresh.push({
+              guestId: guest.id,
+              name: guest.lineName,
+              text: line.text.replace(/\s+/g, " ").trim().slice(0, 120),
+            });
+          }
+        }
+      }
+
+      // 第一次快照只建基準，不提醒（避免進頁就狂跳）
+      if (!knownGuestMsgKeysRef.current) {
+        knownGuestMsgKeysRef.current = nextKeys;
+        return;
+      }
+      knownGuestMsgKeysRef.current = nextKeys;
+      if (!fresh.length) return;
+
+      const latest = fresh[fresh.length - 1];
+      document.title = `（${fresh.length}）新訊息｜租屋配對客服`;
+      playNotifyBeep();
+
+      if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+        try {
+          const popup = new Notification(latest.name || "LINE 客人", {
+            body: latest.text || "傳了一則新訊息",
+            tag: `line-cs-${latest.guestId}`,
+            renotify: true,
+          });
+          popup.onclick = () => {
+            window.focus();
+            setSelectedId(latest.guestId);
+            setFilter("all");
+            popup.close();
+          };
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+
     function applySnapshot(data: {
       conversations?: LineConversation[];
       cases?: LineRentalCase[];
     }) {
       if (cancelled) return;
-      setLiveGuests(buildLiveGuests(data.conversations ?? [], data.cases ?? []));
+      const next = buildLiveGuests(data.conversations ?? [], data.cases ?? []);
+      notifyNewGuestMessages(next);
+      setLiveGuests(next);
     }
 
     async function loadLiveOnce() {
@@ -685,7 +772,10 @@ export function LineRentalPreview({
       if (!source || source.readyState === EventSource.CLOSED) connectStream();
     }
     function onVisibility() {
-      if (document.visibilityState === "visible") onFocus();
+      if (document.visibilityState === "visible") {
+        if (pageTitleRef.current) document.title = pageTitleRef.current;
+        onFocus();
+      }
     }
 
     window.addEventListener("focus", onFocus);
@@ -696,8 +786,18 @@ export function LineRentalPreview({
       source?.close();
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisibility);
+      if (pageTitleRef.current) document.title = pageTitleRef.current;
     };
   }, []);
+
+  async function enableDesktopNotify() {
+    if (typeof Notification === "undefined") {
+      setNotifyState("unsupported");
+      return;
+    }
+    const permission = await Notification.requestPermission();
+    setNotifyState(permission);
+  }
 
   useEffect(() => {
     // 一律以伺服器對話為準（與 LINE 同步）；勿用本地舊 lines 蓋掉 webhook 新訊息
@@ -864,6 +964,20 @@ export function LineRentalPreview({
             </button>
           );
         })}
+        {notifyState !== "unsupported" ? (
+          <button
+            type="button"
+            onClick={() => void enableDesktopNotify()}
+            className={`ml-auto shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold ${
+              notifyState === "granted"
+                ? "bg-emerald-50 text-emerald-800"
+                : "border border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50"
+            }`}
+            title="客人新訊息時用瀏覽器通知提醒（需保持客服頁開啟）"
+          >
+            {notifyState === "granted" ? "通知已開啟" : "開啟新訊提醒"}
+          </button>
+        ) : null}
       </div>
 
       {/* 左：名單｜中：LINE 對話｜右：約看處理 */}
