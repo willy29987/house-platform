@@ -27,6 +27,36 @@ export async function getLineChannelAccessToken() {
   return resolveLineToken();
 }
 
+const profileNameCache = new Map<string, { name: string; expiresAt: number }>();
+
+/** 用 Messaging API 取客人 LINE 暱稱（客服名單顯示用） */
+export async function getLineUserDisplayName(lineUserId: string): Promise<string | null> {
+  const userId = lineUserId.trim();
+  if (!userId) return null;
+
+  const cached = profileNameCache.get(userId);
+  if (cached && cached.expiresAt > Date.now()) return cached.name;
+
+  const token = await resolveLineToken();
+  if (!token) return null;
+
+  try {
+    const response = await fetch(`https://api.line.me/v2/bot/profile/${encodeURIComponent(userId)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    });
+    if (!response.ok) return null;
+    const data = (await response.json()) as { displayName?: string };
+    const name = data.displayName?.trim() || null;
+    if (name) {
+      profileNameCache.set(userId, { name, expiresAt: Date.now() + 6 * 60 * 60_000 });
+    }
+    return name;
+  } catch {
+    return null;
+  }
+}
+
 export type LinePostbackAction = {
   type: "postback";
   label: string;

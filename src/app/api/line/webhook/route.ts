@@ -8,7 +8,7 @@ import {
   type LineConversationMediaType,
 } from "@/lib/line-conversations";
 import { handleGuestPostback, handleGuestText } from "@/lib/line-guest-flow";
-import { replyLineMessages } from "@/lib/line-messaging";
+import { getLineUserDisplayName, replyLineMessages } from "@/lib/line-messaging";
 import { readLineChannelSecretFromCloud } from "@/lib/line-runtime-secrets";
 import {
   handleAgentProposeText,
@@ -147,6 +147,7 @@ function previewForIncomingMessage(message: NonNullable<LineEvent["message"]>): 
 async function storeGuestMessage(input: {
   lineUserId: string;
   text: string;
+  displayName?: string;
   messageId?: string;
   mediaType?: LineConversationMediaType;
   stickerId?: string;
@@ -157,6 +158,7 @@ async function storeGuestMessage(input: {
       lineUserId: input.lineUserId,
       from: "guest",
       text: input.text,
+      displayName: input.displayName,
       messageId: input.messageId,
       mediaType: input.mediaType,
       stickerId: input.stickerId,
@@ -167,9 +169,16 @@ async function storeGuestMessage(input: {
   }
 }
 
+async function resolveGuestDisplayName(userId: string | null): Promise<string> {
+  if (!userId) return "LINE 客人";
+  const name = await getLineUserDisplayName(userId);
+  return name || "LINE 客人";
+}
+
 async function handleEvent(event: LineEvent) {
   const userId = event.source?.userId ?? null;
   rememberLineUserId(userId, event.type);
+  const displayName = await resolveGuestDisplayName(userId);
 
   if (event.type === "postback") {
     if (!event.replyToken) return;
@@ -181,6 +190,7 @@ async function handleEvent(event: LineEvent) {
       await storeGuestMessage({
         lineUserId: userId,
         text: postbackLabel,
+        displayName,
         messageId: `postback:${event.replyToken}:${data}`,
       });
     }
@@ -190,6 +200,7 @@ async function handleEvent(event: LineEvent) {
         replyToken: event.replyToken,
         lineUserId: userId,
         data,
+        displayName,
       });
       return;
     }
@@ -225,6 +236,7 @@ async function handleEvent(event: LineEvent) {
     await storeGuestMessage({
       lineUserId: userId,
       text: preview.text,
+      displayName,
       messageId: message.id,
       mediaType: preview.mediaType,
       stickerId: preview.stickerId,
@@ -254,6 +266,7 @@ async function handleEvent(event: LineEvent) {
         replyToken: event.replyToken,
         lineUserId: userId,
         text,
+        displayName,
       });
       if (guestHandled) return;
     }
@@ -261,7 +274,7 @@ async function handleEvent(event: LineEvent) {
     const result = await handle591LinkInquiry({
       text,
       lineUserId: userId,
-      displayName: "LINE 客人",
+      displayName,
     });
     if (!result) return;
     await replyLineMessages(event.replyToken, result.messages, { lineUserId: userId });
@@ -273,7 +286,7 @@ async function handleEvent(event: LineEvent) {
     if (userId && isViewingAgentUserId(userId)) return;
     await handleImageInquiry({
       lineUserId: userId,
-      displayName: "LINE 客人",
+      displayName,
       imageMessageId: message.id,
     });
   }
