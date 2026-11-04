@@ -8,6 +8,7 @@ import {
   type LineConversationMediaType,
 } from "@/lib/line-conversations";
 import { handleGuestPostback, handleGuestText } from "@/lib/line-guest-flow";
+import { notifyAdminsLineGuestMessage } from "@/lib/admin-web-push";
 import { getLineUserDisplayName, replyLineMessages } from "@/lib/line-messaging";
 import { readLineChannelSecretFromCloud } from "@/lib/line-runtime-secrets";
 import {
@@ -154,7 +155,7 @@ async function storeGuestMessage(input: {
   packageId?: string;
 }) {
   try {
-    await appendLineConversationMessage({
+    const saved = await appendLineConversationMessage({
       lineUserId: input.lineUserId,
       from: "guest",
       text: input.text,
@@ -164,6 +165,16 @@ async function storeGuestMessage(input: {
       stickerId: input.stickerId,
       packageId: input.packageId,
     });
+    // 新訊息才推播；重複 webhook 不重複吵
+    if (saved) {
+      void notifyAdminsLineGuestMessage({
+        lineUserId: input.lineUserId,
+        displayName: input.displayName || "LINE 客人",
+        text: input.text,
+      }).catch((error) => {
+        console.warn("[line/webhook] admin web push failed", error);
+      });
+    }
   } catch (error) {
     console.error("[line/webhook] append guest message failed", error);
   }

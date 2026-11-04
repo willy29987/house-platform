@@ -789,13 +789,66 @@ export function LineRentalPreview({
     };
   }, []);
 
+  function urlBase64ToUint8Array(base64String: string) {
+    const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+    const raw = window.atob(base64);
+    const output = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i += 1) output[i] = raw.charCodeAt(i);
+    return output;
+  }
+
   async function enableDesktopNotify() {
-    if (typeof Notification === "undefined") {
+    if (typeof Notification === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) {
       setNotifyState("unsupported");
       return;
     }
+
     const permission = await Notification.requestPermission();
     setNotifyState(permission);
+    if (permission !== "granted") return;
+
+    try {
+      const keyRes = await fetch("/api/admin/push/vapid-public-key", { cache: "no-store" });
+      if (!keyRes.ok) throw new Error("vapid key failed");
+      const keyData = (await keyRes.json()) as { publicKey?: string };
+      const publicKey = keyData.publicKey?.trim() || "";
+      if (!publicKey) throw new Error("missing public key");
+
+      const registration = await navigator.serviceWorker.register("/line-cs-sw.js", {
+        scope: "/",
+      });
+      await navigator.serviceWorker.ready;
+
+      const existing = await registration.pushManager.getSubscription();
+      const subscription =
+        existing ||
+        (await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(publicKey),
+        }));
+
+      const json = subscription.toJSON();
+      const endpoint = json.endpoint || "";
+      const p256dh = json.keys?.p256dh || "";
+      const auth = json.keys?.auth || "";
+      if (!endpoint || !p256dh || !auth) throw new Error("invalid subscription");
+
+      const saveRes = await fetch("/api/admin/push/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          endpoint,
+          keys: { p256dh, auth },
+        }),
+      });
+      if (!saveRes.ok) throw new Error("save subscription failed");
+      setNotifyState("granted");
+    } catch (error) {
+      console.warn("[line-cs] enable push failed", error);
+      // 仍保留頁面內通知；背景推播失敗時至少 permission 狀態正確
+      setNotifyState(Notification.permission);
+    }
   }
 
   useEffect(() => {
@@ -972,9 +1025,9 @@ export function LineRentalPreview({
                 ? "bg-emerald-50 text-emerald-800"
                 : "border border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50"
             }`}
-            title="客人新訊息時用瀏覽器通知提醒（需保持客服頁開啟）"
+            title="開啟後，即使關掉客服分頁也能收到客人新訊推播（iPhone 建議加到主畫面）"
           >
-            {notifyState === "granted" ? "通知已開啟" : "開啟新訊提醒"}
+            {notifyState === "granted" ? "背景通知已開啟" : "開啟背景新訊提醒"}
           </button>
         ) : null}
       </div>

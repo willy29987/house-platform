@@ -8,6 +8,8 @@ export const ADMIN_CLOUD_DATA_KEYS = {
   lineGuestPushQueue: "line_guest_push_queue",
   lineRuntimeSecrets: "line_runtime_secrets",
   lineConversations: "line_conversations",
+  adminWebPushVapid: "admin_web_push_vapid",
+  adminWebPushSubscriptions: "admin_web_push_subscriptions",
 } as const;
 
 export type AdminCloudDataKey = (typeof ADMIN_CLOUD_DATA_KEYS)[keyof typeof ADMIN_CLOUD_DATA_KEYS];
