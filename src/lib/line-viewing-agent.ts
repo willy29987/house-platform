@@ -14,6 +14,31 @@ import {
   truncateLineTemplateText,
   type LineMessage,
 } from "@/lib/line-messaging";
+import { buildViewingConfirmedGuestText } from "@/lib/line-viewing-guest-copy";
+import { prisma } from "@/lib/prisma";
+
+async function listingAddressesForCase(caseRecord: LineRentalCase): Promise<string[]> {
+  const ids = caseRecord.picked.map((item) => item.id).filter(Boolean);
+  if (!ids.length || !process.env.DATABASE_URL) return [];
+  try {
+    const rows = await prisma.listing.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, address: true, city: true, district: true },
+    });
+    return ids
+      .map((id) => {
+        const row = rows.find((item) => item.id === id);
+        if (!row) return "";
+        const address = row.address?.trim();
+        if (address) return address;
+        return `${row.city || ""}${row.district || ""}`.trim();
+      })
+      .filter(Boolean);
+  } catch (error) {
+    console.warn("[line-viewing-agent] listingAddressesForCase failed", error);
+    return [];
+  }
+}
 
 export function getViewingAgentUserIds(): string[] {
   const raw = process.env.LINE_VIEWING_AGENT_USER_IDS?.trim() ?? "";
@@ -208,10 +233,11 @@ export async function handleViewingAgentPostback(input: {
       { type: "text", text: `已確認「${when}」。系統會通知客人。` },
     ]);
     if (claimed.case.lineUserId) {
+      const addresses = await listingAddressesForCase(claimed.case);
       await pushLineMessages(claimed.case.lineUserId, [
         {
           type: "text",
-          text: `${when} 可以，同事會再跟你說帶看的人。`,
+          text: buildViewingConfirmedGuestText(when, addresses),
         },
       ]);
     }
@@ -292,8 +318,9 @@ async function handleGuestAccept(input: {
     requestedWhen: when,
     summaryText: `客人已接受業務改約時間（${when}）。`,
   });
+  const addresses = await listingAddressesForCase(caseRecord);
   await replyLineMessages(input.replyToken, [
-    { type: "text", text: `好，已改為「${when}」。同事會再跟你說帶看細節。` },
+    { type: "text", text: buildViewingConfirmedGuestText(when, addresses) },
   ]);
   const agentId = updated?.handledByAgentLineUserId;
   if (agentId) {

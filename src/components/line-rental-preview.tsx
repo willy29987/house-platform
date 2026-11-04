@@ -10,6 +10,10 @@ import type {
 import type { LineRentalCase } from "@/lib/line-rental-cases";
 import type { GuestSession } from "@/lib/line-guest-sessions";
 import {
+  buildViewingConfirmedGuestText,
+  VIEWING_ASK_OTHER_TIME_TEXT,
+} from "@/lib/line-viewing-guest-copy";
+import {
   emptyViewingSchedule,
   ViewingSchedulePicker,
   type ViewingScheduleValue,
@@ -475,7 +479,7 @@ function buildStaffGuests(listings: RentalMatchListing[]): StaffGuest[] {
         name: "黃先生",
         when: "2026/10/30 上午 9:00–12:00",
         pet: "沒有",
-        staff: "2026/10/30 上午 9:00–12:00 可以，同事會再跟你說帶看的人。",
+        staff: "2026/10/30 上午 9:00–12:00 可以幫您安排帶看～\n\n直接到這邊就可以嘍～感謝您。",
       }),
     }),
   ];
@@ -1010,9 +1014,19 @@ export function LineRentalPreview({
     });
   }
 
+  function addressesForGuest(guest: StaffGuest): string[] {
+    return guest.picked
+      .map((item) => {
+        const listing = listings.find((row) => row.id === item.id);
+        if (!listing) return "";
+        return listing.address?.trim() || `${listing.city || ""}${listing.district || ""}`.trim();
+      })
+      .filter(Boolean);
+  }
+
   function confirmTime(guest: StaffGuest) {
     const when = guest.proposedWhen || guest.requestedWhen;
-    const text = `${when} 可以，同事會再跟你說帶看的人。`;
+    const text = buildViewingConfirmedGuestText(when, addressesForGuest(guest));
     const id = lineId.current++;
     const at = formatLineClock(new Date().toISOString());
     patchGuest(guest.id, (current) =>
@@ -1028,17 +1042,37 @@ export function LineRentalPreview({
     setEditingTime(false);
   }
 
-  function sendNewTime(guest: StaffGuest) {
-    const when = formatViewingRange(schedule.date, schedule.start);
-    if (!when) return;
+  /** 客服點「改時間」：直接請客人另提方便時段 */
+  function askOtherTime(guest: StaffGuest) {
+    const text = VIEWING_ASK_OTHER_TIME_TEXT;
     const id = lineId.current++;
     const at = formatLineClock(new Date().toISOString());
-    const text = `原本的時間暫無法安排，改 ${when} 可以嗎？`;
     patchGuest(guest.id, (current) =>
       attachPipelineAndReply({
         ...current,
         status: "reschedule_sent",
-        proposedWhen: when,
+        proposedWhen: "",
+        lines: [...current.lines, { id, from: "staff", text, at }],
+      }),
+    );
+    pushStaffLine(guest, text, id);
+    setEditingTime(false);
+    setSchedule(emptyViewingSchedule());
+  }
+
+  function sendNewTime(guest: StaffGuest) {
+    const when = formatViewingRange(schedule.date, schedule.start);
+    if (!when) return;
+    // 客服另選時間後確認：與「可以這個時間」同句式，帶入新時間
+    const text = buildViewingConfirmedGuestText(when, addressesForGuest(guest));
+    const id = lineId.current++;
+    const at = formatLineClock(new Date().toISOString());
+    patchGuest(guest.id, (current) =>
+      attachPipelineAndReply({
+        ...current,
+        status: "confirmed",
+        requestedWhen: when,
+        proposedWhen: "",
         lines: [...current.lines, { id, from: "staff", text, at }],
       }),
     );
@@ -1230,6 +1264,7 @@ export function LineRentalPreview({
                     schedule={schedule}
                     today={today}
                     onConfirm={() => confirmTime(selected)}
+                    onAskOtherTime={() => askOtherTime(selected)}
                     onStartEdit={() => {
                       setEditingTime(true);
                       setSchedule(emptyViewingSchedule());
@@ -1366,6 +1401,7 @@ export function LineRentalPreview({
               schedule={schedule}
               today={today}
               onConfirm={() => confirmTime(selected)}
+              onAskOtherTime={() => askOtherTime(selected)}
               onStartEdit={() => {
                 setEditingTime(true);
                 setSchedule(emptyViewingSchedule());
@@ -1393,6 +1429,7 @@ function GuestDecisionPanel({
   schedule,
   today,
   onConfirm,
+  onAskOtherTime,
   onStartEdit,
   onCancelEdit,
   onScheduleChange,
@@ -1404,6 +1441,7 @@ function GuestDecisionPanel({
   schedule: ViewingScheduleValue;
   today: string;
   onConfirm: () => void;
+  onAskOtherTime: () => void;
   onStartEdit: () => void;
   onCancelEdit: () => void;
   onScheduleChange: (next: ViewingScheduleValue) => void;
@@ -1476,7 +1514,7 @@ function GuestDecisionPanel({
               </button>
               <button
                 type="button"
-                onClick={onStartEdit}
+                onClick={onAskOtherTime}
                 className="rounded-full border border-zinc-300 bg-white px-3 py-2 text-sm font-semibold text-zinc-800"
               >
                 改時間
@@ -1493,7 +1531,7 @@ function GuestDecisionPanel({
           {!editingTime ? (
             <button
               type="button"
-              onClick={onStartEdit}
+              onClick={onAskOtherTime}
               className="w-full rounded-full border border-zinc-300 bg-white px-3 py-2 text-sm font-semibold text-zinc-800"
             >
               改時間

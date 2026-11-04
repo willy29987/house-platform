@@ -26,6 +26,7 @@ import {
   type LineMessageAction,
 } from "@/lib/line-messaging";
 import { appendLineRentalCase } from "@/lib/line-rental-cases";
+import { VIEWING_SUBMIT_ACK_TEXT } from "@/lib/line-viewing-guest-copy";
 import { notifyAgentsOfNewViewing } from "@/lib/line-viewing-agent";
 
 const ROOM_OPTS = [
@@ -442,17 +443,13 @@ export async function completeGuestLiffPick(input: {
   session.step = "done";
   await saveGuestSession(session);
 
-  const confirmText = [
-    "已收到你的看屋偏好，先幫你整理如下：",
-    "",
-    formatGuestPickSummary(session),
-    "",
-    "時間需同事確認後會再回覆你。",
-  ].join("\n");
+  const confirmText = VIEWING_SUBMIT_ACK_TEXT;
   const followUpMessages: LineMessage[] = [{ type: "text", text: confirmText }];
 
-  // 客人端 sendMessages 已會把完整預約貼進對話；這裡不強制 push，避免扣額度與重複追問
-  const pushed = await pushLineMessages(session.lineUserId, followUpMessages);
+  const pushed = await pushLineMessages(session.lineUserId, followUpMessages, {
+    force: true,
+    logAs: "bot",
+  });
   if (!pushed.sent) {
     console.warn("[line-guest-flow] push after LIFF pick failed", pushed);
   }

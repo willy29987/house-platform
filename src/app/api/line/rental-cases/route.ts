@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getCurrentAdmin } from "@/lib/admin-auth";
 import { appendLineRentalCase, readLineRentalCases } from "@/lib/line-rental-cases";
+import { pushLineMessages } from "@/lib/line-messaging";
+import { VIEWING_SUBMIT_ACK_TEXT } from "@/lib/line-viewing-guest-copy";
 import { getViewingAgentUserIds, notifyAgentsOfNewViewing } from "@/lib/line-viewing-agent";
 
 export const dynamic = "force-dynamic";
@@ -108,9 +110,18 @@ export async function POST(request: Request) {
         ...listingLines,
       ].join("\n");
 
-    // 對客人不做 push（避免扣群發額度）；對話內容改由 LIFF sendMessages／oaMessage 客人端傳送
-    const pushSent = false;
-    const pushReason = skipGuestPush ? "skipped_client_delivery" : "guest_push_disabled";
+    // 預約摘要由 LIFF sendMessages 進對話；這裡只補一則「稍等確認」自動回覆
+    let pushSent = false;
+    let pushReason = skipGuestPush ? "skipped_client_delivery" : "guest_push_disabled";
+    if (created.lineUserId) {
+      const ack = await pushLineMessages(
+        created.lineUserId,
+        [{ type: "text", text: VIEWING_SUBMIT_ACK_TEXT }],
+        { force: true, logAs: "bot" },
+      );
+      pushSent = ack.sent;
+      pushReason = ack.sent ? "ack_ok" : ("reason" in ack ? String(ack.reason) : "ack_failed");
+    }
 
     const notify = await notifyAgentsOfNewViewing(created);
 
