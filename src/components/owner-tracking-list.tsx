@@ -1251,6 +1251,8 @@ const CaseRow = memo(function CaseRow({
     >
       <Link
         href={caseHref}
+        target="_blank"
+        rel="noopener noreferrer"
         className="absolute inset-0 z-0"
         aria-label={`查看案件：${item.address || item.ownerName}`}
       />

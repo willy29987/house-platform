@@ -62,6 +62,8 @@ export function OwnerTrackingUpcomingRelease({
               </span>
               <Link
                 href={href}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="min-w-0 flex-1 truncate font-semibold text-zinc-900 hover:text-[#0b2545] hover:underline"
               >
                 {formatOwnerCaseAddress(c) || c.ownerName || "—"}
