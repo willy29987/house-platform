@@ -48,6 +48,9 @@ function liffUrlWithListing(listingId?: string) {
   return `${base}${join}listingId=${encodeURIComponent(listingId)}`;
 }
 
+/** 暫時下架：貼 591 連結仍建案件進客服，但不自動回客人話術 */
+const DISABLE_591_LINK_AUTO_REPLY = true;
+
 export async function handle591LinkInquiry(input: {
   text: string;
   lineUserId: string | null;
@@ -85,23 +88,25 @@ export async function handle591LinkInquiry(input: {
 
     return {
       caseRecord: created,
-      messages: [
-        {
-          type: "template",
-          altText: `「${listing.title}」目前可以安排看屋`,
-          template: {
-            type: "buttons",
-            text: `收到連結了。「${listing.title}」目前可以安排看屋，點下方選時間即可。`,
-            actions: [
-              {
-                type: "uri",
-                label: "選看屋時間",
-                uri: liffUrlWithListing(listing.id),
+      messages: DISABLE_591_LINK_AUTO_REPLY
+        ? []
+        : [
+            {
+              type: "template",
+              altText: `「${listing.title}」目前可以安排看屋`,
+              template: {
+                type: "buttons",
+                text: `收到連結了。「${listing.title}」目前可以安排看屋，點下方選時間即可。`,
+                actions: [
+                  {
+                    type: "uri",
+                    label: "選看屋時間",
+                    uri: liffUrlWithListing(listing.id),
+                  },
+                ],
               },
-            ],
-          },
-        },
-      ],
+            },
+          ],
     };
   }
 
@@ -129,17 +134,19 @@ export async function handle591LinkInquiry(input: {
 
     return {
       caseRecord: created,
-      messages: [
-        {
-          type: "template",
-          altText: "這間目前無法安排看屋",
-          template: {
-            type: "buttons",
-            text: `這間「${listing.title}」目前無法安排看屋。需要我幫你找類似條件的房子嗎？`,
-            actions: [{ type: "uri", label: "開始找房", uri: liffHome }],
-          },
-        },
-      ],
+      messages: DISABLE_591_LINK_AUTO_REPLY
+        ? []
+        : [
+            {
+              type: "template",
+              altText: "這間目前無法安排看屋",
+              template: {
+                type: "buttons",
+                text: `這間「${listing.title}」目前無法安排看屋。需要我幫你找類似條件的房子嗎？`,
+                actions: [{ type: "uri", label: "開始找房", uri: liffHome }],
+              },
+            },
+          ],
     };
   }
 
@@ -166,12 +173,15 @@ export async function handle591LinkInquiry(input: {
 
   return {
     caseRecord: created,
-    messages: [
-      {
-        type: "text",
-        text: "收到你的 591 連結了，我這邊先轉給同事確認這間能不能看，稍後回你。若方便也可以再說一下希望看屋的時段。",
-      },
-    ],
+    // 暫時下架自動回覆；連結仍會進客服收件匣，改由人工回
+    messages: DISABLE_591_LINK_AUTO_REPLY
+      ? []
+      : [
+          {
+            type: "text",
+            text: "收到你的 591 連結了，我這邊先轉給同事確認這間能不能看，稍後回你。若方便也可以再說一下希望看屋的時段。",
+          },
+        ],
   };
 }
 
