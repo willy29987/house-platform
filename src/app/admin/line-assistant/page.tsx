@@ -22,11 +22,11 @@ export default async function LineAssistantPreviewPage() {
   ]);
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-3">
-      <div className="flex flex-wrap items-end justify-between gap-2">
+    <div className="flex w-full min-h-[calc(100dvh-7.5rem)] flex-col gap-2">
+      <div className="flex shrink-0 flex-wrap items-end justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold text-zinc-900">租屋配對客服</h1>
-          <p className="mt-1 text-sm text-zinc-500">
+          <h1 className="text-xl font-bold text-zinc-900 sm:text-2xl">租屋配對客服</h1>
+          <p className="mt-0.5 text-sm text-zinc-500">
             {lineAccount.basicId || "官方帳號"}
             {" · "}
             對話內容以 LINE webhook 真實訊息為準（與聊天室同步）
@@ -44,14 +44,16 @@ export default async function LineAssistantPreviewPage() {
           </a>
         ) : null}
       </div>
-      <LineAssistantWorkbench
-        listings={cards}
-        lineBasicId={lineAccount.basicId}
-        staffDisplayName={current.displayName?.trim() || current.username}
-        initialConversations={conversations}
-        initialCases={cases}
-        initialSessions={sessions}
-      />
+      <div className="min-h-0 flex-1">
+        <LineAssistantWorkbench
+          listings={cards}
+          lineBasicId={lineAccount.basicId}
+          staffDisplayName={current.displayName?.trim() || current.username}
+          initialConversations={conversations}
+          initialCases={cases}
+          initialSessions={sessions}
+        />
+      </div>
     </div>
   );
 }

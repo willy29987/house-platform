@@ -1359,8 +1359,8 @@ export function LineRentalPreview({
     LINE_CS_STICKER_PACKS[0];
 
   return (
-    <div className="flex h-[min(56rem,calc(100dvh-7rem))] min-h-[34rem] flex-col overflow-hidden rounded-lg border border-[#e0e0e0] bg-[#f4f4f4] shadow-sm">
-      <div className="flex gap-1 overflow-x-auto border-b border-[#e8e8e8] bg-white px-3 py-2">
+    <div className="flex h-full min-h-[32rem] flex-col overflow-hidden rounded-xl border border-[#c9ced6] bg-[#edf0f5] shadow-sm">
+      <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-[#d8dde6] bg-white px-2 py-2">
         {FILTERS.map((item) => {
           const count = guests.filter((guest) => matchesFilter(guest, item.id)).length;
           const active = filter === item.id;
@@ -1374,14 +1374,12 @@ export function LineRentalPreview({
                 setDetailsOpen(false);
                 setStickerOpen(false);
               }}
-              className={`shrink-0 rounded px-3 py-1.5 text-[13px] font-semibold transition-colors ${
-                active
-                  ? "bg-[#06c755] text-white"
-                  : "bg-transparent text-[#555] hover:bg-[#f5f5f5]"
+              className={`shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold ${
+                active ? "bg-[#06c755] text-white" : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
               }`}
             >
               {item.label}
-              <span className={`ml-1 tabular-nums ${active ? "text-white/85" : "text-[#999]"}`}>
+              <span className={`ml-1 tabular-nums ${active ? "text-white/80" : "text-zinc-500"}`}>
                 {count}
               </span>
             </button>
@@ -1391,10 +1389,10 @@ export function LineRentalPreview({
           <button
             type="button"
             onClick={() => void enableDesktopNotify()}
-            className={`ml-auto shrink-0 rounded px-3 py-1.5 text-xs font-medium ${
+            className={`ml-auto shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold ${
               notifyState === "granted"
-                ? "bg-[#eefaf2] text-[#1a7a3c]"
-                : "text-[#666] hover:bg-[#f5f5f5]"
+                ? "bg-emerald-50 text-emerald-800"
+                : "border border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50"
             }`}
             title="開啟後，即使關掉客服分頁也能收到客人新訊推播"
           >
@@ -1403,11 +1401,10 @@ export function LineRentalPreview({
         ) : null}
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 max-lg:auto-rows-auto lg:grid-cols-[17.5rem_minmax(0,1fr)_18rem]">
-        {/* 左側名單 */}
-        <ul className="max-h-40 overflow-y-auto border-b border-[#ebebeb] bg-white max-lg:max-h-40 lg:max-h-none lg:border-r lg:border-b-0">
+      <div className="grid min-h-0 flex-1 grid-cols-1 max-lg:auto-rows-auto lg:grid-cols-[minmax(16rem,20%)_minmax(0,1fr)_minmax(18rem,22%)]">
+        <ul className="max-h-40 overflow-y-auto border-b border-[#d8dde6] bg-white max-lg:max-h-40 lg:max-h-none lg:border-r lg:border-b-0">
           {visible.length === 0 ? (
-            <li className="px-4 py-10 text-center text-sm text-[#999]">這個篩選目前沒有客人</li>
+            <li className="px-4 py-8 text-center text-sm text-zinc-500">這個篩選目前沒有客人</li>
           ) : (
             visible.map((guest) => {
               const active = guest.id === selected?.id;
@@ -1419,33 +1416,36 @@ export function LineRentalPreview({
                 guest.lines[guest.lines.length - 1]?.at ||
                 (guest.createdAt ? formatLineClock(guest.createdAt) : "");
               return (
-                <li key={guest.id}>
+                <li key={guest.id} className="border-b border-zinc-100 last:border-b-0">
                   <button
                     type="button"
                     onClick={() => selectGuest(guest.id)}
-                    className={`flex w-full items-start gap-3 border-b border-[#f0f0f0] px-3 py-3 text-left transition-colors ${
-                      active ? "bg-[#f0faf4]" : "hover:bg-[#fafafa]"
+                    className={`flex w-full items-center gap-3 px-3 py-3 text-left ${
+                      active ? "bg-[#e7f8ee]" : "hover:bg-zinc-50"
                     }`}
                   >
-                    <span className="relative mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#06c755] text-sm font-bold text-white">
+                    <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#06c755] text-sm font-bold text-white">
                       {guest.lineName.slice(0, 1)}
-                      {guest.replyStatus === "awaiting_staff" ? (
-                        <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-[#06c755]" />
+                      {guest.watching ? (
+                        <span
+                          title="之後新案會問"
+                          className="absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-sky-500"
+                        />
                       ) : null}
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-2">
-                        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-[#222]">
+                        <span className="min-w-0 flex-1 truncate text-sm font-bold text-zinc-900">
                           {guest.lineName}
                         </span>
                         {clock ? (
-                          <span className="shrink-0 text-[11px] text-[#aaa]">{clock}</span>
+                          <span className="shrink-0 text-[11px] text-zinc-400">{clock}</span>
                         ) : null}
                       </span>
-                      <span className="mt-0.5 block truncate text-[12px] text-[#888]">{preview}</span>
+                      <span className="mt-0.5 block truncate text-xs text-zinc-500">{preview}</span>
                     </span>
                     <span
-                      className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold ${statusPill(guest.replyStatus)}`}
+                      className={`ml-auto shrink-0 self-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${statusPill(guest.replyStatus)}`}
                     >
                       {shortReplyStatus(guest.replyStatus)}
                     </span>
@@ -1456,17 +1456,16 @@ export function LineRentalPreview({
           )}
         </ul>
 
-        {/* 中間對話 */}
         {selected ? (
-          <section className="flex min-h-0 flex-col overflow-hidden border-b border-[#ebebeb] bg-[#f7f7f7] lg:border-b-0 lg:border-r">
-            <header className="shrink-0 border-b border-[#ebebeb] bg-white px-4 py-3">
+          <section className="flex min-h-0 flex-col overflow-hidden border-b border-[#d8dde6] bg-[#7494c0] lg:border-b-0 lg:border-r lg:border-[#d8dde6]">
+            <header className="shrink-0 border-b border-black/10 bg-[#432e1f] px-3 py-2.5 text-white">
               <div className="flex items-center gap-3">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#06c755] text-sm font-bold text-white">
                   {selected.lineName.slice(0, 1)}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-[15px] font-semibold text-[#222]">{selected.lineName}</p>
-                  <p className="truncate text-[11px] text-[#888]">
+                  <p className="truncate text-[15px] font-semibold leading-tight">{selected.lineName}</p>
+                  <p className="truncate text-[11px] text-white/65">
                     {shortReplyStatus(selected.replyStatus)}
                     {selected.pipeline !== "none"
                       ? ` · ${selected.pipeline === "active" ? "進行中" : selected.pipeline === "pending" ? "待確認" : "已確認"}`
@@ -1482,16 +1481,13 @@ export function LineRentalPreview({
                     setDetailsOpen((open) => !open);
                     setStickerOpen(false);
                   }}
-                  className="shrink-0 rounded border border-[#e0e0e0] bg-white px-2.5 py-1 text-xs font-medium text-[#555] hover:bg-[#fafafa] lg:hidden"
+                  className="shrink-0 rounded-md bg-white/10 px-2.5 py-1 text-xs font-medium text-white hover:bg-white/15 lg:hidden"
                 >
                   {detailsOpen ? "收起" : "物件／時間"}
                 </button>
               </div>
-              <div className="mt-2 rounded bg-[#f3f4f6] px-3 py-1.5 text-[12px] text-[#666]">
-                人工回覆中 · 請從此頁傳送，官方帳號 App 回覆不會同步到這裡
-              </div>
               {detailsOpen ? (
-                <div className="mt-3 rounded-lg border border-[#ebebeb] bg-white p-3 lg:hidden">
+                <div className="mt-3 rounded-lg bg-white p-3 text-zinc-900 lg:hidden">
                   <GuestDecisionPanel
                     guest={selected}
                     needsConfirm={Boolean(needsConfirm)}
@@ -1515,11 +1511,11 @@ export function LineRentalPreview({
               ) : null}
             </header>
 
-            <div ref={chatScrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-              <div className="mx-auto flex w-full max-w-2xl flex-col gap-3">
+            <div ref={chatScrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+              <div className="mx-auto flex w-full max-w-3xl flex-col gap-3">
                 {selected.createdAt ? (
                   <div className="flex justify-center py-1">
-                    <span className="rounded bg-[#e8e8e8] px-3 py-0.5 text-[11px] font-medium text-[#666]">
+                    <span className="rounded-full bg-black/20 px-3 py-0.5 text-[11px] font-medium text-white/95">
                       {formatLineDayLabel(selected.createdAt)}
                     </span>
                   </div>
@@ -1535,7 +1531,7 @@ export function LineRentalPreview({
                   return (
                     <div
                       key={line.id}
-                      className={`flex items-end gap-2 ${fromGuest ? "justify-start" : "justify-end"}`}
+                      className={`flex items-end gap-1.5 ${fromGuest ? "justify-start" : "justify-end"}`}
                     >
                       {fromGuest ? (
                         <span className="mb-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#06c755] text-xs font-bold text-white">
@@ -1543,30 +1539,30 @@ export function LineRentalPreview({
                         </span>
                       ) : null}
                       {!fromGuest && line.at ? (
-                        <span className="mb-0.5 shrink-0 text-[10px] leading-none text-[#aaa]">
+                        <span className="mb-0.5 shrink-0 text-[10px] leading-none text-white/80">
                           {line.at}
                         </span>
                       ) : null}
                       <div
-                        className={`max-w-[min(72%,24rem)] break-words text-[13.5px] leading-[1.55] text-[#222] ${
+                        className={`max-w-[min(78%,28rem)] break-words text-[13.5px] leading-[1.55] text-zinc-900 ${
                           mediaBubble
-                            ? "bg-transparent p-0"
-                            : `whitespace-pre-wrap border px-3 py-2 ${
+                            ? "bg-transparent p-0 shadow-none"
+                            : `whitespace-pre-wrap px-3 py-2 shadow-sm ${
                                 fromGuest
-                                  ? "rounded-lg rounded-bl-sm border-[#e5e5e5] bg-white"
-                                  : "rounded-lg rounded-br-sm border-[#c8dff5] bg-[#d6ebff]"
+                                  ? "rounded-[18px] rounded-bl-[4px] bg-white"
+                                  : "rounded-[18px] rounded-br-[4px] bg-[#95ec69]"
                               }`
                         }`}
                       >
                         {line.from === "staff" && !mediaBubble ? (
-                          <span className="mb-1 block text-[10px] font-semibold text-[#2f6fad]">
+                          <span className="mb-1 block text-[10px] font-semibold text-[#067a36]">
                             {staffDisplayName}
                           </span>
                         ) : null}
                         <LineMessageBody line={line} />
                       </div>
                       {fromGuest && line.at ? (
-                        <span className="mb-0.5 shrink-0 text-[10px] leading-none text-[#aaa]">
+                        <span className="mb-0.5 shrink-0 text-[10px] leading-none text-white/80">
                           {line.at}
                         </span>
                       ) : null}
@@ -1726,15 +1722,14 @@ export function LineRentalPreview({
             </form>
           </section>
         ) : (
-          <div className="flex items-center justify-center border-b border-[#ebebeb] bg-[#f7f7f7] px-4 text-sm text-[#888] lg:border-b-0 lg:border-r">
-            選左邊的客人查看對話
+          <div className="flex items-center justify-center border-b border-zinc-100 bg-[#7494c0] px-4 text-sm text-white/90 lg:border-b-0 lg:border-r">
+            選左邊的客人查看 LINE 對話
           </div>
         )}
 
-        {/* 右側：物件選擇與時間 */}
         <aside
           ref={rightPanelRef}
-          className="hidden min-h-0 overflow-y-auto border-l border-[#ebebeb] bg-white px-4 py-4 lg:block"
+          className="hidden min-h-0 overflow-y-auto bg-white px-4 py-4 lg:block"
         >
           {selected ? (
             <GuestDecisionPanel
@@ -1757,7 +1752,7 @@ export function LineRentalPreview({
               onSendNewTime={() => sendNewTime(selected)}
             />
           ) : (
-            <p className="text-sm text-[#999]">選客人後，這裡顯示物件選擇與時間。</p>
+            <p className="text-sm text-zinc-500">選客人後，這裡會顯示物件選擇與時間。</p>
           )}
         </aside>
       </div>
@@ -1825,140 +1820,149 @@ function GuestDecisionPanel({
     />
   );
 
+  const listingRows = needsConfirm ? orderedPicked : guest.picked;
+
   return (
-    <div className="space-y-0 text-[13px] text-[#333]">
-      <div className="border-b border-[#f0f0f0] pb-4">
-        <div className="flex items-center gap-3">
-          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#06c755] text-base font-bold text-white">
-            {guest.lineName.slice(0, 1)}
-          </span>
-          <div className="min-w-0">
-            <p className="truncate text-[15px] font-semibold text-[#222]">{guest.lineName}</p>
-            <p className="mt-0.5 text-[11px] text-[#888]">
-              {shortReplyStatus(guest.replyStatus)}
-              {guest.pipeline !== "none"
-                ? ` · ${guest.pipeline === "active" ? "進行中" : guest.pipeline === "pending" ? "待確認" : "已確認"}`
-                : ""}
-              {guest.watching ? " · 之後新案會問" : ""}
-            </p>
-          </div>
-        </div>
+    <div className="space-y-4 text-sm">
+      <div>
+        <p className="text-xs font-semibold text-zinc-500">這位客人</p>
+        <p className="mt-1 font-bold text-zinc-900">{guest.lineName}</p>
+        <p className="mt-0.5 text-xs text-zinc-500">
+          {shortReplyStatus(guest.replyStatus)}
+          {guest.pipeline !== "none"
+            ? ` · ${guest.pipeline === "active" ? "進行中" : guest.pipeline === "pending" ? "待確認" : "已確認"}`
+            : ""}
+          {guest.watching ? " · 之後新案會問" : ""}
+          {guest.followedAt ? ` · 加入 ${formatLineDayLabel(guest.followedAt)}` : ""}
+          {guest.unfollowedAt ? " · 已封鎖／刪除" : ""}
+        </p>
       </div>
 
-      <section className="border-b border-[#f0f0f0] py-4">
-        <p className="text-[12px] font-semibold text-[#888]">基本資料</p>
-        <dl className="mt-2 space-y-1.5">
-          {(
-            [
-              ["電話", guest.phone || "未填"],
-              ["人數", `${guest.peopleCount || 1} 人`],
-              ["職業", guest.occupation || "未填"],
-              ["預計入住", guest.moveInDate || "未填"],
-              ["國籍", guest.nationality || "未填"],
-              ["寵物", guest.petNote || "未填"],
-              ...(guest.criteriaText ? [["條件", guest.criteriaText] as const] : []),
-              ...(guest.followedAt
-                ? [["加入", formatLineDayLabel(guest.followedAt)] as const]
-                : []),
-            ] as Array<[string, string]>
-          ).map(([label, value]) => (
-            <div key={label} className="flex gap-2">
-              <dt className="w-14 shrink-0 text-[#999]">{label}</dt>
-              <dd className="min-w-0 break-words font-medium text-[#333]">{value}</dd>
+      <div>
+        <p className="text-xs font-semibold text-zinc-500">基本資料</p>
+        <dl className="mt-1 space-y-1 text-zinc-800">
+          <div className="flex gap-2">
+            <dt className="w-16 shrink-0 text-zinc-500">電話</dt>
+            <dd className="min-w-0 break-all font-medium">{guest.phone || "未填"}</dd>
+          </div>
+          <div className="flex gap-2">
+            <dt className="w-16 shrink-0 text-zinc-500">人數</dt>
+            <dd className="min-w-0 font-medium">{guest.peopleCount || 1} 人</dd>
+          </div>
+          <div className="flex gap-2">
+            <dt className="w-16 shrink-0 text-zinc-500">職業</dt>
+            <dd className="min-w-0 break-words font-medium">{guest.occupation || "未填"}</dd>
+          </div>
+          <div className="flex gap-2">
+            <dt className="w-16 shrink-0 text-zinc-500">預計入住</dt>
+            <dd className="min-w-0 font-medium">{guest.moveInDate || "未填"}</dd>
+          </div>
+          <div className="flex gap-2">
+            <dt className="w-16 shrink-0 text-zinc-500">國籍</dt>
+            <dd className="min-w-0 font-medium">{guest.nationality || "未填"}</dd>
+          </div>
+          <div className="flex gap-2">
+            <dt className="w-16 shrink-0 text-zinc-500">寵物</dt>
+            <dd className="min-w-0 break-words font-medium">{guest.petNote || "未填"}</dd>
+          </div>
+          {guest.criteriaText ? (
+            <div className="flex gap-2">
+              <dt className="w-16 shrink-0 text-zinc-500">條件</dt>
+              <dd className="min-w-0 break-words font-medium">{guest.criteriaText}</dd>
             </div>
-          ))}
+          ) : null}
         </dl>
-      </section>
+      </div>
 
-      <section className="border-b border-[#f0f0f0] py-4">
+      {/* 物件選擇 ＋ 帶看順序（待確認時可調順序；標題可點進廣告） */}
+      <section>
         <div className="flex items-center justify-between gap-2">
-          <p className="text-[12px] font-semibold text-[#888]">物件選擇</p>
-          <span className="text-[11px] text-[#aaa]">{guest.picked.length} 筆</span>
+          <p className="text-xs font-semibold text-zinc-500">
+            {needsConfirm ? "待確認看屋 · 物件選擇" : "物件選擇"}
+          </p>
+          <span className="text-[11px] text-zinc-400">{listingRows.length} 筆</span>
         </div>
-        <div className="mt-2 space-y-1.5">
-          {guest.picked.length ? (
-            guest.picked.map((item) => (
-              <a
-                key={item.id}
-                href={`/listings/${item.id}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block rounded-md border border-[#f0f0f0] px-2.5 py-2 text-[#1e3a8a] hover:border-[#06c755]/40 hover:bg-[#f8fdf9]"
-              >
-                <span className="block truncate text-[13px] font-medium">{item.title}</span>
-                <span className="text-[11px] text-[#888]">{formatRent(item.price)}</span>
-              </a>
-            ))
-          ) : (
-            <p className="text-[13px] text-[#aaa]">還沒勾選物件</p>
-          )}
-        </div>
-      </section>
-
-      <section className="border-b border-[#f0f0f0] py-4">
-        <p className="text-[12px] font-semibold text-[#888]">時間</p>
-        <p className="mt-2 text-[14px] font-semibold text-[#222]">
-          {guest.requestedWhen || "還沒選"}
-        </p>
-        {guest.proposedWhen ? (
-          <p className="mt-1 text-[12px] text-[#2f6fad]">改問 {guest.proposedWhen}</p>
+        {needsConfirm ? (
+          <p className="mt-1 text-[11px] text-zinc-500">帶看順序（標題 → 網址 → 地圖）</p>
         ) : null}
-      </section>
-
-      {needsConfirm ? (
-        <section className="space-y-3 py-4">
-          <p className="text-[12px] font-semibold text-[#1a7a3c]">待確認看屋</p>
-          {orderedPicked.length > 0 ? (
-            <div className="space-y-2">
-              <p className="text-[11px] text-[#888]">帶看順序（標題 → 網址 → 地圖）</p>
-              <ul className="space-y-1.5">
-                {orderedPicked.map((item, index) => (
-                  <li
-                    key={item.id}
-                    className="flex items-center gap-2 rounded-md border border-[#ebebeb] bg-[#fafafa] px-2 py-1.5"
-                  >
-                    <span className="w-5 shrink-0 text-center text-[11px] font-bold text-[#999]">
-                      {index + 1}
-                    </span>
-                    <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-[#222]">
-                      {item.title}
-                    </span>
+        <div className="mt-2 space-y-1.5">
+          {listingRows.length ? (
+            listingRows.map((item, index) => (
+              <div
+                key={item.id}
+                className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-[#fafafa] px-2.5 py-2"
+              >
+                {needsConfirm ? (
+                  <span className="w-5 shrink-0 text-center text-[11px] font-bold text-zinc-500">
+                    {index + 1}
+                  </span>
+                ) : null}
+                <a
+                  href={`/listings/${item.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="min-w-0 flex-1 hover:underline"
+                >
+                  <span className="block truncate text-[13px] font-medium text-[#1e3a8a]">
+                    {item.title}
+                  </span>
+                  <span className="text-[11px] text-zinc-500">{formatRent(item.price)}</span>
+                </a>
+                {needsConfirm ? (
+                  <div className="flex shrink-0 gap-1">
                     <button
                       type="button"
                       aria-label="上移"
                       disabled={index === 0}
                       onClick={() => movePicked(item.id, -1)}
-                      className="rounded border border-[#e5e5e5] bg-white px-1.5 py-0.5 text-[11px] text-[#555] disabled:opacity-30"
+                      className="rounded border border-zinc-200 bg-white px-1.5 py-0.5 text-[11px] font-semibold text-zinc-700 disabled:opacity-30"
                     >
                       ↑
                     </button>
                     <button
                       type="button"
                       aria-label="下移"
-                      disabled={index === orderedPicked.length - 1}
+                      disabled={index === listingRows.length - 1}
                       onClick={() => movePicked(item.id, 1)}
-                      className="rounded border border-[#e5e5e5] bg-white px-1.5 py-0.5 text-[11px] text-[#555] disabled:opacity-30"
+                      className="rounded border border-zinc-200 bg-white px-1.5 py-0.5 text-[11px] font-semibold text-zinc-700 disabled:opacity-30"
                     >
                       ↓
                     </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
+                  </div>
+                ) : null}
+              </div>
+            ))
+          ) : (
+            <p className="text-sm text-zinc-400">還沒勾選物件</p>
+          )}
+        </div>
+      </section>
+
+      <section>
+        <p className="text-xs font-semibold text-zinc-500">時間</p>
+        <p className="mt-1 text-[14px] font-semibold text-[#0b2545]">
+          {guest.requestedWhen || "還沒選"}
+        </p>
+        {guest.proposedWhen ? (
+          <p className="mt-1 text-sm text-sky-900">改問 {guest.proposedWhen}</p>
+        ) : null}
+      </section>
+
+      {needsConfirm ? (
+        <section className="space-y-2">
           {!editingTime ? (
             <div className="flex flex-col gap-2">
               <button
                 type="button"
                 onClick={() => onConfirm(orderIds)}
-                className="rounded bg-[#06c755] px-3 py-2 text-[13px] font-semibold text-white hover:bg-[#05b34c]"
+                className="rounded-full bg-[#0b2545] px-3 py-2 text-sm font-semibold text-white"
               >
                 可以這個時間
               </button>
               <button
                 type="button"
                 onClick={onAskOtherTime}
-                className="rounded border border-[#e0e0e0] bg-white px-3 py-2 text-[13px] font-semibold text-[#444] hover:bg-[#fafafa]"
+                className="rounded-full border border-zinc-300 bg-white px-3 py-2 text-sm font-semibold text-zinc-800"
               >
                 改時間
               </button>
@@ -1970,12 +1974,12 @@ function GuestDecisionPanel({
       ) : null}
 
       {guest.status === "confirmed" ? (
-        <section className="space-y-2 py-4">
+        <section className="space-y-2">
           {!editingTime ? (
             <button
               type="button"
               onClick={onAskOtherTime}
-              className="w-full rounded border border-[#e0e0e0] bg-white px-3 py-2 text-[13px] font-semibold text-[#444] hover:bg-[#fafafa]"
+              className="w-full rounded-full border border-zinc-300 bg-white px-3 py-2 text-sm font-semibold text-zinc-800"
             >
               改時間
             </button>

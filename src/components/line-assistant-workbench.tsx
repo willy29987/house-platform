@@ -35,8 +35,8 @@ export function LineAssistantWorkbench({
   const [tab, setTab] = useState<TabId>("staff");
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap gap-1 rounded-full border border-zinc-200 bg-zinc-50 p-1 self-start">
+    <div className="flex h-full min-h-[calc(100dvh-10rem)] flex-col gap-2">
+      <div className="flex shrink-0 flex-wrap gap-1 self-start rounded-full border border-zinc-200 bg-zinc-50 p-1">
         {TABS.map((item) => {
           const on = tab === item.id;
           return (
@@ -54,20 +54,22 @@ export function LineAssistantWorkbench({
         })}
       </div>
 
-      {tab === "staff" ? (
-        <LineRentalPreview
-          listings={listings}
-          lineBasicId={lineBasicId}
-          staffDisplayName={staffDisplayName}
-          initialConversations={initialConversations}
-          initialCases={initialCases}
-          initialSessions={initialSessions}
-        />
-      ) : tab === "guest" ? (
-        <LineGuestChatPreview listings={listings} lineBasicId={lineBasicId} />
-      ) : (
-        <LineNativeChatPreview listings={listings} lineBasicId={lineBasicId} />
-      )}
+      <div className="min-h-0 flex-1">
+        {tab === "staff" ? (
+          <LineRentalPreview
+            listings={listings}
+            lineBasicId={lineBasicId}
+            staffDisplayName={staffDisplayName}
+            initialConversations={initialConversations}
+            initialCases={initialCases}
+            initialSessions={initialSessions}
+          />
+        ) : tab === "guest" ? (
+          <LineGuestChatPreview listings={listings} lineBasicId={lineBasicId} />
+        ) : (
+          <LineNativeChatPreview listings={listings} lineBasicId={lineBasicId} />
+        )}
+      </div>
     </div>
   );
 }
