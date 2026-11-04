@@ -7,7 +7,9 @@ import {
   formatFollowUpWhen,
   formatOwnerCaseAddress,
   emptyOwnerTrackingStore,
+  getOwnerTrackingLocalPersistedAt,
   loadOwnerTrackingStoreLocal,
+  persistOwnerTrackingStoreFromCloud,
   persistOwnerTrackingStoreLocal,
   newId,
   OWNER_TRACKING_STATUS_OPTIONS,
@@ -31,6 +33,7 @@ import {
   hydrateOwnerTrackingStoreOnce,
   invalidateOwnerTrackingHydrateCache,
   pushOwnerTrackingStoreNow,
+  refreshOwnerTrackingFromCloud,
 } from "@/lib/admin-cloud-sync-client";
 import { resolveOwnerCaseEffectiveStatus } from "@/lib/owner-tracking-case-status";
 import {
@@ -82,12 +85,34 @@ export function OwnerTrackingDetail({
     const local = loadOwnerTrackingStoreLocal();
     setStore(local);
     setHydrated(true);
-    void hydrateOwnerTrackingStoreOnce(loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreLocal).then(
+    void hydrateOwnerTrackingStoreOnce(loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreFromCloud).then(
       (next) => {
         setStore(next);
       },
     );
   }, [caseId]);
+
+  /** 手機／電腦切換回來時拉雲端，對齊另一端剛寫的更新進度 */
+  useEffect(() => {
+    if (!hydrated) return;
+    let lastAt = 0;
+    const refresh = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      const now = Date.now();
+      if (now - lastAt < 2500) return;
+      if (now - getOwnerTrackingLocalPersistedAt() < 3000) return;
+      lastAt = now;
+      void refreshOwnerTrackingFromCloud(loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreFromCloud).then(
+        setStore,
+      );
+    };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [hydrated]);
 
   const ownerCase = useMemo(
     () => store.cases.find((c) => c.id === caseId) ?? null,
@@ -221,15 +246,24 @@ export function OwnerTrackingDetail({
     );
     setSubmitting(false);
     window.setTimeout(() => setFlash(null), 3500);
-    void pushOwnerTrackingStoreNow(nextStore).catch(() => {
-      setFlash("已記錄於本機；雲端同步失敗，請稍後重新整理");
-      window.setTimeout(() => setFlash(null), 4000);
-    });
+    void pushOwnerTrackingStoreNow(nextStore)
+      .then((merged) => {
+        setStore(merged);
+      })
+      .catch(() => {
+        setFlash("已記錄於本機；雲端同步失敗，請稍後重新整理");
+        window.setTimeout(() => setFlash(null), 4000);
+      });
   }
 
   function handleDeleteFollowUp(followUpId: string) {
     if (!window.confirm("確定刪除此筆追蹤紀錄？")) return;
-    persist(deleteOwnerFollowUp(store, followUpId));
+    const next = deleteOwnerFollowUp(loadOwnerTrackingStoreLocal(), followUpId);
+    persistLocalOnly(next);
+    void pushOwnerTrackingStoreNow(next, { replace: true }).catch(() => {
+      setFlash("本機已刪；雲端同步失敗，請稍後重新整理");
+      window.setTimeout(() => setFlash(null), 4000);
+    });
     setFlash("已刪除追蹤紀錄");
     window.setTimeout(() => setFlash(null), 2500);
   }

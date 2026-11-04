@@ -6,9 +6,15 @@ import {
   type OwnerTrackingListingChecksStore,
 } from "@/lib/owner-tracking-listing-checks";
 import {
+  mergeOwnerTrackingStoresForCloudWrite,
   normalizeOwnerTrackingStore,
   type OwnerTrackingStore,
 } from "@/lib/owner-tracking-preview";
+
+export type WriteAdminCloudPayloadOptions = {
+  /** 屋主追蹤刪除等需整包覆寫時設 true；預設會與現有雲端聯集合併，避免舊裝置抹掉進度 */
+  replace?: boolean;
+};
 
 function preparePayloadForStorage(key: AdminCloudDataKey, payload: unknown): unknown {
   if (key === ADMIN_CLOUD_DATA_KEYS.ownerTracking && payload && typeof payload === "object") {
@@ -50,12 +56,33 @@ export async function readAdminCloudPayload(key: AdminCloudDataKey): Promise<unk
   return preparePayloadForStorage(key, row.payload);
 }
 
-export async function writeAdminCloudPayload(key: AdminCloudDataKey, payload: unknown): Promise<void> {
+export async function writeAdminCloudPayload(
+  key: AdminCloudDataKey,
+  payload: unknown,
+  opts?: WriteAdminCloudPayloadOptions,
+): Promise<void> {
   const cloud = adminCloudDataDelegate();
   if (!cloud) {
     throw new Error("雲端資料庫未就緒（AdminCloudData）");
   }
-  const toWrite = preparePayloadForStorage(key, payload);
+
+  let toWrite = preparePayloadForStorage(key, payload);
+
+  if (
+    key === ADMIN_CLOUD_DATA_KEYS.ownerTracking &&
+    !opts?.replace &&
+    toWrite &&
+    typeof toWrite === "object"
+  ) {
+    const existing = await readAdminCloudPayload(key);
+    if (existing && typeof existing === "object") {
+      toWrite = mergeOwnerTrackingStoresForCloudWrite(
+        normalizeOwnerTrackingStore(existing as OwnerTrackingStore),
+        normalizeOwnerTrackingStore(toWrite as OwnerTrackingStore),
+      );
+    }
+  }
+
   await cloud.upsert({
     where: { key },
     create: { key, payload: toWrite as Prisma.InputJsonValue },

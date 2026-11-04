@@ -235,15 +235,25 @@ export function getOwnerTrackingLocalPersistedAt(): number {
   return ownerTrackingLocalPersistedAt;
 }
 
-export function persistOwnerTrackingStoreLocal(store: OwnerTrackingStore): void {
+export function persistOwnerTrackingStoreLocal(
+  store: OwnerTrackingStore,
+  opts?: { touchPersistedAt?: boolean },
+): void {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(OWNER_TRACKING_STORAGE_KEY, JSON.stringify(store));
+  // SSR／雲端快取寫回本機時不要觸發「剛編輯」信任窗，否則會誤把舊本機蓋過雲端進度
+  if (opts?.touchPersistedAt === false) return;
   ownerTrackingLocalPersistedAt = Date.now();
   try {
     window.sessionStorage.setItem(OWNER_TRACKING_LOCAL_PERSISTED_AT_KEY, String(ownerTrackingLocalPersistedAt));
   } catch {
     /* ignore quota / private mode */
   }
+}
+
+/** 雲端 hydrate／refresh 寫回本機快取（不啟動本機編輯信任窗） */
+export function persistOwnerTrackingStoreFromCloud(store: OwnerTrackingStore): void {
+  persistOwnerTrackingStoreLocal(store, { touchPersistedAt: false });
 }
 
 export function loadOwnerTrackingStore(): OwnerTrackingStore {
@@ -303,6 +313,60 @@ export function mergeOwnerTrackingStores(
   for (const f of overlay.followUps) {
     followById.set(f.id, f);
   }
+  return normalizeOwnerTrackingStore({
+    cases: [...casesById.values()],
+    followUps: [...followById.values()],
+  });
+}
+
+/**
+ * 雲端 PUT 用合併：保留兩邊的追蹤進度（follow-up 聯集），避免手機／電腦其中一邊
+ * 用舊的整包 localStorage 覆寫、把另一邊剛寫的更新進度抹掉。
+ * 刪除案件請走 replace，不要用此合併。
+ */
+export function mergeOwnerTrackingStoresForCloudWrite(
+  cloud: OwnerTrackingStore,
+  incoming: OwnerTrackingStore,
+): OwnerTrackingStore {
+  const casesById = new Map<string, OwnerCasePreview>();
+  for (const c of cloud.cases) {
+    casesById.set(c.id, c);
+  }
+  for (const incomingCase of incoming.cases) {
+    const existing = casesById.get(incomingCase.id);
+    if (!existing) {
+      casesById.set(incomingCase.id, incomingCase);
+      continue;
+    }
+    const nextContact = pickMergedNextContact(existing, incomingCase, false);
+    const cloudLinkedAt = existing.linkedListingAt || "";
+    const incomingLinkedAt = incomingCase.linkedListingAt || "";
+    const preferIncomingLink =
+      Boolean(incomingCase.linkedListingId.trim()) &&
+      (!existing.linkedListingId.trim() || incomingLinkedAt >= cloudLinkedAt);
+    casesById.set(incomingCase.id, {
+      ...existing,
+      ...incomingCase,
+      nextContactDate: nextContact.nextContactDate,
+      nextContactUpdatedAt: nextContact.nextContactUpdatedAt,
+      expectedReleaseDate: pickMergedYmd(
+        normalizeNextContactDate(existing.expectedReleaseDate),
+        normalizeNextContactDate(incomingCase.expectedReleaseDate),
+        false,
+      ),
+      linkedListingId: preferIncomingLink ? incomingCase.linkedListingId : existing.linkedListingId,
+      linkedListingAt: preferIncomingLink ? incomingLinkedAt : cloudLinkedAt,
+    });
+  }
+
+  const followById = new Map<string, OwnerFollowUpPreview>();
+  for (const f of cloud.followUps) {
+    followById.set(f.id, f);
+  }
+  for (const f of incoming.followUps) {
+    followById.set(f.id, f);
+  }
+
   return normalizeOwnerTrackingStore({
     cases: [...casesById.values()],
     followUps: [...followById.values()],

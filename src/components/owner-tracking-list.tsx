@@ -10,6 +10,7 @@ import {
   loadOwnerTrackingStoreLocal,
   normalizeOwnerTrackingStore,
   OWNER_TRACKING_STORAGE_KEY,
+  persistOwnerTrackingStoreFromCloud,
   persistOwnerTrackingStoreLocal,
   OWNER_TRACKING_STATUS_OPTIONS,
   patchOwnerCaseMarked591Posted,
@@ -227,7 +228,8 @@ function OwnerTrackingListInner({
   useEffect(() => {
     // SSR 已有雲端資料時先寫入本機，再背景合併；否則先畫本機快取
     if (initialStore && (initialStore.cases.length > 0 || initialStore.followUps.length > 0)) {
-      persistOwnerTrackingStoreLocal(initialStore);
+      // 雲端 SSR 快取寫回本機：不觸發「剛本機編輯」信任窗
+      persistOwnerTrackingStoreLocal(initialStore, { touchPersistedAt: false });
       setStore(initialStore);
       setHydrated(true);
     } else {
@@ -235,7 +237,7 @@ function OwnerTrackingListInner({
       setStore(local);
       setHydrated(true);
     }
-    void hydrateOwnerTrackingStoreOnce(loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreLocal)
+    void hydrateOwnerTrackingStoreOnce(loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreFromCloud)
       .then((next) => {
         setStore(next);
         setSyncError(null);
@@ -359,7 +361,7 @@ function OwnerTrackingListInner({
           invalidateOwnerTrackingHydrateCache();
           const refreshed = await refreshOwnerTrackingFromCloud(
             loadOwnerTrackingStoreLocal,
-            persistOwnerTrackingStoreLocal,
+            persistOwnerTrackingStoreFromCloud,
           );
           setStore(refreshed);
         }
@@ -383,7 +385,7 @@ function OwnerTrackingListInner({
       if (now - lastFocusRefreshAt.current < FOCUS_REFRESH_MIN_MS) return;
       if (now - getOwnerTrackingLocalPersistedAt() < 3000) return;
       lastFocusRefreshAt.current = now;
-      void refreshOwnerTrackingFromCloud(loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreLocal).then(
+      void refreshOwnerTrackingFromCloud(loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreFromCloud).then(
         setStore,
       );
     };
@@ -409,7 +411,7 @@ function OwnerTrackingListInner({
   useEffect(() => {
     if (!hydrated || !isContactDueTodayView(contactFilter)) return;
     if (Date.now() - getOwnerTrackingLocalPersistedAt() < 3000) return;
-    void refreshOwnerTrackingFromCloud(loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreLocal).then(
+    void refreshOwnerTrackingFromCloud(loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreFromCloud).then(
       setStore,
     );
   }, [contactFilter, hydrated]);
@@ -547,13 +549,15 @@ function OwnerTrackingListInner({
         persistOwnerTrackingStoreLocal(next);
         setStore(next);
         invalidateOwnerTrackingHydrateCache();
-        const res = await pushCloudPayload(ADMIN_CLOUD_DATA_KEYS.ownerTracking, next);
+        const res = await pushCloudPayload(ADMIN_CLOUD_DATA_KEYS.ownerTracking, next, {
+          replace: true,
+        });
         if (!res.ok) {
           throw new Error("雲端儲存失敗，請重新整理後再試");
         }
       } catch (e) {
         window.alert(e instanceof Error ? e.message : "刪除失敗");
-        void refreshOwnerTrackingFromCloud(loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreLocal).then(
+        void refreshOwnerTrackingFromCloud(loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreFromCloud).then(
           setStore,
         );
       } finally {
@@ -570,7 +574,7 @@ function OwnerTrackingListInner({
     setStore(next);
     invalidateOwnerTrackingHydrateCache();
     void pushOwnerTrackingStoreNow(next).catch(() => {
-      void refreshOwnerTrackingFromCloud(loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreLocal).then(
+      void refreshOwnerTrackingFromCloud(loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreFromCloud).then(
         setStore,
       );
     });

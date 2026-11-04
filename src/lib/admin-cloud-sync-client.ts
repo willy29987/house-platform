@@ -8,13 +8,21 @@ import {
   emptyOwnerTrackingStore,
   getOwnerTrackingLocalPersistedAt,
   loadOwnerTrackingStoreLocal,
+  mergeOwnerTrackingStoresForCloudWrite,
   mergeOwnerTrackingStoresForHydrate,
   normalizeOwnerTrackingStore,
+  persistOwnerTrackingStoreFromCloud,
+  persistOwnerTrackingStoreLocal,
   type OwnerTrackingStore,
 } from "@/lib/owner-tracking-preview";
 import type { TenantManagerStore } from "@/lib/tenant-manager-storage";
 
 const pushTimers = new Map<AdminCloudDataKey, ReturnType<typeof setTimeout>>();
+
+export type PushCloudPayloadOptions = {
+  /** 屋主追蹤刪除等需整包覆寫 */
+  replace?: boolean;
+};
 
 async function fetchCloudPayload(key: AdminCloudDataKey): Promise<unknown | null> {
   const res = await fetch(`/api/admin/cloud-data/${key}`, { credentials: "same-origin" });
@@ -24,23 +32,32 @@ async function fetchCloudPayload(key: AdminCloudDataKey): Promise<unknown | null
   return json.payload ?? null;
 }
 
-export async function pushCloudPayload(key: AdminCloudDataKey, payload: unknown): Promise<Response> {
+export async function pushCloudPayload(
+  key: AdminCloudDataKey,
+  payload: unknown,
+  opts?: PushCloudPayloadOptions,
+): Promise<Response> {
   return fetch(`/api/admin/cloud-data/${key}`, {
     method: "PUT",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ payload }),
+    body: JSON.stringify({ payload, replace: Boolean(opts?.replace) }),
   });
 }
 
-export function schedulePushCloudPayload(key: AdminCloudDataKey, payload: unknown, delayMs = 400): void {
+export function schedulePushCloudPayload(
+  key: AdminCloudDataKey,
+  payload: unknown,
+  delayMs = 400,
+  opts?: PushCloudPayloadOptions,
+): void {
   const prev = pushTimers.get(key);
   if (prev) clearTimeout(prev);
   pushTimers.set(
     key,
     setTimeout(() => {
       pushTimers.delete(key);
-      void pushCloudPayload(key, payload);
+      void pushCloudPayload(key, payload, opts);
     }, delayMs),
   );
 }
@@ -59,24 +76,47 @@ export function schedulePushOwnerTrackingFromLocal(delayMs = 400): void {
     key,
     setTimeout(() => {
       pushTimers.delete(key);
-      void pushCloudPayload(key, loadOwnerTrackingStoreLocal());
+      void pushOwnerTrackingStoreNow(loadOwnerTrackingStoreLocal());
     }, delayMs),
   );
 }
 
 /** 立即上傳屋主追蹤（狀態／追蹤送出後用，避免雲端 refresh 蓋掉尚未 sync 的紀錄） */
-export async function pushOwnerTrackingFromLocalNow(): Promise<void> {
+export async function pushOwnerTrackingFromLocalNow(): Promise<OwnerTrackingStore> {
   return pushOwnerTrackingStoreNow(loadOwnerTrackingStoreLocal());
 }
 
-/** 上傳指定 store（避免 hydrate 競態把本機剛清空的聯繫日又讀回去推上雲端） */
-export async function pushOwnerTrackingStoreNow(store: OwnerTrackingStore): Promise<void> {
+/**
+ * 上傳指定 store。預設與雲端聯集合併（保護另一裝置的追蹤進度）；
+ * 刪除案件請傳 `{ replace: true }`。
+ */
+export async function pushOwnerTrackingStoreNow(
+  store: OwnerTrackingStore,
+  opts?: PushCloudPayloadOptions,
+): Promise<OwnerTrackingStore> {
   const key = ADMIN_CLOUD_DATA_KEYS.ownerTracking;
   cancelScheduledPushCloudPayload(key);
-  const res = await pushCloudPayload(key, store);
+  let toPush = store;
+  if (!opts?.replace) {
+    try {
+      const raw = await fetchCloudPayload(key);
+      if (raw && typeof raw === "object") {
+        toPush = mergeOwnerTrackingStoresForCloudWrite(
+          normalizeOwnerTrackingStore(raw as OwnerTrackingStore),
+          store,
+        );
+        // 合併結果寫回本機，讓手機／電腦畫面立刻對齊雲端聯集
+        persistOwnerTrackingStoreFromCloud(toPush);
+      }
+    } catch {
+      /* 拉雲端失敗仍推本機；伺服器端還會再合併一次 */
+    }
+  }
+  const res = await pushCloudPayload(key, toPush, opts);
   if (!res.ok) {
     throw new Error(`owner tracking cloud push failed (${res.status})`);
   }
+  return toPush;
 }
 
 const LOCAL_DELETE_TRUST_MS = 15_000;
@@ -148,7 +188,8 @@ export function hydrateOwnerTrackingStoreOnce(
           cloudFetchOk &&
           Date.now() - getOwnerTrackingLocalPersistedAt() < LOCAL_DELETE_TRUST_MS
         ) {
-          await pushCloudPayload(ADMIN_CLOUD_DATA_KEYS.ownerTracking, local);
+          // 剛刪除：必須 replace，否則伺服器聯集合併會把已刪案件加回
+          await pushCloudPayload(ADMIN_CLOUD_DATA_KEYS.ownerTracking, local, { replace: true });
         }
 
         if (hasOwnerTrackingData(chosen)) {
@@ -244,7 +285,7 @@ export function hydrateTenantManagerStoreOnce(
 export function prefetchAdminCloudData(): void {
   if (typeof window === "undefined") return;
   void import("@/lib/owner-tracking-preview").then(({ loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreLocal }) =>
-    hydrateOwnerTrackingStoreOnce(loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreLocal),
+    hydrateOwnerTrackingStoreOnce(loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreFromCloud),
   );
   void import("@/lib/commission-stats").then(({ loadCommissionRecordsLocal, persistCommissionRecordsLocal }) =>
     hydrateCommissionRecordsOnce(loadCommissionRecordsLocal, persistCommissionRecordsLocal),

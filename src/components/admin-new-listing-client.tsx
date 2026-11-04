@@ -8,7 +8,7 @@ import { ownerCaseToListingDraft } from "@/lib/owner-case-to-listing-draft";
 import {
   canViewOwnerTrackingCase,
   loadOwnerTrackingStoreLocal,
-  persistOwnerTrackingStoreLocal,
+  persistOwnerTrackingStoreFromCloud,
 } from "@/lib/owner-tracking-preview";
 import { hydrateOwnerTrackingStoreOnce } from "@/lib/admin-cloud-sync-client";
 
@@ -34,7 +34,7 @@ export function AdminNewListingClient({
     void (async () => {
       const store = await hydrateOwnerTrackingStoreOnce(
         loadOwnerTrackingStoreLocal,
-        persistOwnerTrackingStoreLocal,
+        persistOwnerTrackingStoreFromCloud,
       );
       if (cancelled) return;
 

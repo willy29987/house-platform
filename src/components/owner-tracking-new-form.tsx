@@ -9,6 +9,7 @@ import {
   OWNER_TRACKING_STATUS_OPTIONS,
   loadOwnerTrackingStore,
   loadOwnerTrackingStoreLocal,
+  persistOwnerTrackingStoreFromCloud,
   persistOwnerTrackingStoreLocal,
   type OwnerTrackingStatus,
   ownerCaseToInput,
@@ -160,7 +161,7 @@ export function OwnerTrackingNewForm({
 
   useEffect(() => {
     if (!isEdit || !caseId) return;
-    void hydrateOwnerTrackingStoreOnce(loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreLocal).then(
+    void hydrateOwnerTrackingStoreOnce(loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreFromCloud).then(
       (store) => {
     const found = store.cases.find((c) => c.id === caseId);
     if (!found) {

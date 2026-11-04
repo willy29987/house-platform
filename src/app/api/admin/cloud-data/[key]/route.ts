@@ -40,7 +40,12 @@ export async function PUT(request: Request, context: RouteContext) {
     body !== null && typeof body === "object" && "payload" in body
       ? (body as { payload: unknown }).payload
       : body;
+  const replace =
+    body !== null &&
+    typeof body === "object" &&
+    "replace" in body &&
+    Boolean((body as { replace?: unknown }).replace);
 
-  await writeAdminCloudPayload(key, payload);
+  await writeAdminCloudPayload(key, payload, { replace });
   return NextResponse.json({ ok: true });
 }
