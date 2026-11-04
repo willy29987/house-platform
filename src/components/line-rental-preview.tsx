@@ -702,10 +702,6 @@ export function LineRentalPreview({
   }
 
   useEffect(() => {
-    window.requestAnimationFrame(() => resizeDraftInput());
-  }, [selectedId, draft]);
-
-  useEffect(() => {
     pageTitleRef.current = document.title;
     if (typeof Notification === "undefined") {
       setNotifyState("unsupported");
@@ -982,6 +978,9 @@ export function LineRentalPreview({
     node.scrollTop = node.scrollHeight;
   }, [selected]);
   const draft = selected ? (drafts[selected.id] ?? "") : "";
+  useEffect(() => {
+    window.requestAnimationFrame(() => resizeDraftInput());
+  }, [selectedId, draft]);
   const needsConfirm =
     (selected?.status === "pending_confirm" || selected?.status === "reschedule_sent") &&
     Boolean(selected.requestedWhen || selected.proposedWhen);
