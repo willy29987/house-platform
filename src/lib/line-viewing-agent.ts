@@ -9,34 +9,56 @@ import {
 import {
   buildAgentRescheduleUrl,
   buildLiffRentAssistantUrl,
+  buildPublicBaseUrl,
   pushLineMessages,
   replyLineMessages,
   truncateLineTemplateText,
   type LineMessage,
 } from "@/lib/line-messaging";
-import { buildViewingConfirmedGuestText } from "@/lib/line-viewing-guest-copy";
+import {
+  buildViewingConfirmedGuestText,
+  type ViewingConfirmListing,
+} from "@/lib/line-viewing-guest-copy";
 import { prisma } from "@/lib/prisma";
 
-async function listingAddressesForCase(caseRecord: LineRentalCase): Promise<string[]> {
-  const ids = caseRecord.picked.map((item) => item.id).filter(Boolean);
-  if (!ids.length || !process.env.DATABASE_URL) return [];
+async function confirmListingsForCase(
+  caseRecord: LineRentalCase,
+): Promise<ViewingConfirmListing[]> {
+  const picked = caseRecord.picked.filter((item) => item.id);
+  if (!picked.length) return [];
+  const base =
+    process.env.NEXT_PUBLIC_LISTING_BASE_URL?.replace(/\/$/, "") ||
+    buildPublicBaseUrl() ||
+    "https://house-platform.vercel.app";
+  if (!process.env.DATABASE_URL) {
+    return picked.map((item) => ({
+      title: item.title,
+      pageUrl: `${base}/listings/${item.id}`,
+    }));
+  }
   try {
     const rows = await prisma.listing.findMany({
-      where: { id: { in: ids } },
-      select: { id: true, address: true, city: true, district: true },
+      where: { id: { in: picked.map((item) => item.id) } },
+      select: { id: true, title: true, address: true, city: true, district: true },
     });
-    return ids
-      .map((id) => {
-        const row = rows.find((item) => item.id === id);
-        if (!row) return "";
-        const address = row.address?.trim();
-        if (address) return address;
-        return `${row.city || ""}${row.district || ""}`.trim();
-      })
-      .filter(Boolean);
+    return picked.map((item) => {
+      const row = rows.find((entry) => entry.id === item.id);
+      const address =
+        row?.address?.trim() ||
+        `${row?.city || ""}${row?.district || ""}`.trim() ||
+        undefined;
+      return {
+        title: row?.title?.trim() || item.title,
+        pageUrl: `${base}/listings/${item.id}`,
+        address,
+      };
+    });
   } catch (error) {
-    console.warn("[line-viewing-agent] listingAddressesForCase failed", error);
-    return [];
+    console.warn("[line-viewing-agent] confirmListingsForCase failed", error);
+    return picked.map((item) => ({
+      title: item.title,
+      pageUrl: `${base}/listings/${item.id}`,
+    }));
   }
 }
 
@@ -233,11 +255,11 @@ export async function handleViewingAgentPostback(input: {
       { type: "text", text: `已確認「${when}」。系統會通知客人。` },
     ]);
     if (claimed.case.lineUserId) {
-      const addresses = await listingAddressesForCase(claimed.case);
+      const listings = await confirmListingsForCase(claimed.case);
       await pushLineMessages(claimed.case.lineUserId, [
         {
           type: "text",
-          text: buildViewingConfirmedGuestText(when, addresses),
+          text: buildViewingConfirmedGuestText(when, listings),
         },
       ]);
     }
@@ -318,9 +340,9 @@ async function handleGuestAccept(input: {
     requestedWhen: when,
     summaryText: `客人已接受業務改約時間（${when}）。`,
   });
-  const addresses = await listingAddressesForCase(caseRecord);
+  const listings = await confirmListingsForCase(caseRecord);
   await replyLineMessages(input.replyToken, [
-    { type: "text", text: buildViewingConfirmedGuestText(when, addresses) },
+    { type: "text", text: buildViewingConfirmedGuestText(when, listings) },
   ]);
   const agentId = updated?.handledByAgentLineUserId;
   if (agentId) {

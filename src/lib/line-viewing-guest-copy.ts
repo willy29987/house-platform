@@ -10,18 +10,28 @@ export function buildGoogleMapsSearchUrl(address: string): string {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address.trim())}`;
 }
 
-/** 客服／業務點「可以這個時間」後傳給客人的內容；時間帶入實際確認時段 */
+export type ViewingConfirmListing = {
+  title: string;
+  pageUrl: string;
+  address?: string;
+};
+
+/**
+ * 客服／業務點「可以這個時間」後傳給客人。
+ * 每個物件依序：標題 → 物件網址 → 地圖連結
+ */
 export function buildViewingConfirmedGuestText(
   when: string,
-  addresses: string[] = [],
+  listings: ViewingConfirmListing[] = [],
 ): string {
   const parts = [`${when} 可以幫您安排帶看～`];
-  const maps = addresses
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .map(buildGoogleMapsSearchUrl);
-  if (maps.length) {
-    parts.push("", ...maps);
+  for (const item of listings) {
+    const title = item.title.trim();
+    const pageUrl = item.pageUrl.trim();
+    if (title) parts.push("", title);
+    if (pageUrl) parts.push(pageUrl);
+    const address = item.address?.trim();
+    if (address) parts.push(buildGoogleMapsSearchUrl(address));
   }
   parts.push("", "直接到這邊就可以嘍～感謝您。");
   return parts.join("\n");

@@ -12,6 +12,7 @@ import type { GuestSession } from "@/lib/line-guest-sessions";
 import {
   buildViewingConfirmedGuestText,
   VIEWING_ASK_OTHER_TIME_TEXT,
+  type ViewingConfirmListing,
 } from "@/lib/line-viewing-guest-copy";
 import {
   emptyViewingSchedule,
@@ -1014,19 +1015,52 @@ export function LineRentalPreview({
     });
   }
 
-  function addressesForGuest(guest: StaffGuest): string[] {
-    return guest.picked
-      .map((item) => {
-        const listing = listings.find((row) => row.id === item.id);
-        if (!listing) return "";
-        return listing.address?.trim() || `${listing.city || ""}${listing.district || ""}`.trim();
-      })
-      .filter(Boolean);
+  function listingBaseUrl() {
+    if (typeof window !== "undefined" && window.location?.origin) {
+      return window.location.origin;
+    }
+    return "";
   }
 
-  function confirmTime(guest: StaffGuest) {
+  function confirmListingsForGuest(
+    guest: StaffGuest,
+    orderedIds?: string[],
+  ): ViewingConfirmListing[] {
+    const base = listingBaseUrl();
+    const order =
+      orderedIds && orderedIds.length
+        ? orderedIds
+        : guest.picked.map((item) => item.id);
+    const byId = new Map(guest.picked.map((item) => [item.id, item]));
+    return order
+      .map((id) => byId.get(id))
+      .filter((item): item is PickedListing => Boolean(item))
+      .map((item) => {
+        const listing = listings.find((row) => row.id === item.id);
+        const address =
+          listing?.address?.trim() ||
+          `${listing?.city || ""}${listing?.district || ""}`.trim() ||
+          undefined;
+        return {
+          title: listing?.title?.trim() || item.title,
+          pageUrl: `${base}/listings/${item.id}`,
+          address,
+        };
+      });
+  }
+
+  function confirmTime(guest: StaffGuest, orderedIds?: string[]) {
     const when = guest.proposedWhen || guest.requestedWhen;
-    const text = buildViewingConfirmedGuestText(when, addressesForGuest(guest));
+    const orderedPicked =
+      orderedIds && orderedIds.length
+        ? orderedIds
+            .map((id) => guest.picked.find((item) => item.id === id))
+            .filter((item): item is PickedListing => Boolean(item))
+        : guest.picked;
+    const text = buildViewingConfirmedGuestText(
+      when,
+      confirmListingsForGuest(guest, orderedIds),
+    );
     const id = lineId.current++;
     const at = formatLineClock(new Date().toISOString());
     patchGuest(guest.id, (current) =>
@@ -1035,6 +1069,7 @@ export function LineRentalPreview({
         status: "confirmed",
         requestedWhen: when,
         proposedWhen: "",
+        picked: orderedPicked.length ? orderedPicked : current.picked,
         lines: [...current.lines, { id, from: "staff", text, at }],
       }),
     );
@@ -1064,7 +1099,7 @@ export function LineRentalPreview({
     const when = formatViewingRange(schedule.date, schedule.start);
     if (!when) return;
     // 客服另選時間後確認：與「可以這個時間」同句式，帶入新時間
-    const text = buildViewingConfirmedGuestText(when, addressesForGuest(guest));
+    const text = buildViewingConfirmedGuestText(when, confirmListingsForGuest(guest));
     const id = lineId.current++;
     const at = formatLineClock(new Date().toISOString());
     patchGuest(guest.id, (current) =>
@@ -1263,7 +1298,7 @@ export function LineRentalPreview({
                     editingTime={editingTime}
                     schedule={schedule}
                     today={today}
-                    onConfirm={() => confirmTime(selected)}
+                    onConfirm={(orderedIds) => confirmTime(selected, orderedIds)}
                     onAskOtherTime={() => askOtherTime(selected)}
                     onStartEdit={() => {
                       setEditingTime(true);
@@ -1400,7 +1435,7 @@ export function LineRentalPreview({
               editingTime={editingTime}
               schedule={schedule}
               today={today}
-              onConfirm={() => confirmTime(selected)}
+              onConfirm={(orderedIds) => confirmTime(selected, orderedIds)}
               onAskOtherTime={() => askOtherTime(selected)}
               onStartEdit={() => {
                 setEditingTime(true);
@@ -1440,13 +1475,37 @@ function GuestDecisionPanel({
   editingTime: boolean;
   schedule: ViewingScheduleValue;
   today: string;
-  onConfirm: () => void;
+  onConfirm: (orderedIds: string[]) => void;
   onAskOtherTime: () => void;
   onStartEdit: () => void;
   onCancelEdit: () => void;
   onScheduleChange: (next: ViewingScheduleValue) => void;
   onSendNewTime: () => void;
 }) {
+  const pickedKey = guest.picked.map((item) => item.id).join("|");
+  const [orderIds, setOrderIds] = useState<string[]>(() => guest.picked.map((item) => item.id));
+
+  useEffect(() => {
+    setOrderIds(guest.picked.map((item) => item.id));
+  }, [guest.id, pickedKey]);
+
+  const orderedPicked = orderIds
+    .map((id) => guest.picked.find((item) => item.id === id))
+    .filter((item): item is PickedListing => Boolean(item));
+
+  function movePicked(id: string, direction: -1 | 1) {
+    setOrderIds((current) => {
+      const index = current.indexOf(id);
+      if (index < 0) return current;
+      const nextIndex = index + direction;
+      if (nextIndex < 0 || nextIndex >= current.length) return current;
+      const next = [...current];
+      const [row] = next.splice(index, 1);
+      next.splice(nextIndex, 0, row);
+      return next;
+    });
+  }
+
   const rescheduleForm = (
     <ViewingSchedulePicker
       value={schedule}
@@ -1503,11 +1562,51 @@ function GuestDecisionPanel({
       {needsConfirm ? (
         <div className="space-y-2 rounded-xl border border-[#c5d4e8] bg-[#eef3f9] p-3">
           <p className="text-xs font-semibold text-[#0b2545]">待確認看屋</p>
+          {orderedPicked.length > 0 ? (
+            <div className="space-y-2">
+              <p className="text-[11px] font-medium text-zinc-600">
+                帶看順序（傳給客人時：標題 → 網址 → 地圖）
+              </p>
+              <ul className="space-y-1.5">
+                {orderedPicked.map((item, index) => (
+                  <li
+                    key={item.id}
+                    className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-2 py-1.5"
+                  >
+                    <span className="w-5 shrink-0 text-center text-[11px] font-bold text-zinc-500">
+                      {index + 1}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-xs font-medium text-zinc-900">
+                      {item.title}
+                    </span>
+                    <button
+                      type="button"
+                      aria-label="上移"
+                      disabled={index === 0}
+                      onClick={() => movePicked(item.id, -1)}
+                      className="rounded border border-zinc-200 px-1.5 py-0.5 text-[11px] font-semibold text-zinc-700 disabled:opacity-30"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="下移"
+                      disabled={index === orderedPicked.length - 1}
+                      onClick={() => movePicked(item.id, 1)}
+                      className="rounded border border-zinc-200 px-1.5 py-0.5 text-[11px] font-semibold text-zinc-700 disabled:opacity-30"
+                    >
+                      ↓
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           {!editingTime ? (
             <div className="flex flex-col gap-2">
               <button
                 type="button"
-                onClick={onConfirm}
+                onClick={() => onConfirm(orderIds)}
                 className="rounded-full bg-[#0b2545] px-3 py-2 text-sm font-semibold text-white"
               >
                 可以這個時間
