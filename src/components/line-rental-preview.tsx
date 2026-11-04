@@ -8,6 +8,7 @@ import type {
   LineConversationMediaType,
 } from "@/lib/line-conversations";
 import type { LineRentalCase } from "@/lib/line-rental-cases";
+import type { GuestSession } from "@/lib/line-guest-sessions";
 import {
   emptyViewingSchedule,
   ViewingSchedulePicker,
@@ -26,7 +27,9 @@ type GuestStatus =
   | "awaiting_agent"
   | "agent_proposing";
 
-type ListFilter = "all" | "pending" | "active" | "confirmed";
+type ListFilter = "all" | "active" | "pending" | "confirmed";
+type PipelineBucket = "active" | "pending" | "confirmed" | "none";
+type ReplyStatus = "awaiting_staff" | "replied";
 
 type ChatLine = {
   id: string | number;
@@ -48,7 +51,12 @@ type StaffGuest = {
   lineUserId?: string;
   caseId?: string;
   lineName: string;
+  /** 帶看／表單流程狀態（右側處理面板用） */
   status: GuestStatus;
+  /** 列表徽章：待回覆＝未回；已回覆＝已回 */
+  replyStatus: ReplyStatus;
+  /** 上方分頁：進行中／待確認／已確認 */
+  pipeline: PipelineBucket;
   watching: boolean;
   criteriaText: string;
   /** 列表預覽用 */
@@ -191,42 +199,56 @@ const STATUS_LABEL: Record<GuestStatus, string> = {
   agent_proposing: "業務改約中",
 };
 
-/** 帶看流程狀態：優先於一般聊天回覆狀態 */
-const WORKFLOW_STATUS = new Set<GuestStatus>([
-  "pending_confirm",
-  "reschedule_sent",
-  "awaiting_agent",
-  "agent_proposing",
-  "confirmed",
-  "selecting",
-  "picking_time",
-]);
+const REPLY_LABEL: Record<ReplyStatus, string> = {
+  awaiting_staff: "待回覆",
+  replied: "已回覆",
+};
 
-/** 依最後一則訊息決定待回覆／已回覆；流程案件狀態另保留 */
-function resolveGuestStatus(
-  lines: ChatLine[],
-  caseStatus: GuestStatus | null | undefined,
-): GuestStatus {
+/** 待回覆＝客人最後發言（未讀未回／已讀未回）；已回覆＝客服／機器人已回 */
+function resolveReplyStatus(lines: ChatLine[]): ReplyStatus {
   const last = lines[lines.length - 1];
-  const waitingOnStaff = !last || last.from === "guest";
-
-  if (waitingOnStaff) {
-    if (caseStatus && WORKFLOW_STATUS.has(caseStatus) && caseStatus !== "confirmed") {
-      return caseStatus;
-    }
-    return "awaiting_staff";
-  }
-
-  if (caseStatus && WORKFLOW_STATUS.has(caseStatus)) {
-    return caseStatus;
-  }
+  if (!last || last.from === "guest") return "awaiting_staff";
   return "replied";
+}
+
+/**
+ * 進行中：還在填表單
+ * 待確認：看屋時間尚未向業務確認
+ * 已確認：時間與物件都安排好
+ */
+function resolvePipeline(input: {
+  status: GuestStatus;
+  formInProgress?: boolean;
+  pickedCount: number;
+  hasWhen: boolean;
+}): PipelineBucket {
+  if (input.formInProgress) return "active";
+  if (
+    input.status === "selecting" ||
+    input.status === "picking_time" ||
+    input.status === "saved"
+  ) {
+    return "active";
+  }
+  if (
+    input.status === "pending_confirm" ||
+    input.status === "reschedule_sent" ||
+    input.status === "awaiting_agent" ||
+    input.status === "agent_proposing"
+  ) {
+    return "pending";
+  }
+  if (input.status === "confirmed" && input.pickedCount > 0 && input.hasWhen) {
+    return "confirmed";
+  }
+  if (input.status === "confirmed") return "confirmed";
+  return "none";
 }
 
 const FILTERS: { id: ListFilter; label: string }[] = [
   { id: "all", label: "全部" },
-  { id: "pending", label: "待確認" },
   { id: "active", label: "進行中" },
+  { id: "pending", label: "待確認" },
   { id: "confirmed", label: "已確認" },
 ];
 
@@ -342,6 +364,23 @@ function fullThread(
   return lines;
 }
 
+function attachPipelineAndReply(
+  guest: Omit<StaffGuest, "replyStatus" | "pipeline"> &
+    Partial<Pick<StaffGuest, "replyStatus" | "pipeline">>,
+  formInProgress = false,
+): StaffGuest {
+  const replyStatus = guest.replyStatus ?? resolveReplyStatus(guest.lines);
+  const pipeline =
+    guest.pipeline ??
+    resolvePipeline({
+      status: guest.status,
+      formInProgress,
+      pickedCount: guest.picked.length,
+      hasWhen: Boolean(guest.requestedWhen || guest.proposedWhen),
+    });
+  return { ...guest, replyStatus, pipeline };
+}
+
 function buildStaffGuests(listings: RentalMatchListing[]): StaffGuest[] {
   const first = listings[0];
   const second = listings[1] ?? listings[0];
@@ -350,7 +389,7 @@ function buildStaffGuests(listings: RentalMatchListing[]): StaffGuest[] {
   const secondPick = pickedOf(second);
 
   return [
-    {
+    attachPipelineAndReply({
       id: "chen",
       lineName: "陳小姐",
       status: "selecting",
@@ -363,8 +402,8 @@ function buildStaffGuests(listings: RentalMatchListing[]): StaffGuest[] {
       proposedWhen: "",
       asks: [],
       lines: fullThread(undefined, "district", { pet: "沒有" }),
-    },
-    {
+    }),
+    attachPipelineAndReply({
       id: "lin",
       lineName: "林先生",
       status: "picking_time",
@@ -377,8 +416,8 @@ function buildStaffGuests(listings: RentalMatchListing[]): StaffGuest[] {
       proposedWhen: "",
       asks: [],
       lines: fullThread(first, "time", { pet: "有，一隻貓" }),
-    },
-    {
+    }),
+    attachPipelineAndReply({
       id: "wang",
       lineName: "王先生",
       status: "pending_confirm",
@@ -400,8 +439,8 @@ function buildStaffGuests(listings: RentalMatchListing[]): StaffGuest[] {
         when: "2026/11/03 下午 13:00–17:00",
         pet: "沒有",
       }),
-    },
-    {
+    }),
+    attachPipelineAndReply({
       id: "zhang",
       lineName: "張小姐",
       status: "saved",
@@ -414,8 +453,8 @@ function buildStaffGuests(listings: RentalMatchListing[]): StaffGuest[] {
       proposedWhen: "",
       asks: third ? [{ listingId: third.id, title: third.title, answer: "no" }] : [],
       lines: fullThread(third, "declined", { pet: "有，小型犬" }),
-    },
-    {
+    }),
+    attachPipelineAndReply({
       id: "huang",
       lineName: "黃先生",
       status: "confirmed",
@@ -438,12 +477,12 @@ function buildStaffGuests(listings: RentalMatchListing[]): StaffGuest[] {
         pet: "沒有",
         staff: "2026/10/30 上午 9:00–12:00 可以，同事會再跟你說帶看的人。",
       }),
-    },
+    }),
   ];
 }
 
-function shortStatus(status: GuestStatus) {
-  return STATUS_LABEL[status];
+function shortReplyStatus(status: ReplyStatus) {
+  return REPLY_LABEL[status];
 }
 
 function caseToStaffGuest(item: LineRentalCase): StaffGuest {
@@ -497,7 +536,7 @@ function caseToStaffGuest(item: LineRentalCase): StaffGuest {
     item.phone ? `電話 ${item.phone}` : "",
   ].filter(Boolean);
 
-  return {
+  return attachPipelineAndReply({
     id: item.lineUserId || item.id,
     lineUserId: item.lineUserId || undefined,
     caseId: item.id,
@@ -512,15 +551,19 @@ function caseToStaffGuest(item: LineRentalCase): StaffGuest {
     proposedWhen: item.proposedWhen || "",
     asks: [],
     lines,
-  };
+  });
 }
 
 function buildLiveGuests(
   conversations: LineConversation[],
   cases: LineRentalCase[],
+  openSessions: GuestSession[] = [],
 ): StaffGuest[] {
+  const formInProgressIds = new Set(
+    openSessions.map((session) => session.lineUserId).filter(Boolean),
+  );
   const fromConversations = conversations.map((item) =>
-    conversationToStaffGuest(item, cases),
+    conversationToStaffGuest(item, cases, formInProgressIds),
   );
   const covered = new Set(
     fromConversations.map((item) => item.lineUserId).filter(Boolean) as string[],
@@ -534,10 +577,12 @@ function buildLiveGuests(
 function conversationToStaffGuest(
   conversation: LineConversation,
   cases: LineRentalCase[],
+  formInProgressIds?: Set<string>,
 ): StaffGuest {
   const related = cases.filter((item) => item.lineUserId === conversation.lineUserId);
   const latest = related[0] ?? null;
   const base = latest ? caseToStaffGuest(latest) : null;
+  const formInProgress = Boolean(formInProgressIds?.has(conversation.lineUserId));
 
   const lines: ChatLine[] = conversation.messages.map((message) => ({
     id: message.id,
@@ -567,58 +612,40 @@ function conversationToStaffGuest(
           },
         ];
 
-  return {
-    id: conversation.lineUserId,
-    lineUserId: conversation.lineUserId,
-    caseId: latest?.id,
-    lineName: conversation.displayName || base?.lineName || "LINE 客人",
-    status: resolveGuestStatus(resolvedLines, base?.status),
-    watching: true,
-    criteriaText: base?.criteriaText || "",
-    summaryText: lastGuestText,
-    createdAt: conversation.updatedAt || base?.createdAt || new Date().toISOString(),
-    followedAt: conversation.followedAt,
-    unfollowedAt: conversation.unfollowedAt,
-    picked: base?.picked ?? [],
-    requestedWhen: base?.requestedWhen ?? "",
-    proposedWhen: base?.proposedWhen ?? "",
-    asks: [],
-    lines: resolvedLines,
-  };
+  const workflowStatus: GuestStatus =
+    base?.status ?? (formInProgress ? "selecting" : "awaiting_staff");
+
+  return attachPipelineAndReply(
+    {
+      id: conversation.lineUserId,
+      lineUserId: conversation.lineUserId,
+      caseId: latest?.id,
+      lineName: conversation.displayName || base?.lineName || "LINE 客人",
+      status: workflowStatus,
+      watching: true,
+      criteriaText: base?.criteriaText || "",
+      summaryText: lastGuestText,
+      createdAt: conversation.updatedAt || base?.createdAt || new Date().toISOString(),
+      followedAt: conversation.followedAt,
+      unfollowedAt: conversation.unfollowedAt,
+      picked: base?.picked ?? [],
+      requestedWhen: base?.requestedWhen ?? "",
+      proposedWhen: base?.proposedWhen ?? "",
+      asks: [],
+      lines: resolvedLines,
+    },
+    formInProgress,
+  );
 }
 
 function matchesFilter(guest: StaffGuest, filter: ListFilter) {
   if (filter === "all") return true;
-  if (filter === "pending") {
-    return (
-      guest.status === "pending_confirm" ||
-      guest.status === "reschedule_sent" ||
-      guest.status === "awaiting_staff" ||
-      guest.status === "awaiting_agent" ||
-      guest.status === "agent_proposing"
-    );
-  }
-  if (filter === "confirmed") return guest.status === "confirmed";
-  return (
-    guest.status === "selecting" ||
-    guest.status === "picking_time" ||
-    guest.status === "saved" ||
-    guest.status === "replied"
-  );
+  return guest.pipeline === filter;
 }
 
-function statusPill(status: GuestStatus) {
-  if (status === "confirmed" || status === "replied") return "bg-emerald-100 text-emerald-950";
-  if (
-    status === "pending_confirm" ||
-    status === "reschedule_sent" ||
-    status === "awaiting_staff" ||
-    status === "awaiting_agent" ||
-    status === "agent_proposing"
-  ) {
-    return "bg-amber-100 text-amber-950";
-  }
-  return "bg-zinc-100 text-zinc-700";
+function statusPill(status: ReplyStatus) {
+  if (status === "replied") return "bg-emerald-100 text-emerald-950";
+  return "bg-amber-100 text-amber-950";
 }
 
 export function LineRentalPreview({
@@ -626,22 +653,24 @@ export function LineRentalPreview({
   lineBasicId,
   initialConversations = [],
   initialCases = [],
+  initialSessions = [],
 }: {
   listings: RentalMatchListing[];
   lineBasicId: string;
   initialConversations?: LineConversation[];
   initialCases?: LineRentalCase[];
+  initialSessions?: GuestSession[];
 }) {
   const demoGuests = useMemo(() => buildStaffGuests(listings), [listings]);
   const seedLive = useMemo(
-    () => buildLiveGuests(initialConversations, initialCases),
-    [initialConversations, initialCases],
+    () => buildLiveGuests(initialConversations, initialCases, initialSessions),
+    [initialConversations, initialCases, initialSessions],
   );
   const [liveGuests, setLiveGuests] = useState<StaffGuest[]>(() => seedLive);
   const [guests, setGuests] = useState<StaffGuest[]>(() =>
     seedLive.length ? seedLive : buildStaffGuests(listings),
   );
-  const [filter, setFilter] = useState<ListFilter>("pending");
+  const [filter, setFilter] = useState<ListFilter>("all");
   const [selectedId, setSelectedId] = useState(() => seedLive[0]?.id ?? "wang");
   const [editingTime, setEditingTime] = useState(false);
   const [schedule, setSchedule] = useState<ViewingScheduleValue>(emptyViewingSchedule);
@@ -748,9 +777,14 @@ export function LineRentalPreview({
     function applySnapshot(data: {
       conversations?: LineConversation[];
       cases?: LineRentalCase[];
+      sessions?: GuestSession[];
     }) {
       if (cancelled) return;
-      const next = buildLiveGuests(data.conversations ?? [], data.cases ?? []);
+      const next = buildLiveGuests(
+        data.conversations ?? [],
+        data.cases ?? [],
+        data.sessions ?? [],
+      );
       notifyNewGuestMessages(next);
       setLiveGuests(next);
     }
@@ -765,6 +799,7 @@ export function LineRentalPreview({
         const data = (await response.json()) as {
           conversations?: LineConversation[];
           cases?: LineRentalCase[];
+          sessions?: GuestSession[];
         };
         applySnapshot(data);
       } catch {
@@ -797,6 +832,7 @@ export function LineRentalPreview({
           const data = JSON.parse((event as MessageEvent).data) as {
             conversations?: LineConversation[];
             cases?: LineRentalCase[];
+            sessions?: GuestSession[];
           };
           applySnapshot(data);
           stopFallback();
@@ -966,13 +1002,15 @@ export function LineRentalPreview({
     const text = `${when} 可以，同事會再跟你說帶看的人。`;
     const id = lineId.current++;
     const at = formatLineClock(new Date().toISOString());
-    patchGuest(guest.id, (current) => ({
-      ...current,
-      status: "confirmed",
-      requestedWhen: when,
-      proposedWhen: "",
-      lines: [...current.lines, { id, from: "staff", text, at }],
-    }));
+    patchGuest(guest.id, (current) =>
+      attachPipelineAndReply({
+        ...current,
+        status: "confirmed",
+        requestedWhen: when,
+        proposedWhen: "",
+        lines: [...current.lines, { id, from: "staff", text, at }],
+      }),
+    );
     pushStaffLine(guest, text, id);
     setEditingTime(false);
   }
@@ -983,12 +1021,14 @@ export function LineRentalPreview({
     const id = lineId.current++;
     const at = formatLineClock(new Date().toISOString());
     const text = `原本的時間暫無法安排，改 ${when} 可以嗎？`;
-    patchGuest(guest.id, (current) => ({
-      ...current,
-      status: "reschedule_sent",
-      proposedWhen: when,
-      lines: [...current.lines, { id, from: "staff", text, at }],
-    }));
+    patchGuest(guest.id, (current) =>
+      attachPipelineAndReply({
+        ...current,
+        status: "reschedule_sent",
+        proposedWhen: when,
+        lines: [...current.lines, { id, from: "staff", text, at }],
+      }),
+    );
     pushStaffLine(guest, text, id);
     setEditingTime(false);
     setSchedule(emptyViewingSchedule());
@@ -999,21 +1039,23 @@ export function LineRentalPreview({
     if (!when) return;
     const guestLineId = lineId.current++;
     const botLineId = lineId.current++;
-    patchGuest(guest.id, (current) => ({
-      ...current,
-      status: "pending_confirm",
-      requestedWhen: when,
-      proposedWhen: "",
-      lines: [
-        ...current.lines,
-        { id: guestLineId, from: "guest", text: when },
-        {
-          id: botLineId,
-          from: "bot",
-          text: `${current.lineName}，已記下想看的物件和希望時間，時間尚未確認。同事會再跟業務或屋主對過，確認後在 LINE 回你。`,
-        },
-      ],
-    }));
+    patchGuest(guest.id, (current) =>
+      attachPipelineAndReply({
+        ...current,
+        status: "pending_confirm",
+        requestedWhen: when,
+        proposedWhen: "",
+        lines: [
+          ...current.lines,
+          { id: guestLineId, from: "guest", text: when },
+          {
+            id: botLineId,
+            from: "bot",
+            text: `${current.lineName}，已記下想看的物件和希望時間，時間尚未確認。同事會再跟業務或屋主對過，確認後在 LINE 回你。`,
+          },
+        ],
+      }),
+    );
     setSchedule(emptyViewingSchedule());
   }
 
@@ -1031,11 +1073,11 @@ export function LineRentalPreview({
     // 樂觀更新；輪詢會再以伺服器紀錄對齊
     patchGuest(guestId, (current) => {
       const lines = [...current.lines, { id, from: "staff" as const, text, at }];
-      return {
+      return attachPipelineAndReply({
         ...current,
         lines,
-        status: resolveGuestStatus(lines, current.status),
-      };
+        replyStatus: "replied",
+      });
     });
     setDrafts((current) => ({ ...current, [guestId]: "" }));
     window.setTimeout(() => {
@@ -1133,8 +1175,8 @@ export function LineRentalPreview({
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-2">
                         <span className="truncate text-sm font-bold text-zinc-900">{guest.lineName}</span>
-                        <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${statusPill(guest.status)}`}>
-                          {shortStatus(guest.status)}
+                        <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${statusPill(guest.replyStatus)}`}>
+                          {shortReplyStatus(guest.replyStatus)}
                         </span>
                       </span>
                       <span className="mt-0.5 block truncate text-xs text-zinc-500">{preview}</span>
@@ -1156,7 +1198,10 @@ export function LineRentalPreview({
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[15px] font-semibold leading-tight">{selected.lineName}</p>
                   <p className="truncate text-[11px] text-white/65">
-                    {shortStatus(selected.status)}
+                    {shortReplyStatus(selected.replyStatus)}
+                    {selected.pipeline !== "none"
+                      ? ` · ${selected.pipeline === "active" ? "進行中" : selected.pipeline === "pending" ? "待確認" : "已確認"}`
+                      : ""}
                     {selected.followedAt ? ` · 加入 ${formatLineDayLabel(selected.followedAt)}` : ""}
                     {selected.unfollowedAt ? " · 已封鎖／刪除" : ""}
                     {lineBasicId ? ` · ${lineBasicId}` : ""}
@@ -1371,7 +1416,10 @@ function GuestDecisionPanel({
         <p className="text-xs font-semibold text-zinc-500">這位客人</p>
         <p className="mt-1 font-bold text-zinc-900">{guest.lineName}</p>
         <p className="mt-0.5 text-xs text-zinc-500">
-          {shortStatus(guest.status)}
+          {shortReplyStatus(guest.replyStatus)}
+          {guest.pipeline !== "none"
+            ? ` · ${guest.pipeline === "active" ? "進行中" : guest.pipeline === "pending" ? "待確認" : "已確認"}`
+            : ""}
           {guest.watching ? " · 之後新案會問" : ""}
           {guest.followedAt ? ` · 加入 ${formatLineDayLabel(guest.followedAt)}` : ""}
           {guest.unfollowedAt ? " · 已封鎖／刪除" : ""}

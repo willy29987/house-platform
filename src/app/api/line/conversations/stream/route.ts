@@ -1,6 +1,7 @@
 import { getCurrentAdmin } from "@/lib/admin-auth";
 import { ADMIN_CLOUD_DATA_KEYS } from "@/lib/admin-cloud-data-keys";
 import { readLineConversations } from "@/lib/line-conversations";
+import { listOpenGuestSessions } from "@/lib/line-guest-sessions";
 import { readLineRentalCases } from "@/lib/line-rental-cases";
 import { prisma } from "@/lib/prisma";
 
@@ -11,6 +12,7 @@ export const maxDuration = 60;
 const WATCH_KEYS = [
   ADMIN_CLOUD_DATA_KEYS.lineConversations,
   ADMIN_CLOUD_DATA_KEYS.lineRentalCases,
+  ADMIN_CLOUD_DATA_KEYS.lineGuestSessions,
 ] as const;
 
 async function readChangeStamp(): Promise<string> {
@@ -65,13 +67,15 @@ export async function GET(request: Request) {
           const stamp = await readChangeStamp();
           if (stamp !== lastStamp) {
             lastStamp = stamp;
-            const [conversations, cases] = await Promise.all([
+            const [conversations, cases, sessions] = await Promise.all([
               readLineConversations(),
               readLineRentalCases(),
+              listOpenGuestSessions(),
             ]);
             send("snapshot", {
               conversations,
               cases,
+              sessions,
               fetchedAt: new Date().toISOString(),
             });
           } else if (Date.now() - lastPingAt > 15_000) {

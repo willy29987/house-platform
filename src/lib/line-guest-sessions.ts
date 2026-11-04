@@ -93,6 +93,14 @@ export async function getGuestSessionByUserId(lineUserId: string): Promise<Guest
   return store.sessions.find((s) => s.lineUserId === lineUserId && s.step !== "done") ?? null;
 }
 
+/** 尚未填完表單的客人進度（step !== done） */
+export async function listOpenGuestSessions(): Promise<GuestSession[]> {
+  const store = await readStore();
+  return store.sessions
+    .filter((s) => s.step !== "done")
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
 export async function getGuestSessionById(id: string): Promise<GuestSession | null> {
   const store = await readStore();
   return store.sessions.find((s) => s.id === id) ?? null;

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentAdmin } from "@/lib/admin-auth";
 import { readLineConversations } from "@/lib/line-conversations";
+import { listOpenGuestSessions } from "@/lib/line-guest-sessions";
 import { pushLineMessages } from "@/lib/line-messaging";
 import { readLineRentalCases } from "@/lib/line-rental-cases";
 
@@ -18,13 +19,14 @@ export async function GET() {
     return NextResponse.json({ error: "未登入" }, { status: 401, headers: NO_STORE });
   }
 
-  const [conversations, cases] = await Promise.all([
+  const [conversations, cases, sessions] = await Promise.all([
     readLineConversations(),
     readLineRentalCases(),
+    listOpenGuestSessions(),
   ]);
 
   return NextResponse.json(
-    { conversations, cases, fetchedAt: new Date().toISOString() },
+    { conversations, cases, sessions, fetchedAt: new Date().toISOString() },
     { headers: NO_STORE },
   );
 }

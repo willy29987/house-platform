@@ -5,6 +5,7 @@ import { LineGuestChatPreview } from "@/components/line-guest-chat-preview";
 import { LineNativeChatPreview } from "@/components/line-native-chat-preview";
 import { LineRentalPreview } from "@/components/line-rental-preview";
 import type { LineConversation } from "@/lib/line-conversations";
+import type { GuestSession } from "@/lib/line-guest-sessions";
 import type { LineRentalCase } from "@/lib/line-rental-cases";
 import type { RentalMatchListing } from "@/lib/line-rental-assistant";
 
@@ -21,11 +22,13 @@ export function LineAssistantWorkbench({
   lineBasicId,
   initialConversations = [],
   initialCases = [],
+  initialSessions = [],
 }: {
   listings: RentalMatchListing[];
   lineBasicId: string;
   initialConversations?: LineConversation[];
   initialCases?: LineRentalCase[];
+  initialSessions?: GuestSession[];
 }) {
   const [tab, setTab] = useState<TabId>("staff");
 
@@ -55,6 +58,7 @@ export function LineAssistantWorkbench({
           lineBasicId={lineBasicId}
           initialConversations={initialConversations}
           initialCases={initialCases}
+          initialSessions={initialSessions}
         />
       ) : tab === "guest" ? (
         <LineGuestChatPreview listings={listings} lineBasicId={lineBasicId} />

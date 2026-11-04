@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { LineAssistantWorkbench } from "@/components/line-assistant-workbench";
 import { getCurrentAdmin } from "@/lib/admin-auth";
 import { readLineConversations } from "@/lib/line-conversations";
+import { listOpenGuestSessions } from "@/lib/line-guest-sessions";
 import { getLineAccountLink } from "@/lib/line-official-account";
 import { loadRentalMatchListings } from "@/lib/line-rental-assistant";
 import { readLineRentalCases } from "@/lib/line-rental-cases";
@@ -12,11 +13,12 @@ export default async function LineAssistantPreviewPage() {
   const current = await getCurrentAdmin();
   if (!current) redirect("/admin/login");
 
-  const [cards, lineAccount, conversations, cases] = await Promise.all([
+  const [cards, lineAccount, conversations, cases, sessions] = await Promise.all([
     loadRentalMatchListings(60),
     getLineAccountLink(),
     readLineConversations(),
     readLineRentalCases(),
+    listOpenGuestSessions(),
   ]);
 
   return (
@@ -47,6 +49,7 @@ export default async function LineAssistantPreviewPage() {
         lineBasicId={lineAccount.basicId}
         initialConversations={conversations}
         initialCases={cases}
+        initialSessions={sessions}
       />
     </div>
   );
