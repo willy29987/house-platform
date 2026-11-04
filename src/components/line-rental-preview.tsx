@@ -1052,7 +1052,8 @@ export function LineRentalPreview({
                 </button>
               </div>
               <p className="mx-auto mt-1 max-w-xl text-center text-[10px] text-zinc-500">
-                傳送會推到 LINE；上方氣泡與聊天室同步。
+                請用這裡回覆才會兩邊同步。用手機／電腦「官方帳號」聊天室回的訊息，LINE
+                不會通知我們，網頁看不到。
               </p>
             </form>
           </section>
