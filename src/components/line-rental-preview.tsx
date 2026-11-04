@@ -70,6 +70,12 @@ type StaffGuest = {
   /** LINE 加好友時間（有 webhook follow 才有） */
   followedAt?: string;
   unfollowedAt?: string;
+  phone: string;
+  occupation: string;
+  nationality: string;
+  peopleCount: number;
+  petNote: string;
+  moveInDate: string;
   picked: PickedListing[];
   requestedWhen: string;
   proposedWhen: string;
@@ -371,7 +377,7 @@ function fullThread(
 
 function attachPipelineAndReply(
   guest: Omit<StaffGuest, "replyStatus" | "pipeline"> &
-    Partial<Pick<StaffGuest, "replyStatus" | "pipeline">>,
+    Partial<Pick<StaffGuest, "replyStatus" | "pipeline" | "phone" | "occupation" | "nationality" | "peopleCount" | "petNote" | "moveInDate">>,
   formInProgress = false,
 ): StaffGuest {
   const replyStatus = guest.replyStatus ?? resolveReplyStatus(guest.lines);
@@ -383,7 +389,17 @@ function attachPipelineAndReply(
       pickedCount: guest.picked.length,
       hasWhen: Boolean(guest.requestedWhen || guest.proposedWhen),
     });
-  return { ...guest, replyStatus, pipeline };
+  return {
+    phone: "",
+    occupation: "",
+    nationality: "",
+    peopleCount: 1,
+    petNote: "",
+    moveInDate: "",
+    ...guest,
+    replyStatus,
+    pipeline,
+  };
 }
 
 function buildStaffGuests(listings: RentalMatchListing[]): StaffGuest[] {
@@ -551,6 +567,12 @@ function caseToStaffGuest(item: LineRentalCase): StaffGuest {
     criteriaText: criteriaBits.join(" · ") || item.criteriaText,
     summaryText: lineMessage,
     createdAt,
+    phone: item.phone || "",
+    occupation: item.occupation || "",
+    nationality: item.nationality || "",
+    peopleCount: item.peopleCount || 1,
+    petNote: item.petNote || "",
+    moveInDate: item.moveInDate || "",
     picked: item.picked,
     requestedWhen: item.requestedWhen,
     proposedWhen: item.proposedWhen || "",
@@ -584,7 +606,9 @@ function conversationToStaffGuest(
   cases: LineRentalCase[],
   formInProgressIds?: Set<string>,
 ): StaffGuest {
-  const related = cases.filter((item) => item.lineUserId === conversation.lineUserId);
+  const related = cases
+    .filter((item) => item.lineUserId === conversation.lineUserId)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const latest = related[0] ?? null;
   const base = latest ? caseToStaffGuest(latest) : null;
   const formInProgress = Boolean(formInProgressIds?.has(conversation.lineUserId));
@@ -633,6 +657,12 @@ function conversationToStaffGuest(
       createdAt: conversation.updatedAt || base?.createdAt || new Date().toISOString(),
       followedAt: conversation.followedAt,
       unfollowedAt: conversation.unfollowedAt,
+      phone: base?.phone || "",
+      occupation: base?.occupation || "",
+      nationality: base?.nationality || "",
+      peopleCount: base?.peopleCount || 1,
+      petNote: base?.petNote || "",
+      moveInDate: base?.moveInDate || "",
       picked: base?.picked ?? [],
       requestedWhen: base?.requestedWhen ?? "",
       proposedWhen: base?.proposedWhen ?? "",
@@ -1531,6 +1561,42 @@ function GuestDecisionPanel({
           {guest.followedAt ? ` · 加入 ${formatLineDayLabel(guest.followedAt)}` : ""}
           {guest.unfollowedAt ? " · 已封鎖／刪除" : ""}
         </p>
+      </div>
+
+      <div>
+        <p className="text-xs font-semibold text-zinc-500">基本資料</p>
+        <dl className="mt-1 space-y-1 text-zinc-800">
+          <div className="flex gap-2">
+            <dt className="w-16 shrink-0 text-zinc-500">電話</dt>
+            <dd className="min-w-0 break-all font-medium">{guest.phone || "未填"}</dd>
+          </div>
+          <div className="flex gap-2">
+            <dt className="w-16 shrink-0 text-zinc-500">人數</dt>
+            <dd className="min-w-0 font-medium">{guest.peopleCount || 1} 人</dd>
+          </div>
+          <div className="flex gap-2">
+            <dt className="w-16 shrink-0 text-zinc-500">職業</dt>
+            <dd className="min-w-0 break-words font-medium">{guest.occupation || "未填"}</dd>
+          </div>
+          <div className="flex gap-2">
+            <dt className="w-16 shrink-0 text-zinc-500">預計入住</dt>
+            <dd className="min-w-0 font-medium">{guest.moveInDate || "未填"}</dd>
+          </div>
+          <div className="flex gap-2">
+            <dt className="w-16 shrink-0 text-zinc-500">國籍</dt>
+            <dd className="min-w-0 font-medium">{guest.nationality || "未填"}</dd>
+          </div>
+          <div className="flex gap-2">
+            <dt className="w-16 shrink-0 text-zinc-500">寵物</dt>
+            <dd className="min-w-0 break-words font-medium">{guest.petNote || "未填"}</dd>
+          </div>
+          {guest.criteriaText ? (
+            <div className="flex gap-2">
+              <dt className="w-16 shrink-0 text-zinc-500">條件</dt>
+              <dd className="min-w-0 break-words font-medium">{guest.criteriaText}</dd>
+            </div>
+          ) : null}
+        </dl>
       </div>
 
       <div>
