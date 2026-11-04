@@ -1271,7 +1271,7 @@ export function LineRentalPreview({
                   <textarea
                     rows={2}
                     value={draft}
-                    placeholder="輸入訊息（連按兩次 Enter 送出）"
+                    placeholder=""
                     onChange={(event) => {
                       if (ignoreDraftChangeRef.current === selected.id) return;
                       const value = event.target.value;
