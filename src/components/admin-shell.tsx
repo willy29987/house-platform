@@ -121,12 +121,6 @@ export function AdminShell({ current, children }: AdminShellProps) {
             {isSuperAdmin ? (
               <>
                 <Link prefetch={false}
-                  href="/admin/commissions"
-                  className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-                >
-                  服務費統計
-                </Link>
-                <Link prefetch={false}
                   href="/admin/listings/records"
                   className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
                 >
@@ -223,9 +217,6 @@ export function AdminShell({ current, children }: AdminShellProps) {
                 </Link>
                 {isSuperAdmin ? (
                   <>
-                    <Link prefetch={false} href="/admin/commissions" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
-                      服務費統計
-                    </Link>
                     <Link prefetch={false}
                       href="/admin/listings/records"
                       onClick={() => setMenuOpen(false)}

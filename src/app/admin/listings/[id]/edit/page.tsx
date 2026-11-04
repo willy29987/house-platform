@@ -114,6 +114,7 @@ export default async function AdminEditListingPage({ params }: AdminEditListingP
           submitUrl={`/api/admin/listings/${listing.id}`}
           initialData={initialData}
           lockedListingType={listing.listingType}
+          listingId={listing.id}
         />
       </section>
     </main>

@@ -3,7 +3,9 @@
 import Image from "next/image";
 import { FormEvent, ReactNode, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { AdminListing591RentDraftPanel } from "@/components/admin-listing-591-rent-draft-panel";
 import { EQUIPMENT_ITEMS, FURNITURE_ITEMS } from "@/lib/furniture-appliance-value";
+import { build591RentDraftFields } from "@/lib/listing-591-rent-draft";
 import {
   inferParkingPrice,
   LAYOUT_OPEN_LABEL,
@@ -86,6 +88,8 @@ type AdminListingFormProps = {
   lockedListingType?: "RENT" | "SALE";
   /** 從屋主追蹤帶入上架時帶入；建立成功後寫回案件 linkedListingId */
   fromOwnerCaseId?: string;
+  /** 編輯時傳入，供 591 草稿顯示本站物件網址 */
+  listingId?: string;
 };
 
 const PARKING_CUSTOM = "__CUSTOM__";
@@ -193,6 +197,7 @@ export function AdminListingForm({
   initialData,
   lockedListingType,
   fromOwnerCaseId,
+  listingId,
 }: AdminListingFormProps) {
   const [formData, setFormData] = useState(initialData);
   const [status, setStatus] = useState("");
@@ -200,6 +205,7 @@ export function AdminListingForm({
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadingVideo, setUploadingVideo] = useState(false);
+  const [rent591DraftOpen, setRent591DraftOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
@@ -479,12 +485,115 @@ export function AdminListingForm({
     ? "inline-block rounded-full bg-blue-600 px-2.5 py-0.5 text-xs font-medium text-white"
     : "inline-block rounded-full bg-emerald-600 px-2.5 py-0.5 text-xs font-medium text-white";
 
+  const rent591DraftFields = useMemo(() => {
+    if (!isRent) return [];
+    const securityDeposit =
+      depositUi.kind === "two"
+        ? "2個月"
+        : depositUi.kind === "other" && depositUi.other.trim()
+          ? depositUi.other.trim()
+          : formData.securityDeposit.trim();
+    const availableFrom =
+      availableUi.mode === "immediate"
+        ? "隨時可遷入"
+        : availableUi.mode === "date" && availableUi.date.trim()
+          ? availableUi.date.trim()
+          : formData.availableFrom.trim();
+    const parkingRentResolved =
+      hasParking && parkingPriceUi.mode === "separate" && parkingPriceUi.amount.trim()
+        ? parkingPriceUi.amount.trim()
+        : formData.parkingRent.trim();
+    const siteListingUrl =
+      listingId?.trim() && typeof window !== "undefined"
+        ? `${window.location.origin}/listings/${listingId.trim()}`
+        : listingId?.trim()
+          ? `/listings/${listingId.trim()}`
+          : undefined;
+
+    return build591RentDraftFields({
+      title: formData.title,
+      city: formData.city,
+      district: formData.district,
+      address: formData.address,
+      community: formData.community,
+      propertyType: formData.propertyType,
+      price: formData.price,
+      managementFee: formData.managementFee,
+      otherFees: formData.otherFees,
+      securityDeposit,
+      availableFrom,
+      shortTermRent: choiceToValue(shortTermUi) ?? "",
+      serviceFee: choiceToValue(serviceFeeUi) ?? "",
+      areaPing: formData.areaPing,
+      areaMain: formData.areaMain,
+      areaAncillary: formData.areaAncillary,
+      rooms: formData.rooms,
+      livingRooms: formData.livingRooms,
+      bathrooms: formData.bathrooms,
+      balconies: formData.balconies,
+      layoutOpen: layoutOpenLayout,
+      floor: formData.floor,
+      totalFloors: formData.totalFloors,
+      roomNumber: formData.roomNumber,
+      parkingType: parkingTypeValue,
+      parkingRent: parkingRentResolved,
+      parkingSpaceInfo: formData.parkingSpaceInfo,
+      areaParkingSpace: formData.areaParkingSpace,
+      petsAllowed: formData.petsAllowed,
+      rentSubsidy: formData.rentSubsidy,
+      taxDeductible: formData.taxDeductible,
+      canRegisterAddress: formData.canRegisterAddress,
+      viewingMethod: formData.viewingMethod,
+      mrtLine: formData.mrtLine,
+      mrtStation: formData.mrtStation,
+      features: formData.features,
+      specialMatters: formData.specialMatters,
+      furnitureItems: formData.furnitureItems,
+      equipmentItems: formData.equipmentItems,
+      contactName: formData.contactName,
+      contactPhone: formData.contactPhone,
+      coverImage: formData.coverImage,
+      images: formData.images,
+      videoUrl: formData.videoUrl,
+      source591Url: formData.source591Url,
+      siteListingUrl,
+    });
+  }, [
+    isRent,
+    formData,
+    depositUi,
+    availableUi,
+    hasParking,
+    parkingPriceUi,
+    parkingTypeValue,
+    layoutOpenLayout,
+    shortTermUi,
+    serviceFeeUi,
+    listingId,
+  ]);
+
   return (
     <form onSubmit={onSubmit} className="space-y-6">
       {/* 類型提示 */}
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <span className={typeBadgeCls}>{isRent ? "租賃" : "買賣"}</span>
+        {isRent ? (
+          <button
+            type="button"
+            onClick={() => setRent591DraftOpen(true)}
+            className="rounded-lg border border-violet-300 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-900 hover:bg-violet-100"
+          >
+            591 租賃刊登草稿
+          </button>
+        ) : null}
       </div>
+      {isRent ? (
+        <AdminListing591RentDraftPanel
+          open={rent591DraftOpen}
+          onClose={() => setRent591DraftOpen(false)}
+          fields={rent591DraftFields}
+        />
+      ) : null}
 
       {/* 基本資訊 */}
       <section>
@@ -505,7 +614,8 @@ export function AdminListingForm({
               className={`w-full ${field}`}
             />
             <p className="mt-1 text-xs text-zinc-500">
-              有上 591 的物件請填，客人貼連結問能不能看時才能對到同一間。
+              有上 591 的物件請填，客人貼連結問能不能看時才能對到同一間。尚未上架可先用上方「591
+              租賃刊登草稿」複製欄位到 591 後台。
             </p>
           </div>
           {!lockedListingType ? (

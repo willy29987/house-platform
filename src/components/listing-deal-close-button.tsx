@@ -94,7 +94,7 @@ export function ListingDealCloseButton({
       if (!response.ok || !result.ok) {
         setError(
           result.message ??
-            "服務費已寫入本機，但下架失敗。請至「服務費統計」確認紀錄，並手動下架或重試。",
+            "服務費已寫入本機，但下架失敗。請手動下架或重試。",
         );
         setBusy(false);
         return;
@@ -104,7 +104,7 @@ export function ListingDealCloseButton({
       setBusy(false);
       router.refresh();
     } catch {
-      setError("服務費已寫入本機，但下架請求失敗。請至「服務費統計」確認，並手動下架。");
+      setError("服務費已寫入本機，但下架請求失敗。請手動下架。");
       setBusy(false);
     }
   }
