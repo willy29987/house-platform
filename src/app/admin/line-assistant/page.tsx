@@ -47,6 +47,7 @@ export default async function LineAssistantPreviewPage() {
       <LineAssistantWorkbench
         listings={cards}
         lineBasicId={lineAccount.basicId}
+        staffDisplayName={current.displayName?.trim() || current.username}
         initialConversations={conversations}
         initialCases={cases}
         initialSessions={sessions}

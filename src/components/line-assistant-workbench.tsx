@@ -20,12 +20,14 @@ const TABS: { id: TabId; label: string }[] = [
 export function LineAssistantWorkbench({
   listings,
   lineBasicId,
+  staffDisplayName,
   initialConversations = [],
   initialCases = [],
   initialSessions = [],
 }: {
   listings: RentalMatchListing[];
   lineBasicId: string;
+  staffDisplayName: string;
   initialConversations?: LineConversation[];
   initialCases?: LineRentalCase[];
   initialSessions?: GuestSession[];
@@ -56,6 +58,7 @@ export function LineAssistantWorkbench({
         <LineRentalPreview
           listings={listings}
           lineBasicId={lineBasicId}
+          staffDisplayName={staffDisplayName}
           initialConversations={initialConversations}
           initialCases={initialCases}
           initialSessions={initialSessions}

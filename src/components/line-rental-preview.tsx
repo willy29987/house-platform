@@ -651,12 +651,14 @@ function statusPill(status: ReplyStatus) {
 export function LineRentalPreview({
   listings,
   lineBasicId,
+  staffDisplayName,
   initialConversations = [],
   initialCases = [],
   initialSessions = [],
 }: {
   listings: RentalMatchListing[];
   lineBasicId: string;
+  staffDisplayName: string;
   initialConversations?: LineConversation[];
   initialCases?: LineRentalCase[];
   initialSessions?: GuestSession[];
@@ -1281,7 +1283,9 @@ export function LineRentalPreview({
                         }`}
                       >
                         {line.from === "staff" && !mediaBubble ? (
-                          <span className="mb-1 block text-[10px] font-semibold text-[#067a36]">官方帳號／同事</span>
+                          <span className="mb-1 block text-[10px] font-semibold text-[#067a36]">
+                            {staffDisplayName}
+                          </span>
                         ) : null}
                         <LineMessageBody line={line} />
                       </div>
