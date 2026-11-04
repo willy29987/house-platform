@@ -690,7 +690,20 @@ export function LineRentalPreview({
   const enterStreakRef = useRef(0);
   /** 送出後短暫忽略 onChange，避免 IME／Enter 把字又填回來 */
   const ignoreDraftChangeRef = useRef<string | null>(null);
+  const draftInputRef = useRef<HTMLTextAreaElement | null>(null);
   const today = useMemo(() => taipeiTodayYmd(), []);
+
+  function resizeDraftInput(node?: HTMLTextAreaElement | null) {
+    const el = node ?? draftInputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const max = 7 * 20; // 約 7 行
+    el.style.height = `${Math.min(el.scrollHeight, max)}px`;
+  }
+
+  useEffect(() => {
+    window.requestAnimationFrame(() => resizeDraftInput());
+  }, [selectedId, draft]);
 
   useEffect(() => {
     pageTitleRef.current = document.title;
@@ -1082,6 +1095,7 @@ export function LineRentalPreview({
       });
     });
     setDrafts((current) => ({ ...current, [guestId]: "" }));
+    window.requestAnimationFrame(() => resizeDraftInput());
     window.setTimeout(() => {
       if (ignoreDraftChangeRef.current === guestId) {
         ignoreDraftChangeRef.current = null;
@@ -1318,16 +1332,18 @@ export function LineRentalPreview({
                 <label className="min-w-0 flex-1">
                   <span className="sr-only">輸入訊息</span>
                   <textarea
-                    rows={2}
+                    ref={draftInputRef}
+                    rows={1}
                     value={draft}
                     placeholder=""
                     onChange={(event) => {
                       if (ignoreDraftChangeRef.current === selected.id) return;
                       const value = event.target.value;
                       setDrafts((current) => ({ ...current, [selected.id]: value }));
+                      resizeDraftInput(event.target);
                     }}
                     onKeyDown={onDraftKeyDown}
-                    className="max-h-28 min-h-10 w-full resize-none rounded-md border border-[#d0d3d9] bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-[#06c755]"
+                    className="max-h-28 min-h-10 w-full resize-none overflow-y-auto rounded-md border border-[#d0d3d9] bg-white px-3 py-2 text-sm leading-5 text-zinc-900 outline-none focus:border-[#06c755]"
                   />
                 </label>
                 <button
