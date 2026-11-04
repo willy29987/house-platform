@@ -53,6 +53,9 @@ type StaffGuest = {
   /** 列表預覽用 */
   summaryText: string;
   createdAt: string;
+  /** LINE 加好友時間（有 webhook follow 才有） */
+  followedAt?: string;
+  unfollowedAt?: string;
   picked: PickedListing[];
   requestedWhen: string;
   proposedWhen: string;
@@ -528,6 +531,8 @@ function conversationToStaffGuest(
     criteriaText: base?.criteriaText || "",
     summaryText: lastGuestText,
     createdAt: conversation.updatedAt || base?.createdAt || new Date().toISOString(),
+    followedAt: conversation.followedAt,
+    unfollowedAt: conversation.unfollowedAt,
     picked: base?.picked ?? [],
     requestedWhen: base?.requestedWhen ?? "",
     proposedWhen: base?.proposedWhen ?? "",
@@ -1087,6 +1092,8 @@ export function LineRentalPreview({
                   <p className="truncate text-[15px] font-semibold leading-tight">{selected.lineName}</p>
                   <p className="truncate text-[11px] text-white/65">
                     {shortStatus(selected.status)}
+                    {selected.followedAt ? ` · 加入 ${formatLineDayLabel(selected.followedAt)}` : ""}
+                    {selected.unfollowedAt ? " · 已封鎖／刪除" : ""}
                     {lineBasicId ? ` · ${lineBasicId}` : ""}
                   </p>
                 </div>
@@ -1300,6 +1307,8 @@ function GuestDecisionPanel({
         <p className="mt-0.5 text-xs text-zinc-500">
           {shortStatus(guest.status)}
           {guest.watching ? " · 之後新案會問" : ""}
+          {guest.followedAt ? ` · 加入 ${formatLineDayLabel(guest.followedAt)}` : ""}
+          {guest.unfollowedAt ? " · 已封鎖／刪除" : ""}
         </p>
       </div>
 

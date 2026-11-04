@@ -5,6 +5,8 @@ import { NextResponse } from "next/server";
 import { handle591LinkInquiry, handleImageInquiry } from "@/lib/line-591-inquiry";
 import {
   appendLineConversationMessage,
+  recordLineFriendFollow,
+  recordLineFriendUnfollow,
   type LineConversationMediaType,
 } from "@/lib/line-conversations";
 import { handleGuestPostback, handleGuestText } from "@/lib/line-guest-flow";
@@ -39,6 +41,7 @@ function rememberLineUserId(userId: string | null | undefined, eventType?: strin
 
 type LineEvent = {
   type?: string;
+  timestamp?: number;
   replyToken?: string;
   source?: { userId?: string; type?: string };
   message?: {
@@ -189,6 +192,29 @@ async function resolveGuestDisplayName(userId: string | null): Promise<string> {
 async function handleEvent(event: LineEvent) {
   const userId = event.source?.userId ?? null;
   rememberLineUserId(userId, event.type);
+
+  if (event.type === "follow" || event.type === "unfollow") {
+    if (!userId) return;
+    try {
+      if (event.type === "follow") {
+        const displayName = await resolveGuestDisplayName(userId);
+        await recordLineFriendFollow({
+          lineUserId: userId,
+          displayName,
+          timestamp: event.timestamp,
+        });
+      } else {
+        await recordLineFriendUnfollow({
+          lineUserId: userId,
+          timestamp: event.timestamp,
+        });
+      }
+    } catch (error) {
+      console.error("[line/webhook] follow/unfollow store failed", error);
+    }
+    return;
+  }
+
   const displayName = await resolveGuestDisplayName(userId);
 
   if (event.type === "postback") {

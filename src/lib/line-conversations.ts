@@ -29,15 +29,16 @@ export type LineConversation = {
   lineUserId: string;
   displayName: string;
   updatedAt: string;
+  /** 加入／再次加入好友時間（ISO）；unfollow 後再 follow 會更新 */
+  followedAt?: string;
+  /** 解除好友／封鎖時間（ISO）；再次 follow 時清除 */
+  unfollowedAt?: string;
   messages: LineConversationMessage[];
 };
 
 type Store = {
   conversations: LineConversation[];
 };
-
-const MAX_CONVERSATIONS = 200;
-const MAX_MESSAGES = 200;
 
 const MEDIA_TYPES = new Set<LineConversationMediaType>([
   "image",
@@ -87,14 +88,14 @@ function normalizeStore(payload: unknown): Store {
         displayName: typeof row.displayName === "string" ? row.displayName : "LINE 客人",
         updatedAt:
           typeof row.updatedAt === "string" ? row.updatedAt : new Date().toISOString(),
+        followedAt: typeof row.followedAt === "string" ? row.followedAt : undefined,
+        unfollowedAt: typeof row.unfollowedAt === "string" ? row.unfollowedAt : undefined,
         messages: Array.isArray(row.messages)
           ? row.messages
               .map(normalizeMessage)
               .filter((m): m is LineConversationMessage => Boolean(m))
-              .slice(-MAX_MESSAGES)
           : [],
-      }))
-      .slice(0, MAX_CONVERSATIONS),
+      })),
   };
 }
 
@@ -106,6 +107,13 @@ function previewTextFromLineMessage(message: LineMessage): string {
     if (t.type === "confirm") return message.altText || t.text || "[確認訊息]";
   }
   return message.altText || "[訊息]";
+}
+
+function toIsoFromLineTimestamp(timestamp?: number): string {
+  if (typeof timestamp === "number" && Number.isFinite(timestamp) && timestamp > 0) {
+    return new Date(timestamp).toISOString();
+  }
+  return new Date().toISOString();
 }
 
 export async function readLineConversations(): Promise<LineConversation[]> {
@@ -120,6 +128,79 @@ export async function getLineConversation(
 ): Promise<LineConversation | null> {
   const all = await readLineConversations();
   return all.find((item) => item.lineUserId === lineUserId) ?? null;
+}
+
+/** 記錄加好友（含再次加入）；永久保留對話，不刪減 */
+export async function recordLineFriendFollow(input: {
+  lineUserId: string;
+  displayName?: string;
+  timestamp?: number;
+}): Promise<LineConversation | null> {
+  const lineUserId = input.lineUserId.trim();
+  if (!lineUserId) return null;
+
+  const store = normalizeStore(
+    await readAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.lineConversations),
+  );
+  const index = store.conversations.findIndex((row) => row.lineUserId === lineUserId);
+  const now = toIsoFromLineTimestamp(input.timestamp);
+  const displayName = input.displayName?.trim() || "LINE 客人";
+
+  if (index < 0) {
+    const created: LineConversation = {
+      lineUserId,
+      displayName,
+      updatedAt: now,
+      followedAt: now,
+      messages: [],
+    };
+    store.conversations.unshift(created);
+    await writeAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.lineConversations, store);
+    return created;
+  }
+
+  const current = store.conversations[index];
+  current.followedAt = now;
+  current.unfollowedAt = undefined;
+  current.updatedAt = now;
+  if (input.displayName?.trim()) current.displayName = input.displayName.trim();
+  store.conversations.splice(index, 1);
+  store.conversations.unshift(current);
+  await writeAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.lineConversations, store);
+  return current;
+}
+
+/** 記錄封鎖／刪好友；保留既有對話與加入日 */
+export async function recordLineFriendUnfollow(input: {
+  lineUserId: string;
+  timestamp?: number;
+}): Promise<void> {
+  const lineUserId = input.lineUserId.trim();
+  if (!lineUserId) return;
+
+  const store = normalizeStore(
+    await readAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.lineConversations),
+  );
+  const index = store.conversations.findIndex((row) => row.lineUserId === lineUserId);
+  const now = toIsoFromLineTimestamp(input.timestamp);
+
+  if (index < 0) {
+    store.conversations.unshift({
+      lineUserId,
+      displayName: "LINE 客人",
+      updatedAt: now,
+      unfollowedAt: now,
+      messages: [],
+    });
+  } else {
+    const current = store.conversations[index];
+    current.unfollowedAt = now;
+    current.updatedAt = now;
+    store.conversations.splice(index, 1);
+    store.conversations.unshift(current);
+  }
+
+  await writeAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.lineConversations, store);
 }
 
 export async function appendLineConversationMessage(input: {
@@ -177,12 +258,11 @@ export async function appendLineConversationMessage(input: {
             (m) => !(m.messageId?.startsWith("case:") && m.text === text && m.from === input.from),
           )
         : current.messages;
-    current.messages = [...cleaned, message].slice(-MAX_MESSAGES);
+    current.messages = [...cleaned, message];
     store.conversations.splice(index, 1);
     store.conversations.unshift(current);
   }
 
-  store.conversations = store.conversations.slice(0, MAX_CONVERSATIONS);
   await writeAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.lineConversations, store);
   return message;
 }
