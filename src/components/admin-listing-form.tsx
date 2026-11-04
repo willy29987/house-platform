@@ -1,8 +1,9 @@
 "use client";
 
 import Image from "next/image";
-import { FormEvent, ReactNode, useMemo, useRef, useState } from "react";
+import { FormEvent, ReactNode, startTransition, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { markRouteNavigating } from "@/components/route-nav-progress";
 import { AdminListing591RentDraftPanel } from "@/components/admin-listing-591-rent-draft-panel";
 import { EQUIPMENT_ITEMS, FURNITURE_ITEMS } from "@/lib/furniture-appliance-value";
 import { build591RentDraftFields } from "@/lib/listing-591-rent-draft";
@@ -469,7 +470,10 @@ export function AdminListingForm({
     const typeParam = isRent ? "rent" : "sale";
     const published = Boolean(payload.isPublished);
     const qs = published ? "mine=1" : "mine=1&off=1";
-    router.push(`/admin?type=${typeParam}&${qs}`);
+    markRouteNavigating();
+    startTransition(() => {
+      router.push(`/admin?type=${typeParam}&${qs}`);
+    });
   }
 
   const field =

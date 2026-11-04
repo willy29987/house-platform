@@ -16,3 +16,18 @@ body {
   background: var(--background);
   color: var(--foreground);
 }
+
+/* 點擊導航後 0.2s 內可見的頂部進度條 */
+@keyframes route-nav-progress {
+  0% {
+    transform: scaleX(0.06);
+  }
+  100% {
+    transform: scaleX(0.88);
+  }
+}
+
+.route-nav-progress-bar {
+  transform-origin: left center;
+  animation: route-nav-progress 0.85s ease-out forwards;
+}

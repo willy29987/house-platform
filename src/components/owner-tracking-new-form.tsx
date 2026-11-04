@@ -2,7 +2,8 @@
 
 import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { startTransition, useEffect, useState } from "react";
+import { markRouteNavigating } from "@/components/route-nav-progress";
 import {
   appendOwnerCase,
   canViewOwnerTrackingCase,
@@ -265,7 +266,10 @@ export function OwnerTrackingNewForm({
         setSubmitting(false);
         return;
       }
-      router.push(returnListHref ?? "/admin/owner-tracking");
+      markRouteNavigating();
+      startTransition(() => {
+        router.push(returnListHref ?? "/admin/owner-tracking");
+      });
       return;
     }
     const { store: next, caseId: newCaseId } = appendOwnerCase(
@@ -282,7 +286,10 @@ export function OwnerTrackingNewForm({
       setSubmitting(false);
       return;
     }
-    router.push(`/admin/owner-tracking/${newCaseId}`);
+    markRouteNavigating();
+    startTransition(() => {
+      router.push(`/admin/owner-tracking/${newCaseId}`);
+    });
   }
 
   if (!hydrated) {

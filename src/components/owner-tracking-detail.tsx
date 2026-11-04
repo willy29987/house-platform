@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useEffect, useMemo, useRef, useState } from "react";
+import { markRouteNavigating } from "@/components/route-nav-progress";
 import {
   formatFollowUpWhen,
   formatOwnerCaseAddress,
@@ -512,7 +513,10 @@ export function OwnerTrackingDetail({
 
       <button
         type="button"
-        onClick={() => router.push(listHref)}
+        onClick={() => {
+          markRouteNavigating();
+          startTransition(() => router.push(listHref));
+        }}
         className="text-sm font-medium text-zinc-600 hover:text-zinc-900 sm:hidden"
       >
         ← 回列表

@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { AdminLogoutButton } from "@/components/admin-logout-button";
 import { BrandLogo } from "@/components/brand-logo";
 import { AdminCloudSyncBootstrap } from "@/components/admin-cloud-sync-bootstrap";
+import { RouteNavProgress } from "@/components/route-nav-progress";
 import { formatAdminStaffLabel } from "@/lib/admin-staff-labels";
 
 export type AdminShellUser = {
@@ -15,9 +16,40 @@ export type AdminShellUser = {
 } | null;
 
 type AdminShellProps = {
-  current: AdminShellUser;
+  /** 可選；未傳則由本機快取 + /api/admin/me 非阻塞載入（避免 layout 卡住切頁） */
+  current?: AdminShellUser;
   children: React.ReactNode;
 };
+
+const ADMIN_USER_CACHE_KEY = "house-platform:admin-shell-user:v1";
+
+function readCachedAdminUser(): AdminShellUser {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(ADMIN_USER_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as AdminShellUser;
+    if (!parsed?.username || (parsed.role !== "SUPER_ADMIN" && parsed.role !== "OPERATOR")) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedAdminUser(user: AdminShellUser) {
+  if (typeof window === "undefined") return;
+  try {
+    if (!user) {
+      window.sessionStorage.removeItem(ADMIN_USER_CACHE_KEY);
+      return;
+    }
+    window.sessionStorage.setItem(ADMIN_USER_CACHE_KEY, JSON.stringify(user));
+  } catch {
+    /* ignore */
+  }
+}
 
 function MenuIcon() {
   return (
@@ -27,11 +59,63 @@ function MenuIcon() {
   );
 }
 
-export function AdminShell({ current, children }: AdminShellProps) {
+export function AdminShell({ current: currentProp = null, children }: AdminShellProps) {
   const pathname = usePathname() ?? "";
   const isLogin = pathname.startsWith("/admin/login");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [current, setCurrent] = useState<AdminShellUser>(currentProp);
+  const [userReady, setUserReady] = useState(Boolean(currentProp));
   const isSuperAdmin = current?.role === "SUPER_ADMIN";
+
+  useEffect(() => {
+    if (currentProp) {
+      setCurrent(currentProp);
+      writeCachedAdminUser(currentProp);
+      setUserReady(true);
+      return;
+    }
+    const cached = readCachedAdminUser();
+    if (cached) {
+      setCurrent(cached);
+      setUserReady(true);
+    }
+    let cancelled = false;
+    void fetch("/api/admin/me", { credentials: "same-origin" })
+      .then(async (res) => {
+        if (!res.ok) {
+          if (!cancelled) {
+            setCurrent(null);
+            writeCachedAdminUser(null);
+            setUserReady(true);
+          }
+          return;
+        }
+        const json = (await res.json()) as {
+          ok?: boolean;
+          user?: { username: string; displayName?: string | null; role: "SUPER_ADMIN" | "OPERATOR" };
+        };
+        if (cancelled) return;
+        if (json.ok && json.user?.username) {
+          const next: AdminShellUser = {
+            username: json.user.username,
+            displayName: json.user.displayName ?? null,
+            role: json.user.role,
+          };
+          setCurrent(next);
+          writeCachedAdminUser(next);
+        } else {
+          setCurrent(null);
+          writeCachedAdminUser(null);
+        }
+        setUserReady(true);
+      })
+      .catch(() => {
+        if (!cancelled) setUserReady(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentProp]);
 
   useEffect(() => {
     setMenuOpen(false);
@@ -53,6 +137,7 @@ export function AdminShell({ current, children }: AdminShellProps) {
   if (isLogin) {
     return (
       <div className="min-h-[100dvh] bg-gradient-to-b from-[#0b2545] via-[#132f52] to-[#1e3a8a]">
+        <RouteNavProgress />
         {children}
       </div>
     );
@@ -68,6 +153,7 @@ export function AdminShell({ current, children }: AdminShellProps) {
 
   return (
     <div className="flex min-h-[100dvh] flex-col bg-[#f4f6f9]">
+      <RouteNavProgress />
       {current ? <AdminCloudSyncBootstrap /> : null}
       <header className="sticky top-0 z-40 border-b border-[#0b2545]/10 bg-white/95 shadow-sm backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-[1800px] items-center gap-3 px-3 sm:h-16 sm:px-4 lg:px-6">
@@ -79,7 +165,7 @@ export function AdminShell({ current, children }: AdminShellProps) {
           >
             <MenuIcon />
           </button>
-          <Link prefetch={false} href="/admin" className="group flex min-w-0 flex-1 items-center gap-2 sm:gap-2.5">
+          <Link href="/admin" className="group flex min-w-0 flex-1 items-center gap-2 sm:gap-2.5">
             <BrandLogo className="h-8 w-8 shrink-0 transition-transform group-hover:scale-105 sm:h-9 sm:w-9" />
             <span className="truncate text-base font-extrabold tracking-wide text-[#0b2545] sm:text-lg">
               不動產實踐家
@@ -100,19 +186,19 @@ export function AdminShell({ current, children }: AdminShellProps) {
             </div>
           ) : null}
           <div className="hidden items-center gap-2 md:flex">
-            <Link prefetch={false}
+            <Link
               href="/admin/listings/new"
               className="rounded-lg bg-[#0b2545] px-3 py-2 text-sm font-medium text-white hover:bg-[#1e3a8a]"
             >
               新增廣告
             </Link>
-            <Link prefetch={false}
+            <Link
               href="/admin/owner-tracking"
               className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
             >
               屋主追蹤
             </Link>
-            <Link prefetch={false}
+            <Link
               href="/admin/line-assistant"
               className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
             >
@@ -120,19 +206,19 @@ export function AdminShell({ current, children }: AdminShellProps) {
             </Link>
             {isSuperAdmin ? (
               <>
-                <Link prefetch={false}
+                <Link
                   href="/admin/listings/records"
                   className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
                 >
                   資料紀錄
                 </Link>
-                <Link prefetch={false}
+                <Link
                   href="/admin/tenants"
                   className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
                 >
                   房客管理
                 </Link>
-                <Link prefetch={false}
+                <Link
                   href="/admin/team"
                   className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
                 >
@@ -140,7 +226,7 @@ export function AdminShell({ current, children }: AdminShellProps) {
                 </Link>
               </>
             ) : null}
-            <Link prefetch={false}
+            <Link
               href="/"
               target="_blank"
               rel="noopener noreferrer"
@@ -149,7 +235,7 @@ export function AdminShell({ current, children }: AdminShellProps) {
               外網
             </Link>
             {isSuperAdmin ? (
-              <Link prefetch={false}
+              <Link
                 href="/admin/settings"
                 className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
               >
@@ -180,6 +266,8 @@ export function AdminShell({ current, children }: AdminShellProps) {
                       {isSuperAdmin ? "最高管理員" : "業務"}
                     </span>
                   </p>
+                ) : !userReady ? (
+                  <p className="mt-0.5 text-sm text-zinc-400">載入帳號…</p>
                 ) : null}
               </div>
               <button
@@ -193,46 +281,46 @@ export function AdminShell({ current, children }: AdminShellProps) {
             </div>
             <nav className="flex-1 overflow-y-auto p-3">
               <div className="grid gap-1.5">
-                <Link prefetch={false}
+                <Link
                   href="/admin/listings/new"
                   onClick={() => setMenuOpen(false)}
                   className="rounded-xl bg-[#0b2545] px-4 py-3.5 text-center text-sm font-semibold text-white shadow-sm active:bg-[#1e3a8a]"
                 >
                   ＋ 新增廣告
                 </Link>
-                <Link prefetch={false} href="/admin" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
+                <Link href="/admin" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
                   營運總覽
                 </Link>
-                <Link prefetch={false} href="/admin?type=rent" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
+                <Link href="/admin?type=rent" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
                   租賃物件
                 </Link>
-                <Link prefetch={false} href="/admin?type=sale" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
+                <Link href="/admin?type=sale" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
                   買賣物件
                 </Link>
-                <Link prefetch={false} href="/admin/owner-tracking" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
+                <Link href="/admin/owner-tracking" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
                   屋主追蹤
                 </Link>
-                <Link prefetch={false} href="/admin/line-assistant" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
+                <Link href="/admin/line-assistant" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
                   租屋客服
                 </Link>
                 {isSuperAdmin ? (
                   <>
-                    <Link prefetch={false}
+                    <Link
                       href="/admin/listings/records"
                       onClick={() => setMenuOpen(false)}
                       className={menuLinkCls}
                     >
                       資料總紀錄
                     </Link>
-                    <Link prefetch={false} href="/admin/tenants" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
+                    <Link href="/admin/tenants" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
                       房客管理
                     </Link>
-                    <Link prefetch={false} href="/admin/team" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
+                    <Link href="/admin/team" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
                       AI 團隊
                     </Link>
                   </>
                 ) : null}
-                <Link prefetch={false}
+                <Link
                   href="/"
                   target="_blank"
                   rel="noopener noreferrer"
@@ -242,7 +330,7 @@ export function AdminShell({ current, children }: AdminShellProps) {
                   外網
                 </Link>
                 {isSuperAdmin ? (
-                  <Link prefetch={false} href="/admin/settings" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
+                  <Link href="/admin/settings" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
                     帳號管理
                   </Link>
                 ) : null}

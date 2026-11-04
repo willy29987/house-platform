@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useId, useRef, useState } from "react";
+import { startTransition, useEffect, useId, useRef, useState } from "react";
+import { markRouteNavigating } from "@/components/route-nav-progress";
 
 export function HeaderSearch() {
   const router = useRouter();
@@ -27,8 +28,12 @@ export function HeaderSearch() {
 
   function goSearch() {
     const trimmed = q.trim();
-    router.push(trimmed ? `/search?q=${encodeURIComponent(trimmed)}` : "/search");
+    const href = trimmed ? `/search?q=${encodeURIComponent(trimmed)}` : "/search";
+    markRouteNavigating();
     setOpen(false);
+    startTransition(() => {
+      router.push(href);
+    });
   }
 
   function onSubmit(e: React.FormEvent) {

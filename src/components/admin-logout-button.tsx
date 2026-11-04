@@ -2,6 +2,11 @@
 
 export function AdminLogoutButton() {
   async function onLogout() {
+    try {
+      window.sessionStorage.removeItem("house-platform:admin-shell-user:v1");
+    } catch {
+      /* ignore */
+    }
     await fetch("/api/admin/logout", { method: "POST" });
     window.location.href = "/admin/login";
   }
