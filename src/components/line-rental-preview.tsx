@@ -376,8 +376,30 @@ function fullThread(
 }
 
 function attachPipelineAndReply(
-  guest: Omit<StaffGuest, "replyStatus" | "pipeline"> &
-    Partial<Pick<StaffGuest, "replyStatus" | "pipeline" | "phone" | "occupation" | "nationality" | "peopleCount" | "petNote" | "moveInDate">>,
+  guest: Omit<
+    StaffGuest,
+    | "replyStatus"
+    | "pipeline"
+    | "phone"
+    | "occupation"
+    | "nationality"
+    | "peopleCount"
+    | "petNote"
+    | "moveInDate"
+  > &
+    Partial<
+      Pick<
+        StaffGuest,
+        | "replyStatus"
+        | "pipeline"
+        | "phone"
+        | "occupation"
+        | "nationality"
+        | "peopleCount"
+        | "petNote"
+        | "moveInDate"
+      >
+    >,
   formInProgress = false,
 ): StaffGuest {
   const replyStatus = guest.replyStatus ?? resolveReplyStatus(guest.lines);
@@ -390,13 +412,13 @@ function attachPipelineAndReply(
       hasWhen: Boolean(guest.requestedWhen || guest.proposedWhen),
     });
   return {
-    phone: "",
-    occupation: "",
-    nationality: "",
-    peopleCount: 1,
-    petNote: "",
-    moveInDate: "",
     ...guest,
+    phone: guest.phone || "",
+    occupation: guest.occupation || "",
+    nationality: guest.nationality || "",
+    peopleCount: guest.peopleCount || 1,
+    petNote: guest.petNote || "",
+    moveInDate: guest.moveInDate || "",
     replyStatus,
     pipeline,
   };
