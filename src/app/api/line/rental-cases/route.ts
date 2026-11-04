@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentAdmin } from "@/lib/admin-auth";
+import { appendLineConversationMessage } from "@/lib/line-conversations";
 import { appendLineRentalCase, readLineRentalCases } from "@/lib/line-rental-cases";
 import { pushLineMessages } from "@/lib/line-messaging";
 import { VIEWING_SUBMIT_ACK_TEXT } from "@/lib/line-viewing-guest-copy";
@@ -110,10 +111,22 @@ export async function POST(request: Request) {
         ...listingLines,
       ].join("\n");
 
-    // 預約摘要由 LIFF sendMessages 進對話；這裡只補一則「稍等確認」自動回覆
+    // 先把預約摘要寫進客服對話（不依賴 LIFF webhook 時序），再送「稍等確認」
     let pushSent = false;
     let pushReason = skipGuestPush ? "skipped_client_delivery" : "guest_push_disabled";
     if (created.lineUserId) {
+      try {
+        await appendLineConversationMessage({
+          lineUserId: created.lineUserId,
+          from: "guest",
+          text: confirmText,
+          displayName: created.displayName,
+          messageId: `case:${created.id}:booking`,
+        });
+      } catch (error) {
+        console.warn("[line/rental-cases] append booking to conversation failed", error);
+      }
+
       const ack = await pushLineMessages(
         created.lineUserId,
         [{ type: "text", text: VIEWING_SUBMIT_ACK_TEXT }],

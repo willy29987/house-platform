@@ -228,6 +228,18 @@ export async function appendLineConversationMessage(input: {
     return null;
   }
 
+  // LIFF sendMessages 與案件備援可能幾乎同時寫入同一段預約摘要
+  if (
+    input.from === "guest" &&
+    existing?.messages.some((m) => {
+      if (m.from !== "guest" || m.text !== text) return false;
+      const age = Date.now() - new Date(m.createdAt).getTime();
+      return Number.isFinite(age) && age >= 0 && age < 10 * 60_000;
+    })
+  ) {
+    return null;
+  }
+
   const now = new Date().toISOString();
   const message: LineConversationMessage = {
     id: `lcm_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
