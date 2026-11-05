@@ -28,6 +28,8 @@ export type LineConversationMessage = {
 export type LineConversation = {
   lineUserId: string;
   displayName: string;
+  /** LINE 頭像；空字串＝已查過但沒有圖；缺欄＝尚未查 */
+  pictureUrl?: string;
   updatedAt: string;
   /** 加入／再次加入好友時間（ISO）；unfollow 後再 follow 會更新 */
   followedAt?: string;
@@ -86,6 +88,7 @@ function normalizeStore(payload: unknown): Store {
       .map((row) => ({
         lineUserId: row.lineUserId,
         displayName: typeof row.displayName === "string" ? row.displayName : "LINE 客人",
+        pictureUrl: typeof row.pictureUrl === "string" ? row.pictureUrl : undefined,
         updatedAt:
           typeof row.updatedAt === "string" ? row.updatedAt : new Date().toISOString(),
         followedAt: typeof row.followedAt === "string" ? row.followedAt : undefined,
@@ -136,6 +139,7 @@ export async function getLineConversation(
 export async function recordLineFriendFollow(input: {
   lineUserId: string;
   displayName?: string;
+  pictureUrl?: string;
   timestamp?: number;
 }): Promise<LineConversation | null> {
   const lineUserId = input.lineUserId.trim();
@@ -152,6 +156,7 @@ export async function recordLineFriendFollow(input: {
     const created: LineConversation = {
       lineUserId,
       displayName,
+      pictureUrl: input.pictureUrl,
       updatedAt: now,
       followedAt: now,
       messages: [],
@@ -166,6 +171,7 @@ export async function recordLineFriendFollow(input: {
   current.unfollowedAt = undefined;
   current.updatedAt = now;
   if (input.displayName?.trim()) current.displayName = input.displayName.trim();
+  if (typeof input.pictureUrl === "string") current.pictureUrl = input.pictureUrl;
   store.conversations.splice(index, 1);
   store.conversations.unshift(current);
   await writeAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.lineConversations, store);
@@ -210,6 +216,7 @@ export async function appendLineConversationMessage(input: {
   from: LineConversationFrom;
   text: string;
   displayName?: string;
+  pictureUrl?: string;
   messageId?: string;
   mediaType?: LineConversationMediaType;
   stickerId?: string;
@@ -258,6 +265,7 @@ export async function appendLineConversationMessage(input: {
     store.conversations.unshift({
       lineUserId,
       displayName: input.displayName?.trim() || "LINE 客人",
+      pictureUrl: input.pictureUrl,
       updatedAt: now,
       messages: [message],
     });
@@ -265,6 +273,7 @@ export async function appendLineConversationMessage(input: {
     const current = existing;
     current.updatedAt = now;
     if (input.displayName?.trim()) current.displayName = input.displayName.trim();
+    if (typeof input.pictureUrl === "string") current.pictureUrl = input.pictureUrl;
     // 真實 webhook 抵達時，拿掉同內容的案件備援種子（case:…）
     const cleaned =
       input.messageId && !input.messageId.startsWith("case:")
@@ -317,5 +326,33 @@ export async function appendLineConversationBotMessages(input: {
       text,
       displayName: input.displayName,
     });
+  }
+}
+
+/** 補上已查到的客人頭像／暱稱（一次寫入） */
+export async function patchLineConversationProfiles(
+  patches: Array<{ lineUserId: string; displayName?: string; pictureUrl?: string }>,
+): Promise<void> {
+  const useful = patches.filter((row) => row.lineUserId.trim());
+  if (useful.length === 0) return;
+
+  const store = normalizeStore(
+    await readAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.lineConversations),
+  );
+  let changed = false;
+  for (const patch of useful) {
+    const current = store.conversations.find((row) => row.lineUserId === patch.lineUserId.trim());
+    if (!current) continue;
+    if (patch.displayName?.trim() && current.displayName !== patch.displayName.trim()) {
+      current.displayName = patch.displayName.trim();
+      changed = true;
+    }
+    if (typeof patch.pictureUrl === "string" && current.pictureUrl !== patch.pictureUrl) {
+      current.pictureUrl = patch.pictureUrl;
+      changed = true;
+    }
+  }
+  if (changed) {
+    await writeAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.lineConversations, store);
   }
 }

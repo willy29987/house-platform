@@ -11,7 +11,7 @@ import {
 } from "@/lib/line-conversations";
 import { handleGuestPostback, handleGuestText } from "@/lib/line-guest-flow";
 import { notifyAdminsLineGuestMessage } from "@/lib/admin-web-push";
-import { getLineUserDisplayName, replyLineMessages } from "@/lib/line-messaging";
+import { getLineUserProfile, replyLineMessages } from "@/lib/line-messaging";
 import { readLineChannelSecretFromCloud } from "@/lib/line-runtime-secrets";
 import {
   handleAgentProposeText,
@@ -152,6 +152,7 @@ async function storeGuestMessage(input: {
   lineUserId: string;
   text: string;
   displayName?: string;
+  pictureUrl?: string;
   messageId?: string;
   mediaType?: LineConversationMediaType;
   stickerId?: string;
@@ -163,6 +164,7 @@ async function storeGuestMessage(input: {
       from: "guest",
       text: input.text,
       displayName: input.displayName,
+      pictureUrl: input.pictureUrl,
       messageId: input.messageId,
       mediaType: input.mediaType,
       stickerId: input.stickerId,
@@ -183,10 +185,16 @@ async function storeGuestMessage(input: {
   }
 }
 
-async function resolveGuestDisplayName(userId: string | null): Promise<string> {
-  if (!userId) return "LINE 客人";
-  const name = await getLineUserDisplayName(userId);
-  return name || "LINE 客人";
+async function resolveGuestProfile(userId: string | null): Promise<{
+  displayName: string;
+  pictureUrl?: string;
+}> {
+  if (!userId) return { displayName: "LINE 客人" };
+  const profile = await getLineUserProfile(userId);
+  return {
+    displayName: profile?.displayName || "LINE 客人",
+    pictureUrl: profile ? profile.pictureUrl : undefined,
+  };
 }
 
 async function handleEvent(event: LineEvent) {
@@ -197,10 +205,11 @@ async function handleEvent(event: LineEvent) {
     if (!userId) return;
     try {
       if (event.type === "follow") {
-        const displayName = await resolveGuestDisplayName(userId);
+        const profile = await resolveGuestProfile(userId);
         await recordLineFriendFollow({
           lineUserId: userId,
-          displayName,
+          displayName: profile.displayName,
+          pictureUrl: profile.pictureUrl,
           timestamp: event.timestamp,
         });
       } else {
@@ -215,7 +224,9 @@ async function handleEvent(event: LineEvent) {
     return;
   }
 
-  const displayName = await resolveGuestDisplayName(userId);
+  const guestProfile = await resolveGuestProfile(userId);
+  const displayName = guestProfile.displayName;
+  const pictureUrl = guestProfile.pictureUrl;
 
   if (event.type === "postback") {
     if (!event.replyToken) return;
@@ -228,6 +239,7 @@ async function handleEvent(event: LineEvent) {
         lineUserId: userId,
         text: postbackLabel,
         displayName,
+        pictureUrl,
         messageId: `postback:${event.replyToken}:${data}`,
       });
     }
@@ -274,6 +286,7 @@ async function handleEvent(event: LineEvent) {
       lineUserId: userId,
       text: preview.text,
       displayName,
+      pictureUrl,
       messageId: message.id,
       mediaType: preview.mediaType,
       stickerId: preview.stickerId,

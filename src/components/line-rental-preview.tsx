@@ -68,6 +68,8 @@ type StaffGuest = {
   lineUserId?: string;
   caseId?: string;
   lineName: string;
+  /** LINE 頭像網址；空字串代表已查過但沒有圖 */
+  pictureUrl?: string;
   /** 帶看／表單流程狀態（右側處理面板用） */
   status: GuestStatus;
   /** 列表徽章：待回覆＝未回；已回覆＝已回 */
@@ -691,6 +693,7 @@ function conversationToStaffGuest(
       lineUserId: conversation.lineUserId,
       caseId: latest?.id,
       lineName: conversation.displayName || base?.lineName || "LINE 客人",
+      pictureUrl: conversation.pictureUrl,
       status: workflowStatus,
       watching: true,
       criteriaText: base?.criteriaText || "",
@@ -722,6 +725,39 @@ function matchesFilter(guest: StaffGuest, filter: ListFilter) {
 function statusPill(status: ReplyStatus) {
   if (status === "replied") return "bg-emerald-100 text-emerald-950";
   return "bg-amber-100 text-amber-950";
+}
+
+function LineSideAvatar({
+  name,
+  src,
+  size = "sm",
+}: {
+  name: string;
+  src?: string;
+  size?: "sm" | "md";
+}) {
+  const [failed, setFailed] = useState(false);
+  const initial = name.trim().slice(0, 1) || "客";
+  const box = size === "md" ? "h-10 w-10 text-sm" : "h-9 w-9 text-xs";
+  if (src && !failed) {
+    return (
+      // LINE profile.line-scdn.net 不走 next/image，避免網域設定擋住頭像
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={src}
+        alt=""
+        className={`${box} shrink-0 rounded-full object-cover`}
+        onError={() => setFailed(true)}
+      />
+    );
+  }
+  return (
+    <span
+      className={`flex ${box} shrink-0 items-center justify-center rounded-full bg-[#06c755] font-bold text-white`}
+    >
+      {initial}
+    </span>
+  );
 }
 
 export function LineRentalPreview({
@@ -1425,8 +1461,8 @@ export function LineRentalPreview({
                       active ? "bg-[#e7f8ee]" : "hover:bg-zinc-50"
                     }`}
                   >
-                    <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#06c755] text-sm font-bold text-white">
-                      {guest.lineName.slice(0, 1)}
+                    <span className="relative shrink-0">
+                      <LineSideAvatar name={guest.lineName} src={guest.pictureUrl} size="md" />
                       {guest.watching ? (
                         <span
                           title="之後新案會問"
@@ -1461,9 +1497,7 @@ export function LineRentalPreview({
           <section className="flex min-h-0 min-w-0 flex-col overflow-hidden border-b border-[#d8dde6] bg-[#7494c0] lg:border-b-0 lg:border-r lg:border-[#d8dde6]">
             <header className="shrink-0 border-b border-black/10 bg-[#432e1f] px-3 py-2.5 text-white">
               <div className="flex items-center gap-3">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#06c755] text-sm font-bold text-white">
-                  {selected.lineName.slice(0, 1)}
-                </span>
+                <LineSideAvatar name={selected.lineName} src={selected.pictureUrl} size="sm" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[15px] font-semibold leading-tight">{selected.lineName}</p>
                   <p className="truncate text-[11px] text-white/65">
@@ -1529,44 +1563,51 @@ export function LineRentalPreview({
                     mediaType === "image" ||
                     mediaType === "video" ||
                     mediaType === "audio";
+                  const sideName = fromGuest
+                    ? selected.lineName
+                    : line.from === "staff"
+                      ? staffDisplayName
+                      : "自動回覆";
                   return (
                     <div
                       key={line.id}
-                      className={`flex items-end gap-1.5 ${fromGuest ? "justify-start" : "justify-end"}`}
+                      className={`flex items-start gap-2 ${fromGuest ? "justify-start" : "flex-row-reverse"}`}
                     >
-                      {fromGuest ? (
-                        <span className="mb-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#06c755] text-xs font-bold text-white">
-                          {selected.lineName.slice(0, 1)}
-                        </span>
-                      ) : null}
-                      {!fromGuest && line.at ? (
-                        <span className="mb-0.5 shrink-0 text-[10px] leading-none text-white/80">
-                          {line.at}
-                        </span>
-                      ) : null}
+                      <LineSideAvatar
+                        name={sideName}
+                        src={fromGuest ? selected.pictureUrl : undefined}
+                      />
                       <div
-                        className={`max-w-[min(78%,28rem)] break-words text-[13.5px] leading-[1.55] text-zinc-900 ${
-                          mediaBubble
-                            ? "bg-transparent p-0 shadow-none"
-                            : `whitespace-pre-wrap px-3 py-2 shadow-sm ${
-                                fromGuest
-                                  ? "rounded-[18px] rounded-bl-[4px] bg-white"
-                                  : "rounded-[18px] rounded-br-[4px] bg-[#95ec69]"
-                              }`
+                        className={`flex min-w-0 max-w-[min(78%,28rem)] flex-col ${
+                          fromGuest ? "items-start" : "items-end"
                         }`}
                       >
-                        {line.from === "staff" && !mediaBubble ? (
-                          <span className="mb-1 block text-[10px] font-semibold text-[#067a36]">
-                            {staffDisplayName}
-                          </span>
-                        ) : null}
-                        <LineMessageBody line={line} />
-                      </div>
-                      {fromGuest && line.at ? (
-                        <span className="mb-0.5 shrink-0 text-[10px] leading-none text-white/80">
-                          {line.at}
+                        <span className="mb-0.5 px-0.5 text-[11px] font-semibold leading-none text-white/95">
+                          {sideName}
                         </span>
-                      ) : null}
+                        <div
+                          className={`flex items-end gap-1.5 ${fromGuest ? "" : "flex-row-reverse"}`}
+                        >
+                          <div
+                            className={`min-w-0 break-words text-[13.5px] leading-[1.55] text-zinc-900 ${
+                              mediaBubble
+                                ? "bg-transparent p-0 shadow-none"
+                                : `whitespace-pre-wrap px-3 py-2 shadow-sm ${
+                                    fromGuest
+                                      ? "rounded-[18px] rounded-tl-[4px] bg-white"
+                                      : "rounded-[18px] rounded-tr-[4px] bg-[#95ec69]"
+                                  }`
+                            }`}
+                          >
+                            <LineMessageBody line={line} />
+                          </div>
+                          {line.at ? (
+                            <span className="mb-0.5 shrink-0 text-[10px] leading-none text-white/80">
+                              {line.at}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
                     </div>
                   );
                 })}

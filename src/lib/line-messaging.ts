@@ -27,15 +27,21 @@ export async function getLineChannelAccessToken() {
   return resolveLineToken();
 }
 
-const profileNameCache = new Map<string, { name: string; expiresAt: number }>();
+export type LineUserProfile = {
+  displayName: string | null;
+  /** 有圖才有網址；空字串代表已查過、客人沒設頭像 */
+  pictureUrl: string;
+};
 
-/** 用 Messaging API 取客人 LINE 暱稱（客服名單顯示用） */
-export async function getLineUserDisplayName(lineUserId: string): Promise<string | null> {
+const profileCache = new Map<string, { profile: LineUserProfile; expiresAt: number }>();
+
+/** 用 Messaging API 取客人 LINE 暱稱與頭像 */
+export async function getLineUserProfile(lineUserId: string): Promise<LineUserProfile | null> {
   const userId = lineUserId.trim();
   if (!userId) return null;
 
-  const cached = profileNameCache.get(userId);
-  if (cached && cached.expiresAt > Date.now()) return cached.name;
+  const cached = profileCache.get(userId);
+  if (cached && cached.expiresAt > Date.now()) return cached.profile;
 
   const token = await resolveLineToken();
   if (!token) return null;
@@ -46,15 +52,22 @@ export async function getLineUserDisplayName(lineUserId: string): Promise<string
       cache: "no-store",
     });
     if (!response.ok) return null;
-    const data = (await response.json()) as { displayName?: string };
-    const name = data.displayName?.trim() || null;
-    if (name) {
-      profileNameCache.set(userId, { name, expiresAt: Date.now() + 6 * 60 * 60_000 });
-    }
-    return name;
+    const data = (await response.json()) as { displayName?: string; pictureUrl?: string };
+    const profile: LineUserProfile = {
+      displayName: data.displayName?.trim() || null,
+      pictureUrl: data.pictureUrl?.trim() || "",
+    };
+    profileCache.set(userId, { profile, expiresAt: Date.now() + 6 * 60 * 60_000 });
+    return profile;
   } catch {
     return null;
   }
+}
+
+/** 用 Messaging API 取客人 LINE 暱稱（客服名單顯示用） */
+export async function getLineUserDisplayName(lineUserId: string): Promise<string | null> {
+  const profile = await getLineUserProfile(lineUserId);
+  return profile?.displayName ?? null;
 }
 
 export type LinePostbackAction = {
