@@ -1449,23 +1449,21 @@ export function LineRentalPreview({
                   >
                     <LineSideAvatar name={guest.lineName} src={guest.pictureUrl} size="md" />
                     <span className="min-w-0 flex-1">
-                      <span className="flex items-center gap-2">
-                        <span className="min-w-0 flex-1 truncate text-sm font-bold text-zinc-900">
-                          {guest.lineName}
-                        </span>
-                        {clock ? (
-                          <span className="shrink-0 text-[11px] text-zinc-400">{clock}</span>
-                        ) : null}
-                      </span>
+                      <span className="block truncate text-sm font-bold text-zinc-900">{guest.lineName}</span>
                       <span className="mt-0.5 block truncate text-xs text-zinc-500">{preview}</span>
                     </span>
-                    {guest.replyStatus === "awaiting_staff" ? (
-                      <span
-                        className="ml-auto h-3.5 w-3.5 shrink-0 self-center rounded-full bg-sky-500"
-                        title="未回覆"
-                        aria-label="未回覆"
-                      />
-                    ) : null}
+                    <span className="ml-auto flex w-11 shrink-0 flex-col items-center gap-1 self-center">
+                      <span className="whitespace-nowrap text-[11px] leading-none text-zinc-400">{clock || "\u00a0"}</span>
+                      {guest.replyStatus === "awaiting_staff" ? (
+                        <span
+                          className="h-3 w-3 rounded-full bg-sky-500"
+                          title="未回覆"
+                          aria-label="未回覆"
+                        />
+                      ) : (
+                        <span className="h-3 w-3" aria-hidden />
+                      )}
+                    </span>
                   </button>
                 </li>
               );
