@@ -9,6 +9,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
+import Link from "next/link";
 import { taipeiTodayYmd } from "@/lib/owner-tracking-next-contact";
 import { formatViewingRange, RENT_PRICE_OPTIONS, type RentalMatchListing } from "@/lib/line-rental-assistant";
 import type {
@@ -1493,10 +1494,16 @@ export function LineRentalPreview({
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-[#c9ced6] bg-[#edf0f5] shadow-sm max-lg:fixed max-lg:inset-0 max-lg:z-[70] max-lg:h-[100dvh] max-lg:rounded-none max-lg:border-0 max-lg:bg-white max-lg:pt-[env(safe-area-inset-top)] max-lg:shadow-none">
       <div
-        className={`flex shrink-0 gap-1 overflow-x-auto border-b border-[#d8dde6] bg-white px-2 py-2 ${
+        className={`flex shrink-0 items-center gap-1 overflow-x-auto border-b border-[#d8dde6] bg-white px-2 py-2 ${
           mobilePane === "chat" ? "max-lg:hidden" : ""
         }`}
       >
+        <Link
+          href="/admin"
+          className="shrink-0 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-sm font-semibold text-zinc-800 lg:hidden"
+        >
+          首頁
+        </Link>
         {FILTERS.map((item) => {
           const count = guests.filter((guest) => matchesFilter(guest, item.id)).length;
           const active = filter === item.id;
