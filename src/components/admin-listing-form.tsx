@@ -301,6 +301,10 @@ export function AdminListingForm({
       }
       const draft = json.draft;
       const keepType = Boolean(lockedListingType);
+      const importedPropertyType = (PROPERTY_TYPE_OPTIONS as readonly string[]).includes(draft.propertyType)
+        ? (draft.propertyType as PropertyTypeOption)
+        : null;
+      const skipLayout = importedPropertyType === "STUDIO" || importedPropertyType === "SUITE";
       setFormData((prev) => ({
         ...prev,
         listingType: keepType ? prev.listingType : draft.listingType,
@@ -311,14 +315,12 @@ export function AdminListingForm({
         district: draft.city ? draft.district : prev.district,
         address: draft.address || prev.address,
         community: draft.community || prev.community,
-        propertyType: (PROPERTY_TYPE_OPTIONS as readonly string[]).includes(draft.propertyType)
-          ? (draft.propertyType as PropertyTypeOption)
-          : prev.propertyType,
+        propertyType: importedPropertyType ?? prev.propertyType,
         areaPing: draft.areaPing || prev.areaPing,
-        rooms: draft.rooms || prev.rooms,
-        livingRooms: draft.livingRooms || prev.livingRooms,
-        bathrooms: draft.bathrooms || prev.bathrooms,
-        balconies: draft.balconies || prev.balconies,
+        rooms: skipLayout ? "" : draft.rooms || prev.rooms,
+        livingRooms: skipLayout ? "" : draft.livingRooms || prev.livingRooms,
+        bathrooms: skipLayout ? "" : draft.bathrooms || prev.bathrooms,
+        balconies: skipLayout ? "" : draft.balconies || prev.balconies,
         floor: draft.floor || prev.floor,
         totalFloors: draft.totalFloors || prev.totalFloors,
         managementFee: draft.managementFeeSet ? draft.managementFee : draft.managementFee || prev.managementFee,
@@ -363,6 +365,7 @@ export function AdminListingForm({
 
   const isRent = formData.listingType === "RENT";
   const isSale = formData.listingType === "SALE";
+  const layoutOptional = formData.propertyType === "STUDIO" || formData.propertyType === "SUITE";
   const hasParking = parkingUi.select !== "";
   const parkingExtraDisabled = !hasParking;
   const selectedRegion = TAIWAN_REGIONS.find((r) => r.city === formData.city);
@@ -912,12 +915,12 @@ export function AdminListingForm({
                   <input
                     type="text"
                     inputMode="decimal"
-                    required={required}
+                    required={required && !layoutOptional}
                     value={formData[key]}
                     onChange={(e) => setFormData((p) => ({ ...p, [key]: e.target.value }))}
                     className={`h-[42px] w-full min-w-0 rounded-lg border bg-white py-2 pl-2 text-sm ${
                       key === "balconies" ? "pr-10" : "pr-7"
-                    } ${key === "rooms" ? "border-orange-400" : "border-zinc-300"}`}
+                    } ${key === "rooms" && !layoutOptional ? "border-orange-400" : "border-zinc-300"}`}
                     aria-label={`格局${suffix}`}
                   />
                   <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-sm font-medium text-zinc-800">

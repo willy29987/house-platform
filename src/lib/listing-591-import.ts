@@ -198,6 +198,17 @@ function layoutCounts(layoutText: string) {
   };
 }
 
+/** 獨立套房、分租套房不帶格局。 */
+function layoutForPropertyType(
+  propertyType: PropertyTypeOption | "",
+  counts: { rooms: string; livingRooms: string; bathrooms: string; balconies: string },
+) {
+  if (propertyType === "STUDIO" || propertyType === "SUITE") {
+    return { rooms: "", livingRooms: "", bathrooms: "", balconies: "" };
+  }
+  return counts;
+}
+
 function priceForForm(raw: string, listingType: "RENT" | "SALE"): string {
   const cleaned = raw.replace(/[,，元]/g, "").trim();
   const wan = cleaned.match(/([\d.]+)\s*萬/);
@@ -464,7 +475,11 @@ function mapRentPayload(
     "";
   const shapeName = rowText(info, "shape", "型態") || textOf(gtm.shape_name);
   const floors = splitFloor(rowText(info, "floor", "樓層") || textOf(gtm.floor_name));
-  const counts = layoutCounts(rowText(info, "layout", "格局"));
+  const propertyType = propertyTypeFromKindAndShape(kindName, shapeName);
+  const counts = layoutForPropertyType(
+    propertyType,
+    layoutCounts(rowText(info, "layout", "格局")),
+  );
   const facilities = mapFacilities(service.facility);
   const cityRaw = textOf(gtm.region_name) || crumbName(0);
   const districtRaw = textOf(gtm.section_name) || crumbName(1);
@@ -497,12 +512,12 @@ function mapRentPayload(
     district: region.district,
     address: stripRegion(street, region.city, region.district),
     community: community === "依現場名稱" ? "" : community,
-    propertyType: propertyTypeFromKindAndShape(kindName, shapeName),
+    propertyType,
     areaPing: pingNumber(rowText(info, "area", "使用坪數") || textOf(gtm.area_name)),
     rooms: counts.rooms,
     livingRooms: counts.livingRooms,
     bathrooms: counts.bathrooms,
-    balconies: counts.balconies || facilities.balcony,
+    balconies: counts.balconies || (propertyType === "STUDIO" || propertyType === "SUITE" ? "" : facilities.balcony),
     floor: floors.floor,
     totalFloors: floors.totalFloors,
     managementFee: management.amount,
@@ -541,7 +556,8 @@ function mapSalePayload(
   const kindName = rowText(info, "現況") || textOf(data.kindStr) || textOf(gtm.kind_name);
   const shapeName = rowText(info, "型態") || textOf(gtm.shape_name);
   const floors = splitFloor(rowText(info, "樓層") || textOf(gtm.floor_name));
-  const counts = layoutCounts(textOf(base.layout));
+  const propertyType = propertyTypeFromKindAndShape(/住宅|住家/.test(kindName) ? "" : kindName, shapeName);
+  const counts = layoutForPropertyType(propertyType, layoutCounts(textOf(base.layout)));
   const cityRaw = textOf(address.region) || textOf(gtm.region_name);
   const districtRaw = textOf(address.section) || textOf(gtm.section_name);
   const street = [textOf(address.street), textOf(address.lane) ? `${textOf(address.lane)}巷` : "", textOf(address.alley) ? `${textOf(address.alley)}弄` : ""]
@@ -565,7 +581,7 @@ function mapSalePayload(
     city: region.city,
     district: region.district,
     address: stripRegion(fullStreet, region.city, region.district),
-    propertyType: propertyTypeFromKindAndShape(/住宅|住家/.test(kindName) ? "" : kindName, shapeName),
+    propertyType,
     areaPing: pingNumber(textOf(base.unitArea) || textOf(base.area)),
     areaParkingSpace: pingNumber(parkingRaw.includes("坪") ? parkingRaw : ""),
     rooms: counts.rooms,
