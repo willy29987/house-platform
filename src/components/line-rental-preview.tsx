@@ -1491,7 +1491,7 @@ export function LineRentalPreview({
     LINE_CS_STICKER_PACKS[0];
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-[#c9ced6] bg-[#edf0f5] shadow-sm max-lg:rounded-none max-lg:shadow-none">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-[#c9ced6] bg-[#edf0f5] shadow-sm max-lg:fixed max-lg:inset-0 max-lg:z-[70] max-lg:h-[100dvh] max-lg:rounded-none max-lg:border-0 max-lg:bg-white max-lg:pt-[env(safe-area-inset-top)] max-lg:shadow-none">
       <div
         className={`flex shrink-0 gap-1 overflow-x-auto border-b border-[#d8dde6] bg-white px-2 py-2 ${
           mobilePane === "chat" ? "max-lg:hidden" : ""
@@ -1541,7 +1541,7 @@ export function LineRentalPreview({
 
       <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-1 overflow-hidden lg:grid-cols-[minmax(16rem,20%)_minmax(0,1fr)_minmax(18rem,22%)]">
         <ul
-          className={`min-h-0 overflow-y-auto border-b border-[#d8dde6] bg-white lg:border-r lg:border-b-0 ${
+          className={`min-h-0 overflow-y-auto border-b border-[#d8dde6] bg-white max-lg:border-0 max-lg:pb-[env(safe-area-inset-bottom)] lg:border-r lg:border-b-0 ${
             mobilePane === "chat" ? "max-lg:hidden" : ""
           }`}
         >
