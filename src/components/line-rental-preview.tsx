@@ -7,6 +7,7 @@ import {
   useState,
   type FormEvent,
   type KeyboardEvent,
+  type ReactNode,
 } from "react";
 import { taipeiTodayYmd } from "@/lib/owner-tracking-next-contact";
 import { formatViewingRange, RENT_PRICE_OPTIONS, type RentalMatchListing } from "@/lib/line-rental-assistant";
@@ -20,6 +21,7 @@ import type { GuestWatchRecord } from "@/lib/line-guest-watch";
 import {
   buildViewingConfirmedGuestText,
   VIEWING_ASK_OTHER_TIME_TEXT,
+  VIEWING_SUBMIT_ACK_TEXT,
   type ViewingConfirmListing,
 } from "@/lib/line-viewing-guest-copy";
 import {
@@ -780,10 +782,12 @@ function LineSideAvatar({
   name,
   src,
   size = "sm",
+  className = "",
 }: {
   name: string;
   src?: string;
   size?: "sm" | "md";
+  className?: string;
 }) {
   const [failed, setFailed] = useState(false);
   const initial = name.trim().slice(0, 1) || "客";
@@ -795,14 +799,14 @@ function LineSideAvatar({
       <img
         src={src}
         alt=""
-        className={`${box} shrink-0 rounded-full object-cover`}
+        className={`${box} shrink-0 rounded-full object-cover ${className}`}
         onError={() => setFailed(true)}
       />
     );
   }
   return (
     <span
-      className={`flex ${box} shrink-0 items-center justify-center rounded-full bg-[#06c755] font-bold text-white`}
+      className={`flex ${box} shrink-0 items-center justify-center rounded-full bg-[#06c755] font-bold text-white ${className}`}
     >
       {initial}
     </span>
@@ -856,6 +860,8 @@ export function LineRentalPreview({
     "default",
   );
   const [stickerOpen, setStickerOpen] = useState(false);
+  const [attachOpen, setAttachOpen] = useState(false);
+  const [presetOpen, setPresetOpen] = useState(false);
   const [stickerPackId, setStickerPackId] = useState(LINE_CS_STICKER_PACKS[0]?.packageId ?? "");
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const lineId = useRef(500);
@@ -868,11 +874,18 @@ export function LineRentalPreview({
   const draftInputRef = useRef<HTMLTextAreaElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
+  const desktopDraftRef = useRef<HTMLTextAreaElement | null>(null);
   const rightPanelRef = useRef<HTMLElement | null>(null);
   const today = useMemo(() => taipeiTodayYmd(), []);
 
   function resizeDraftInput(node?: HTMLTextAreaElement | null) {
-    const el = node ?? draftInputRef.current;
+    const el =
+      node ??
+      [draftInputRef.current, desktopDraftRef.current].find(
+        (item) => item && item.getClientRects().length > 0,
+      ) ??
+      draftInputRef.current;
     if (!el) return;
     el.style.height = "0px";
     const max = 7 * 20; // 約 7 行
@@ -1180,6 +1193,8 @@ export function LineRentalPreview({
     setSchedule(emptyViewingSchedule());
     setDetailsOpen(false);
     setStickerOpen(false);
+    setAttachOpen(false);
+    setPresetOpen(false);
   }
 
   function patchGuest(id: string, update: (guest: StaffGuest) => StaffGuest) {
@@ -1494,6 +1509,8 @@ export function LineRentalPreview({
                 setEditingTime(false);
                 setDetailsOpen(false);
                 setStickerOpen(false);
+                setAttachOpen(false);
+                setPresetOpen(false);
               }}
               className={`shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold ${
                 active ? "bg-[#06c755] text-white" : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
@@ -1576,12 +1593,12 @@ export function LineRentalPreview({
 
         {selected ? (
           <section
-            className={`flex min-h-0 min-w-0 flex-col overflow-hidden border-b border-[#d8dde6] bg-[#7494c0] lg:border-b-0 lg:border-r lg:border-[#d8dde6] ${
+            className={`flex min-h-0 min-w-0 flex-col overflow-hidden border-b border-[#d8dde6] bg-[#7494c0] lg:border-b-0 lg:border-r lg:border-[#d8dde6] max-lg:fixed max-lg:inset-0 max-lg:z-[70] max-lg:h-[100dvh] max-lg:w-screen max-lg:border-0 max-lg:bg-[#f3f3f3] ${
               mobilePane === "list" ? "max-lg:hidden" : ""
             }`}
           >
-            <header className="shrink-0 border-b border-black/10 bg-[#432e1f] px-3 py-2.5 text-white">
-              <div className="flex items-center gap-3">
+            <header className="shrink-0 border-b border-black/10 bg-[#432e1f] px-3 py-2.5 text-white max-lg:border-zinc-200 max-lg:bg-white max-lg:px-1 max-lg:py-1.5 max-lg:pt-[max(0.35rem,env(safe-area-inset-top))] max-lg:text-zinc-900">
+              <div className="flex items-center gap-3 max-lg:relative max-lg:min-h-11">
                 <button
                   type="button"
                   onClick={() => {
@@ -1593,18 +1610,27 @@ export function LineRentalPreview({
                     setMobilePane("list");
                     setDetailsOpen(false);
                     setStickerOpen(false);
+                    setAttachOpen(false);
+                    setPresetOpen(false);
                   }}
-                  className="-ml-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white hover:bg-white/10 lg:hidden"
+                  className="-ml-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white hover:bg-white/10 max-lg:text-zinc-900 max-lg:hover:bg-zinc-100 lg:hidden"
                   aria-label={detailsOpen ? "返回對話" : "返回聊天列表"}
                 >
                   <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
                     <path d="M15 6 9 12l6 6" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </button>
-                <LineSideAvatar name={selected.lineName} src={selected.pictureUrl} size="sm" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[15px] font-semibold leading-tight">{selected.lineName}</p>
-                  <p className="truncate text-[11px] text-white/65">
+                <LineSideAvatar
+                  name={selected.lineName}
+                  src={selected.pictureUrl}
+                  size="sm"
+                  className="max-lg:hidden"
+                />
+                <div className="min-w-0 flex-1 max-lg:pointer-events-none max-lg:absolute max-lg:inset-x-12 max-lg:text-center">
+                  <p className="truncate text-[15px] font-semibold leading-tight max-lg:text-[17px] max-lg:text-zinc-900">
+                    {selected.lineName}
+                  </p>
+                  <p className="truncate text-[11px] text-white/65 max-lg:hidden">
                     {[
                       selected.pipeline === "active"
                         ? "進行中"
@@ -1626,10 +1652,17 @@ export function LineRentalPreview({
                   onClick={() => {
                     setDetailsOpen((open) => !open);
                     setStickerOpen(false);
+                    setAttachOpen(false);
+                    setPresetOpen(false);
                   }}
-                  className="shrink-0 rounded-md bg-white/10 px-2.5 py-1 text-xs font-medium text-white hover:bg-white/15 lg:hidden"
+                  className="ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-zinc-800 hover:bg-zinc-100 lg:hidden"
+                  aria-label={detailsOpen ? "回對話" : "更多"}
                 >
-                  {detailsOpen ? "回對話" : "物件／時間"}
+                  <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" aria-hidden>
+                    <circle cx="5" cy="12" r="1.6" />
+                    <circle cx="12" cy="12" r="1.6" />
+                    <circle cx="19" cy="12" r="1.6" />
+                  </svg>
                 </button>
               </div>
             </header>
@@ -1667,7 +1700,7 @@ export function LineRentalPreview({
               <div className="flex w-full flex-col gap-3">
                 {selected.createdAt ? (
                   <div className="flex justify-center py-1">
-                    <span className="rounded-full bg-black/20 px-3 py-0.5 text-[11px] font-medium text-white/95">
+                    <span className="rounded-full bg-black/20 px-3 py-0.5 text-[11px] font-medium text-white/95 max-lg:bg-black/10 max-lg:text-zinc-600">
                       {formatLineDayLabel(selected.createdAt)}
                     </span>
                   </div>
@@ -1693,13 +1726,14 @@ export function LineRentalPreview({
                       <LineSideAvatar
                         name={sideName}
                         src={fromGuest ? selected.pictureUrl : undefined}
+                        className={fromGuest ? "" : "max-lg:hidden"}
                       />
                       <div
                         className={`flex min-w-0 max-w-[min(78%,28rem)] flex-col ${
                           fromGuest ? "items-start" : "items-end"
                         }`}
                       >
-                        <span className="mb-0.5 px-0.5 text-[11px] font-semibold leading-none text-white/95">
+                        <span className="mb-0.5 px-0.5 text-[11px] font-semibold leading-none text-white/95 max-lg:hidden">
                           {sideName}
                         </span>
                         <div
@@ -1712,14 +1746,14 @@ export function LineRentalPreview({
                                 : `whitespace-pre-wrap px-3 py-2 shadow-sm ${
                                     fromGuest
                                       ? "rounded-[18px] rounded-tl-[4px] bg-white"
-                                      : "rounded-[18px] rounded-tr-[4px] bg-[#95ec69]"
+                                      : "rounded-[18px] rounded-tr-[4px] bg-[#95ec69] max-lg:bg-[#d6e7fb]"
                                   }`
                             }`}
                           >
                             <LineMessageBody line={line} />
                           </div>
                           {line.at ? (
-                            <span className="mb-0.5 shrink-0 text-[10px] leading-none text-white/80">
+                            <span className="mb-0.5 shrink-0 text-[10px] leading-none text-white/80 max-lg:text-zinc-400">
                               {line.at}
                             </span>
                           ) : null}
@@ -1795,36 +1829,161 @@ export function LineRentalPreview({
             ) : null}
 
             <form
-              onSubmit={sendDraft}
-              className={`shrink-0 border-t border-[#ebebeb] bg-white px-3 py-2.5 max-lg:px-2 max-lg:py-1.5 ${
+              onSubmit={(event) => {
+                setAttachOpen(false);
+                setPresetOpen(false);
+                sendDraft(event);
+              }}
+              className={`shrink-0 border-t border-[#ebebeb] bg-white max-lg:px-2 max-lg:pb-[max(0.45rem,env(safe-area-inset-bottom))] max-lg:pt-1.5 lg:px-3 lg:py-2.5 ${
                 detailsOpen ? "max-lg:hidden" : ""
               }`}
             >
               <input
-                ref={imageInputRef}
+                ref={cameraInputRef}
                 type="file"
                 accept="image/*"
+                capture="environment"
                 className="hidden"
                 onChange={(event) => {
                   onPickMedia(selected, event.target.files);
                   event.target.value = "";
+                  setAttachOpen(false);
+                }}
+              />
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/*,video/*"
+                className="hidden"
+                onChange={(event) => {
+                  onPickMedia(selected, event.target.files);
+                  event.target.value = "";
+                  setAttachOpen(false);
                 }}
               />
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*"
                 className="hidden"
                 onChange={(event) => {
                   onPickMedia(selected, event.target.files);
                   event.target.value = "";
+                  setAttachOpen(false);
                 }}
               />
-              <div className="rounded-lg border border-[#e5e5e5] bg-white max-lg:flex max-lg:items-end max-lg:gap-1 max-lg:rounded-none max-lg:border-0">
-                <label className="block px-3 pt-2.5 max-lg:min-w-0 max-lg:flex-1 max-lg:rounded-[1.25rem] max-lg:bg-[#f2f2f2] max-lg:px-3 max-lg:py-1">
+              <div className="lg:hidden">
+                {attachOpen ? (
+                  <div className="border-b border-zinc-100 px-1 pb-3 pt-2">
+                    {presetOpen ? (
+                      <div className="space-y-2">
+                        <p className="px-2 text-xs font-semibold text-zinc-500">預設訊息</p>
+                        {[
+                          { label: "稍等確認時間", text: VIEWING_SUBMIT_ACK_TEXT },
+                          { label: "改問其他時間", text: VIEWING_ASK_OTHER_TIME_TEXT },
+                        ].map((item) => (
+                          <button
+                            key={item.label}
+                            type="button"
+                            onClick={() => {
+                              setDrafts((current) => ({ ...current, [selected.id]: item.text }));
+                              setPresetOpen(false);
+                              setAttachOpen(false);
+                              window.requestAnimationFrame(() => resizeDraftInput());
+                            }}
+                            className="block w-full rounded-xl bg-zinc-50 px-3 py-2.5 text-left text-sm leading-relaxed text-zinc-800"
+                          >
+                            {item.text}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-4 gap-2">
+                        <MobileAttachButton
+                          label="相機"
+                          disabled={!selected.lineUserId || uploadingMedia}
+                          onClick={() => cameraInputRef.current?.click()}
+                          icon={<MobileCameraIcon />}
+                        />
+                        <MobileAttachButton
+                          label="照片・影片"
+                          disabled={!selected.lineUserId || uploadingMedia}
+                          onClick={() => imageInputRef.current?.click()}
+                          icon={<MobilePhotoIcon />}
+                        />
+                        <MobileAttachButton
+                          label="檔案"
+                          disabled={!selected.lineUserId || uploadingMedia}
+                          onClick={() => fileInputRef.current?.click()}
+                          icon={<MobileFileIcon />}
+                        />
+                        <MobileAttachButton
+                          label="預設訊息"
+                          onClick={() => setPresetOpen(true)}
+                          icon={<MobilePresetIcon />}
+                        />
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+                <div className="flex items-end gap-1.5">
+                  <button
+                    type="button"
+                    aria-label={attachOpen ? "關閉附件" : "開啟附件"}
+                    onClick={() => {
+                      setAttachOpen((open) => !open);
+                      setPresetOpen(false);
+                      setStickerOpen(false);
+                    }}
+                    className="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center text-zinc-500"
+                  >
+                    {attachOpen ? <MobileCloseIcon /> : <MobilePlusIcon />}
+                  </button>
+                  <label className="flex min-h-9 min-w-0 flex-1 items-center rounded-full border border-zinc-200 bg-white px-3">
+                    <span className="sr-only">輸入訊息</span>
+                    <textarea
+                      ref={draftInputRef}
+                      rows={1}
+                      value={draft}
+                      placeholder="輸入訊息"
+                      onChange={(event) => {
+                        if (ignoreDraftChangeRef.current === selected.id) return;
+                        const value = event.target.value;
+                        setDrafts((current) => ({ ...current, [selected.id]: value }));
+                        resizeDraftInput(event.target);
+                      }}
+                      onKeyDown={onDraftKeyDown}
+                      className="max-h-32 min-h-[1.35rem] w-full resize-none overflow-y-auto bg-transparent py-1.5 text-[15px] leading-6 text-zinc-900 outline-none placeholder:text-zinc-400"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    aria-label="貼圖"
+                    onClick={() => {
+                      setStickerOpen((open) => !open);
+                      setAttachOpen(false);
+                      setPresetOpen(false);
+                    }}
+                    className={`mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center ${
+                      stickerOpen ? "text-[#4c8dff]" : "text-zinc-500"
+                    }`}
+                  >
+                    <ComposerSmileIcon />
+                  </button>
+                  <button
+                    type="submit"
+                    aria-label="傳送"
+                    disabled={!draft.trim() || !selected.lineUserId}
+                    className="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center text-zinc-700 disabled:text-zinc-300"
+                  >
+                    <MobileSendIcon />
+                  </button>
+                </div>
+              </div>
+              <div className="hidden rounded-lg border border-[#e5e5e5] bg-white lg:block">
+                <label className="block px-3 pt-2.5">
                   <span className="sr-only">輸入訊息</span>
                   <textarea
-                    ref={draftInputRef}
+                    ref={desktopDraftRef}
                     rows={1}
                     value={draft}
                     placeholder="Enter: 傳送 / Shift + Enter: 換行"
@@ -1835,10 +1994,10 @@ export function LineRentalPreview({
                       resizeDraftInput(event.target);
                     }}
                     onKeyDown={onDraftKeyDown}
-                    className="max-h-32 min-h-[2.5rem] w-full resize-none overflow-y-auto bg-transparent text-[14px] leading-6 text-[#222] outline-none placeholder:text-[#bbb] max-lg:min-h-[1.5rem] max-lg:py-0.5"
+                    className="max-h-32 min-h-[2.5rem] w-full resize-none overflow-y-auto bg-transparent text-[14px] leading-6 text-[#222] outline-none placeholder:text-[#bbb]"
                   />
                 </label>
-                <div className="flex items-center gap-1 px-2 pb-2 pt-1 max-lg:shrink-0 max-lg:gap-0 max-lg:px-0 max-lg:pb-0.5 max-lg:pt-0">
+                <div className="flex items-center gap-1 px-2 pb-2 pt-1">
                   <button
                     type="button"
                     aria-label="貼圖"
@@ -2186,6 +2345,90 @@ function GuestDecisionPanel({
         </section>
       ) : null}
     </div>
+  );
+}
+
+function MobileAttachButton({
+  label,
+  icon,
+  onClick,
+  disabled = false,
+}: {
+  label: string;
+  icon: ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className="flex flex-col items-center gap-1.5 px-1 py-2 text-zinc-500 disabled:opacity-40"
+    >
+      <span className="flex h-12 w-12 items-center justify-center">{icon}</span>
+      <span className="text-[11px] leading-none">{label}</span>
+    </button>
+  );
+}
+
+function MobilePlusIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
+      <path d="M12 5v14M5 12h14" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function MobileCloseIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
+      <path d="M6 6l12 12M18 6 6 18" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function MobileSendIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-6 w-6" fill="currentColor" aria-hidden>
+      <path d="M4.2 11.2 19.5 4.4c.7-.3 1.4.4 1.1 1.1l-6.8 15.3c-.3.7-1.3.6-1.5-.1l-1.8-6.1-6.1-1.8c-.7-.2-.8-1.2-.2-1.6Z" />
+    </svg>
+  );
+}
+
+function MobileCameraIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-8 w-8" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden>
+      <path d="M8 7.5 9.2 5.8A1 1 0 0 1 10 5.4h4a1 1 0 0 1 .8.4L16 7.5h2.2A1.8 1.8 0 0 1 20 9.3v7.4a1.8 1.8 0 0 1-1.8 1.8H5.8A1.8 1.8 0 0 1 4 16.7V9.3A1.8 1.8 0 0 1 5.8 7.5H8Z" />
+      <circle cx="12" cy="12.2" r="3.1" />
+    </svg>
+  );
+}
+
+function MobilePhotoIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-8 w-8" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden>
+      <rect x="3.5" y="5" width="17" height="14" rx="2" />
+      <circle cx="8.5" cy="9.2" r="1.3" />
+      <path d="m6 16.5 3.4-3.3a1 1 0 0 1 1.4 0L14 16.2l1.2-1.1a1 1 0 0 1 1.3 0L19 17.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function MobileFileIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-8 w-8" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden>
+      <path d="M7 3.8h6.2L19 9.6V20.2H7V3.8Z" />
+      <path d="M13 3.8V9.6h6" />
+    </svg>
+  );
+}
+
+function MobilePresetIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-8 w-8" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden>
+      <path d="M6 6.5h12v8.2H9.2L6 17.2V6.5Z" strokeLinejoin="round" />
+    </svg>
   );
 }
 
