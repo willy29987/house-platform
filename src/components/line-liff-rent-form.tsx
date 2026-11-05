@@ -29,6 +29,15 @@ import { propertyTypeLabel } from "@/lib/property-type-label";
 
 type Step = "criteria" | "listings" | "profile";
 
+/** 已存條件的客人從推播點進：跳過條件頁，直接開物件 */
+export type LiffDirectListingEntry = {
+  listingIds: string[];
+  criteria: RentalMatchCriteria;
+  priceMin: number | null;
+  priceMax: number | null;
+  petNote: string;
+};
+
 const STEPS: { id: Step; label: string }[] = [
   { id: "criteria", label: "條件" },
   { id: "listings", label: "物件" },
@@ -200,11 +209,12 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function StepDots({ step }: { step: Step }) {
-  const index = STEPS.findIndex((item) => item.id === step);
+function StepDots({ step, hideCriteria }: { step: Step; hideCriteria?: boolean }) {
+  const steps = hideCriteria ? STEPS.filter((item) => item.id !== "criteria") : STEPS;
+  const index = steps.findIndex((item) => item.id === step);
   return (
     <div className="mt-2 flex items-center gap-1.5">
-      {STEPS.map((item, i) => (
+      {steps.map((item, i) => (
         <div key={item.id} className="flex min-w-0 flex-1 flex-col items-center gap-1">
           <div
             className={`h-1.5 w-full rounded-full ${
@@ -230,12 +240,16 @@ function ListingDetailSheet({
   wanted,
   onToggleWant,
   onClose,
+  onContinue,
+  continueLabel,
 }: {
   listing: RentalMatchListing;
   pageUrl: string;
   wanted: boolean;
   onToggleWant: () => void;
   onClose: () => void;
+  onContinue?: () => void;
+  continueLabel?: string;
 }) {
   const photos = listingPhotos(listing);
   const [photoIndex, setPhotoIndex] = useState(0);
@@ -547,6 +561,15 @@ function ListingDetailSheet({
           >
             {wanted ? "已加入想看（再點取消）" : "想看這間"}
           </button>
+          {wanted && onContinue ? (
+            <button
+              type="button"
+              onClick={onContinue}
+              className="mt-2 w-full rounded-full bg-[#06c755] py-2.5 text-sm font-bold text-white"
+            >
+              {continueLabel || "下一步"}
+            </button>
+          ) : null}
         </div>
       </div>
     </div>
@@ -609,6 +632,7 @@ export function LineLiffRentForm({
   displayName,
   listingBaseUrl,
   lineBasicId = "@878thkii",
+  directListing = null,
   onSubmitted,
 }: {
   listings: RentalMatchListing[];
@@ -617,22 +641,47 @@ export function LineLiffRentForm({
   displayName: string | null;
   listingBaseUrl: string;
   lineBasicId?: string;
+  directListing?: LiffDirectListingEntry | null;
   onSubmitted?: (caseId: string) => void;
 }) {
   const today = useMemo(() => taipeiTodayYmd(), []);
-  const [step, setStep] = useState<Step>("criteria");
-  const [criteria, setCriteria] = useState<RentalMatchCriteria>(emptyCriteria());
-  const [petHas, setPetHas] = useState<"no" | "yes" | null>(null);
-  const [petDraft, setPetDraft] = useState("");
-  const [matched, setMatched] = useState<RentalMatchListing[]>([]);
+  const skipCriteria = Boolean(directListing?.listingIds.length);
+  const [step, setStep] = useState<Step>(skipCriteria ? "listings" : "criteria");
+  const [criteria, setCriteria] = useState<RentalMatchCriteria>(
+    directListing?.criteria ?? emptyCriteria(),
+  );
+  const [petHas, setPetHas] = useState<"no" | "yes" | null>(() => {
+    if (!directListing?.petNote) return null;
+    return directListing.petNote === "沒有" ? "no" : "yes";
+  });
+  const [petDraft, setPetDraft] = useState(
+    directListing?.petNote && directListing.petNote !== "沒有" ? directListing.petNote : "",
+  );
+  const [matched, setMatched] = useState<RentalMatchListing[]>(() => {
+    if (!directListing) return [];
+    const ids = new Set(directListing.listingIds);
+    return listings.filter((item) => ids.has(item.id));
+  });
   const [matchedRelaxed, setMatchedRelaxed] = useState<string[]>([]);
   const [similar, setSimilar] = useState<RentalMatchListing[]>([]);
   const [similarNotes, setSimilarNotes] = useState<string[]>([]);
   const [watchSaved, setWatchSaved] = useState(false);
-  const [detailId, setDetailId] = useState<string | null>(null);
-  const [priceCustomOn, setPriceCustomOn] = useState(false);
-  const [priceMin, setPriceMin] = useState("");
-  const [priceMax, setPriceMax] = useState("");
+  const [detailId, setDetailId] = useState<string | null>(
+    skipCriteria ? (directListing?.listingIds[0] ?? null) : null,
+  );
+  const [priceCustomOn, setPriceCustomOn] = useState(
+    Boolean(
+      directListing &&
+        directListing.criteria.priceKeys.length === 0 &&
+        (directListing.priceMin != null || directListing.priceMax != null),
+    ),
+  );
+  const [priceMin, setPriceMin] = useState(
+    directListing?.priceMin != null ? String(directListing.priceMin) : "",
+  );
+  const [priceMax, setPriceMax] = useState(
+    directListing?.priceMax != null ? String(directListing.priceMax) : "",
+  );
   const [peopleCount, setPeopleCount] = useState(1);
   const [occupation, setOccupation] = useState("");
   const [moveIn, setMoveIn] = useState("");
@@ -640,7 +689,9 @@ export function LineLiffRentForm({
   const [nationalityDraft, setNationalityDraft] = useState("");
   const [phone, setPhone] = useState("");
   const [schedule, setSchedule] = useState<ViewingScheduleValue>(emptyViewingSchedule);
-  const [pickedIds, setPickedIds] = useState<string[]>([]);
+  const [pickedIds, setPickedIds] = useState<string[]>(
+    skipCriteria ? [...(directListing?.listingIds ?? [])] : [],
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState<{ when: string; titles: string[] } | null>(null);
@@ -768,7 +819,7 @@ export function LineLiffRentForm({
     const found = ids
       .map((id) => listings.find((item) => item.id === id))
       .filter((item): item is RentalMatchListing => Boolean(item));
-    if (!found.length) return;
+    if (!found.length || !skipCriteria) return;
     listingBootRef.current = true;
     const seed = emptyCriteria();
     seed.cities = [...new Set(found.map((item) => item.city).filter(Boolean))];
@@ -782,8 +833,9 @@ export function LineLiffRentForm({
     setSimilar(similarResult.items);
     setSimilarNotes(similarResult.notes);
     setPickedIds(found.map((item) => item.id));
+    if (skipCriteria) setDetailId(found[0]?.id ?? null);
     setStep("listings");
-  }, [listings]);
+  }, [listings, skipCriteria]);
 
   const cities = useMemo(
     () => [...new Set(listings.map((item) => item.city).filter(Boolean))].sort(),
@@ -838,9 +890,17 @@ export function LineLiffRentForm({
 
   function goBack() {
     setError("");
+    if (skipCriteria && step === "profile") {
+      setStep("listings");
+      setDetailId(pickedIds[0] ?? directListing?.listingIds[0] ?? null);
+      return;
+    }
     setDetailId(null);
-    if (step === "listings") setStep("criteria");
-    else if (step === "profile") setStep("listings");
+    if (step === "listings") {
+      if (!skipCriteria) setStep("criteria");
+      return;
+    }
+    if (step === "profile") setStep("listings");
   }
 
   function reselectCriteria() {
@@ -1237,7 +1297,9 @@ export function LineLiffRentForm({
           ? profileReady
             ? "下一步：選看屋時間"
             : "下一步：填基本資料"
-          : "重新挑選條件"
+          : skipCriteria
+            ? "請先看這間物件"
+            : "重新挑選條件"
         : step === "profile" && editingProfile && profileReady
           ? "完成修改"
           : offerJoin
@@ -1251,7 +1313,9 @@ export function LineLiffRentForm({
   function onPrimary() {
     if (step === "criteria") confirmCriteria();
     else if (step === "listings") {
-      if (!canContinueListings) reselectCriteria();
+      if (!canContinueListings) {
+        if (!skipCriteria) reselectCriteria();
+      }
       else confirmListings();
     } else if (editingProfile && profileReady) finishProfileEdit();
     else if (offerJoin) joinExistingViewing();
@@ -1262,7 +1326,7 @@ export function LineLiffRentForm({
     <div className="relative z-0 mx-auto flex min-h-dvh w-full max-w-md flex-col bg-zinc-100">
       <header className="shrink-0 border-b border-zinc-200 bg-white px-4 py-3">
         <div className="flex items-center gap-2">
-          {step !== "criteria" ? (
+          {step !== "criteria" && !(skipCriteria && step === "listings") ? (
             <button
               type="button"
               onClick={goBack}
@@ -1277,14 +1341,16 @@ export function LineLiffRentForm({
               {step === "criteria"
                 ? "先填找房條件"
                 : step === "listings"
-                  ? "點物件看照片與資訊，右側點「想看」"
+                  ? skipCriteria
+                    ? "這間是推給你的物件，看完可直接約時間"
+                    : "點物件看照片與資訊，右側點「想看」"
                   : showSavedProfile
                     ? "已有個人資料，只要選看屋時間"
                     : "填基本資料與看屋時間後送出"}
             </p>
           </div>
         </div>
-        <StepDots step={step} />
+        <StepDots step={step} hideCriteria={skipCriteria} />
       </header>
 
       <div className="flex-1 space-y-3 px-3 py-3 pb-4">
@@ -1498,6 +1564,7 @@ export function LineLiffRentForm({
                       ? " 已幫你記住這組條件，之後有符合的新案會再通知。"
                       : " 系統會盡量記住你的條件；若之後有符合的新案會再通知。"}
                   </p>
+                  {skipCriteria ? null : (
                   <button
                     type="button"
                     onClick={reselectCriteria}
@@ -1505,6 +1572,7 @@ export function LineLiffRentForm({
                   >
                     重新挑選條件
                   </button>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -1757,6 +1825,14 @@ export function LineLiffRentForm({
           wanted={pickedIds.includes(detailListing.id)}
           onToggleWant={() => togglePick(detailListing.id)}
           onClose={() => setDetailId(null)}
+          onContinue={skipCriteria ? confirmListings : undefined}
+          continueLabel={
+            skipCriteria
+              ? profileReady
+                ? "下一步：選看屋時間"
+                : "下一步：填基本資料"
+              : undefined
+          }
         />
       ) : null}
     </div>

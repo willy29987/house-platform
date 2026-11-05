@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { LineLiffRentForm } from "@/components/line-liff-rent-form";
+import { LineLiffRentForm, type LiffDirectListingEntry } from "@/components/line-liff-rent-form";
 import { loadLiffClient } from "@/lib/line-liff-client";
 import type { RentalMatchListing } from "@/lib/line-rental-assistant";
 
@@ -11,12 +11,15 @@ export function LineLiffRentAssistant({
   listingBaseUrl,
   fallbackLineUserId = null,
   lineBasicId = "@878thkii",
+  directListing = null,
 }: {
   listings: RentalMatchListing[];
   lineBasicId?: string;
   liffId: string;
   listingBaseUrl: string;
   fallbackLineUserId?: string | null;
+  /** 已有找房條件、又從推播點進物件時，直接開物件頁 */
+  directListing?: LiffDirectListingEntry | null;
 }) {
   const [hydrated, setHydrated] = useState(false);
   const [lineUserId, setLineUserId] = useState<string | null>(fallbackLineUserId);
@@ -91,6 +94,7 @@ export function LineLiffRentAssistant({
       displayName={displayName}
       listingBaseUrl={listingBaseUrl}
       lineBasicId={lineBasicId}
+      directListing={directListing}
       onSubmitted={async () => {
         // 表單內已 closeWindow；此處僅備援
         if (!liffId) return;

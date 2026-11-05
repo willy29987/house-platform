@@ -124,7 +124,10 @@ export function toRentalMatchListing(listing: {
 }
 
 /** 已上架出租物件（含詳情欄位）供 LIFF／LINE 配對 */
-export async function loadRentalMatchListings(take = 60): Promise<RentalMatchListing[]> {
+export async function loadRentalMatchListings(
+  take = 60,
+  extraIds: string[] = [],
+): Promise<RentalMatchListing[]> {
   if (!process.env.DATABASE_URL) return [];
   try {
     const rows = await prisma.listing.findMany({
@@ -132,6 +135,18 @@ export async function loadRentalMatchListings(take = 60): Promise<RentalMatchLis
       orderBy: { createdAt: "desc" },
       take,
     });
+    const wanted = [...new Set(extraIds.map((id) => id.trim()).filter(Boolean))];
+    const missing = wanted.filter((id) => !rows.some((row) => row.id === id));
+    if (missing.length) {
+      const extras = await prisma.listing.findMany({
+        where: {
+          id: { in: missing },
+          listingType: ListingType.RENT,
+          isPublished: true,
+        },
+      });
+      rows.unshift(...extras);
+    }
     return rows.map((row) => {
       const meta = parseListingInternalMeta(row.description);
       return toRentalMatchListing({
