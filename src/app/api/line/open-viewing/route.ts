@@ -20,6 +20,11 @@ export async function GET(request: Request) {
       id: viewing.id,
       requestedWhen: viewing.requestedWhen,
       titles: viewing.picked.map((item) => item.title).filter(Boolean),
+      picked: viewing.picked.map((item) => ({
+        id: item.id,
+        title: item.title,
+        price: item.price,
+      })),
     },
   });
 }

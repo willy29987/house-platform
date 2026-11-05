@@ -88,11 +88,13 @@ function ListingPickRow({
   selected,
   onOpen,
   onToggle,
+  hideToggle = false,
 }: {
   item: RentalMatchListing;
   selected: boolean;
   onOpen: () => void;
   onToggle: () => void;
+  hideToggle?: boolean;
 }) {
   const photo = listingPhotos(item)[0];
   return (
@@ -125,6 +127,7 @@ function ListingPickRow({
           </span>
         </span>
       </button>
+      {hideToggle ? null : (
       <button
         type="button"
         aria-label={selected ? "取消想看" : "想看這間"}
@@ -137,6 +140,7 @@ function ListingPickRow({
       >
         {selected ? "已選" : "想看"}
       </button>
+      )}
     </div>
   );
 }
@@ -240,16 +244,15 @@ function ListingDetailSheet({
   wanted,
   onToggleWant,
   onClose,
-  onContinue,
-  continueLabel,
+  onWantNext,
 }: {
   listing: RentalMatchListing;
   pageUrl: string;
   wanted: boolean;
-  onToggleWant: () => void;
+  onToggleWant?: () => void;
   onClose: () => void;
-  onContinue?: () => void;
-  continueLabel?: string;
+  /** 有值時最下面只留「想看這間」，點了就進下一步 */
+  onWantNext?: () => void;
 }) {
   const photos = listingPhotos(listing);
   const [photoIndex, setPhotoIndex] = useState(0);
@@ -551,6 +554,17 @@ function ListingDetailSheet({
             </a>
           </div>
         </div>
+        {onWantNext ? (
+          <div className="border-t border-zinc-100 p-3">
+            <button
+              type="button"
+              onClick={onWantNext}
+              className="w-full rounded-full bg-[#06c755] py-2.5 text-sm font-bold text-white"
+            >
+              想看這間
+            </button>
+          </div>
+        ) : onToggleWant ? (
         <div className="border-t border-zinc-100 p-3">
           <button
             type="button"
@@ -561,16 +575,8 @@ function ListingDetailSheet({
           >
             {wanted ? "已加入想看（再點取消）" : "想看這間"}
           </button>
-          {wanted && onContinue ? (
-            <button
-              type="button"
-              onClick={onContinue}
-              className="mt-2 w-full rounded-full bg-[#06c755] py-2.5 text-sm font-bold text-white"
-            >
-              {continueLabel || "下一步"}
-            </button>
-          ) : null}
         </div>
+        ) : null}
       </div>
     </div>
   );
@@ -701,7 +707,10 @@ export function LineLiffRentForm({
     id: string;
     requestedWhen: string;
     titles: string[];
+    picked: { id: string; title: string; price: number }[];
   } | null>(null);
+  /** 從約時間頁打開上次物件時只看詳細，不出現「想看這間」 */
+  const [detailReadOnly, setDetailReadOnly] = useState(false);
   const [bookSeparateTime, setBookSeparateTime] = useState(false);
   const [editingProfile, setEditingProfile] = useState(false);
   const profileBootRef = useRef(false);
@@ -783,7 +792,12 @@ export function LineLiffRentForm({
       .then(async (response) => {
         if (!response.ok) return null;
         return (await response.json()) as {
-          viewing?: { id?: string; requestedWhen?: string; titles?: string[] } | null;
+          viewing?: {
+            id?: string;
+            requestedWhen?: string;
+            titles?: string[];
+            picked?: { id?: string; title?: string; price?: number }[];
+          } | null;
         };
       })
       .then((data) => {
@@ -793,10 +807,22 @@ export function LineLiffRentForm({
           setOpenViewing(null);
           return;
         }
+        const picked = Array.isArray(viewing.picked)
+          ? viewing.picked
+              .map((item) => ({
+                id: item.id?.trim() || "",
+                title: item.title?.trim() || "",
+                price: Number(item.price) || 0,
+              }))
+              .filter((item) => item.id || item.title)
+          : [];
         setOpenViewing({
           id: viewing.id,
           requestedWhen: viewing.requestedWhen,
-          titles: Array.isArray(viewing.titles) ? viewing.titles.filter(Boolean) : [],
+          titles: Array.isArray(viewing.titles)
+            ? viewing.titles.filter(Boolean)
+            : picked.map((item) => item.title).filter(Boolean),
+          picked,
         });
       })
       .catch(() => {
@@ -855,7 +881,9 @@ export function LineLiffRentForm({
     return byId;
   }, [matched, similar]);
 
-  const detailListing = detailId ? listingPool.get(detailId) ?? null : null;
+  const detailListing = detailId
+    ? listingPool.get(detailId) ?? listings.find((item) => item.id === detailId) ?? null
+    : null;
 
   const petNote =
     petHas === "no" ? "沒有" : petHas === "yes" ? petDraft.trim() : "";
@@ -1023,6 +1051,17 @@ export function LineLiffRentForm({
     setStep("listings");
     // 每次確認條件都以最新條件覆蓋寫入（關掉 LIFF 也保留，之後新案可推）
     void persistWatchCriteria({ minRaw, maxRaw, min, max });
+  }
+
+  function wantCurrentListing() {
+    const id = detailId;
+    if (!id) return;
+    setPickedIds((current) => (current.includes(id) ? current : [...current, id]));
+    setError("");
+    setDetailReadOnly(false);
+    setDetailId(null);
+    setEditingProfile(!profileReady);
+    setStep("profile");
   }
 
   function confirmListings() {
@@ -1750,40 +1789,71 @@ export function LineLiffRentForm({
             </Section>
             )}
 
-            {openViewing && !bookSeparateTime ? (
-              <Section title="要跟上次一起看嗎？">
+            {openViewing ? (
+              <Section title="您要跟上次挑選的物件預約同一時間嗎？">
                 <p className="text-sm text-zinc-800">
-                  你已約 <span className="font-semibold">{openViewing.requestedWhen}</span>
-                  。選一起看會把這間加進同一筆，不會蓋掉上一間。
+                  已約時間：<span className="font-semibold">{openViewing.requestedWhen}</span>
                 </p>
-                {openViewing.titles.length ? (
-                  <p className="text-xs text-zinc-500">原先已約：{openViewing.titles.join("、")}</p>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setError("");
-                    setBookSeparateTime(true);
-                  }}
-                  className="touch-manipulation w-full rounded-full border border-zinc-300 bg-white py-2.5 text-sm font-semibold text-zinc-800"
-                >
-                  另外約一個時間
-                </button>
+                <div className="space-y-2">
+                  {openViewing.picked.map((item) => {
+                    const full = listings.find((listing) => listing.id === item.id);
+                    if (!full) {
+                      return (
+                        <div
+                          key={item.id || item.title}
+                          className="rounded-2xl border border-zinc-200 bg-white px-3 py-3"
+                        >
+                          <p className="text-sm font-bold text-zinc-900">{item.title}</p>
+                          {item.price > 0 ? (
+                            <p className="mt-1 text-sm font-semibold text-red-600">
+                              {formatRent(item.price)}
+                            </p>
+                          ) : null}
+                        </div>
+                      );
+                    }
+                    return (
+                      <ListingPickRow
+                        key={full.id}
+                        item={full}
+                        selected={false}
+                        hideToggle
+                        onOpen={() => {
+                          setDetailReadOnly(true);
+                          setDetailId(full.id);
+                        }}
+                        onToggle={() => {}}
+                      />
+                    );
+                  })}
+                </div>
+                {bookSeparateTime ? (
+                  <button
+                    type="button"
+                    onClick={() => setBookSeparateTime(false)}
+                    className="text-xs font-semibold text-[#067a36]"
+                  >
+                    改回跟上次同一個時間
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setError("");
+                      setBookSeparateTime(true);
+                    }}
+                    className="touch-manipulation w-full rounded-full border border-zinc-300 bg-white py-2.5 text-sm font-semibold text-zinc-800"
+                  >
+                    另外約一個時間
+                  </button>
+                )}
               </Section>
-            ) : (
+            ) : null}
+            {!openViewing || bookSeparateTime ? (
             <Section title="看屋時間">
               <p className="text-xs text-zinc-500">
                 已選 {pickedIds.length} 間想看物件，選時間後送出會傳到對話。
               </p>
-              {openViewing && bookSeparateTime ? (
-                <button
-                  type="button"
-                  onClick={() => setBookSeparateTime(false)}
-                  className="text-xs font-semibold text-[#067a36]"
-                >
-                  改回跟上次同一個時間
-                </button>
-              ) : null}
               <ViewingSchedulePicker
                 heading="選擇日期與開始時間"
                 value={schedule}
@@ -1799,7 +1869,7 @@ export function LineLiffRentForm({
                 }}
               />
             </Section>
-            )}
+            ) : null}
           </>
         ) : null}
       </div>
@@ -1823,16 +1893,14 @@ export function LineLiffRentForm({
           listing={detailListing}
           pageUrl={listingPageUrl(listingBaseUrl, detailListing.id)}
           wanted={pickedIds.includes(detailListing.id)}
-          onToggleWant={() => togglePick(detailListing.id)}
-          onClose={() => setDetailId(null)}
-          onContinue={skipCriteria ? confirmListings : undefined}
-          continueLabel={
-            skipCriteria
-              ? profileReady
-                ? "下一步：選看屋時間"
-                : "下一步：填基本資料"
-              : undefined
+          onToggleWant={
+            detailReadOnly || skipCriteria ? undefined : () => togglePick(detailListing.id)
           }
+          onClose={() => {
+            setDetailId(null);
+            setDetailReadOnly(false);
+          }}
+          onWantNext={skipCriteria && !detailReadOnly ? wantCurrentListing : undefined}
         />
       ) : null}
     </div>

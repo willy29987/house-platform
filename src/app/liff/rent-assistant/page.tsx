@@ -1,5 +1,6 @@
 import { LineLiffRentAssistant } from "@/components/line-liff-rent-assistant";
 import { getGuestWatchByUserId, watchRecordToCriteria } from "@/lib/line-guest-watch";
+import { findLatestOpenViewing } from "@/lib/line-rental-cases";
 import { LINE_LIFF_RENT_ASSISTANT_ID } from "@/lib/line-liff-id";
 import { loadRentalMatchListings } from "@/lib/line-rental-assistant";
 import type { LiffDirectListingEntry } from "@/components/line-liff-rent-form";
@@ -27,8 +28,12 @@ export default async function LiffRentAssistantPage({
   const liffId = params.liffId?.trim() || LINE_LIFF_RENT_ASSISTANT_ID;
   const fallbackLineUserId = params.uid?.trim() || null;
   const pushedListingIds = listingIdsFromParam(params.listingId);
+  const openViewing = fallbackLineUserId
+    ? await findLatestOpenViewing(fallbackLineUserId)
+    : null;
+  const priorListingIds = openViewing?.picked.map((item) => item.id) ?? [];
 
-  const cards = await loadRentalMatchListings(60, pushedListingIds);
+  const cards = await loadRentalMatchListings(60, [...pushedListingIds, ...priorListingIds]);
   let directListing: LiffDirectListingEntry | null = null;
   if (fallbackLineUserId && pushedListingIds.length) {
     const watch = await getGuestWatchByUserId(fallbackLineUserId);
