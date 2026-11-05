@@ -207,6 +207,7 @@ export function AdminListingForm({
   const [uploading, setUploading] = useState(false);
   const [uploadingVideo, setUploadingVideo] = useState(false);
   const [rent591DraftOpen, setRent591DraftOpen] = useState(false);
+  const [importing591, setImporting591] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
@@ -234,6 +235,108 @@ export function AdminListingForm({
   const [shortTermUi, setShortTermUi] = useState<ChoiceUi>(() =>
     inferChoice(initialData.shortTermRent, SHORT_TERM_CHOICES),
   );
+
+  async function importFrom591Url() {
+    const url = formData.source591Url.trim();
+    if (!url) {
+      setStatus("請先貼上 591 連結");
+      return;
+    }
+    setImporting591(true);
+    setStatus("");
+    try {
+      const response = await fetch("/api/admin/listings/import-591", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      const json = (await response.json()) as {
+        ok?: boolean;
+        message?: string;
+        draft?: {
+          listingType: "RENT" | "SALE";
+          source591Url: string;
+          title: string;
+          price: string;
+          city: string;
+          district: string;
+          address: string;
+          community: string;
+          propertyType: string;
+          areaPing: string;
+          rooms: string;
+          livingRooms: string;
+          bathrooms: string;
+          balconies: string;
+          floor: string;
+          totalFloors: string;
+          managementFee: string;
+          otherFees: string;
+          securityDeposit: string;
+          availableFrom: string;
+          petsAllowed: "" | "yes" | "no";
+          specialMatters: string;
+          images: string[];
+          coverImage: string;
+          furnitureItems: string[];
+          equipmentItems: string[];
+          contactName: string;
+          contactPhone: string;
+        };
+      };
+      if (!response.ok || !json.ok || !json.draft) {
+        setStatus(json.message || "帶入失敗");
+        return;
+      }
+      const draft = json.draft;
+      const keepType = Boolean(lockedListingType);
+      setFormData((prev) => ({
+        ...prev,
+        listingType: keepType ? prev.listingType : draft.listingType,
+        source591Url: draft.source591Url || prev.source591Url,
+        title: draft.title || prev.title,
+        price: draft.price || prev.price,
+        city: draft.city || prev.city,
+        district: draft.city ? draft.district : prev.district,
+        address: draft.address || prev.address,
+        community: draft.community || prev.community,
+        propertyType: (PROPERTY_TYPE_OPTIONS as readonly string[]).includes(draft.propertyType)
+          ? (draft.propertyType as PropertyTypeOption)
+          : prev.propertyType,
+        areaPing: draft.areaPing || prev.areaPing,
+        rooms: draft.rooms || prev.rooms,
+        livingRooms: draft.livingRooms || prev.livingRooms,
+        bathrooms: draft.bathrooms || prev.bathrooms,
+        balconies: draft.balconies || prev.balconies,
+        floor: draft.floor || prev.floor,
+        totalFloors: draft.totalFloors || prev.totalFloors,
+        managementFee: draft.managementFee || prev.managementFee,
+        otherFees: draft.otherFees || prev.otherFees,
+        securityDeposit: draft.securityDeposit || prev.securityDeposit,
+        availableFrom: draft.availableFrom || prev.availableFrom,
+        petsAllowed: draft.petsAllowed || prev.petsAllowed,
+        specialMatters: draft.specialMatters || prev.specialMatters,
+        images: draft.images.length > 0 ? draft.images : prev.images,
+        coverImage: draft.coverImage || prev.coverImage,
+        furnitureItems: draft.furnitureItems.length > 0 ? draft.furnitureItems : prev.furnitureItems,
+        equipmentItems: draft.equipmentItems.length > 0 ? draft.equipmentItems : prev.equipmentItems,
+        contactName: draft.contactName || prev.contactName,
+        contactPhone: draft.contactPhone || prev.contactPhone,
+      }));
+      if (draft.securityDeposit) setDepositUi(inferDeposit(draft.securityDeposit));
+      if (draft.availableFrom) setAvailableUi(inferAvailable(draft.availableFrom));
+      const typeNote =
+        keepType && lockedListingType && draft.listingType !== lockedListingType
+          ? "連結是另一種類型，已維持目前的租賃／買賣。"
+          : "";
+      setStatus(`帶入成功，請再核對欄位後儲存。${typeNote}`);
+    } catch {
+      setStatus("帶入失敗，請稍後再試");
+    } finally {
+      setImporting591(false);
+    }
+  }
 
   const isRent = formData.listingType === "RENT";
   const isSale = formData.listingType === "SALE";
@@ -611,15 +714,24 @@ export function AdminListingForm({
           </div>
           <div className="sm:col-span-2">
             <label className={labelCls}>591 物件網址（選填）</label>
-            <input
-              value={formData.source591Url}
-              onChange={(e) => setFormData((p) => ({ ...p, source591Url: e.target.value }))}
-              placeholder="貼上 591 連結，系統會抽出編號以便客人詢問時自動對應"
-              className={`w-full ${field}`}
-            />
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <input
+                value={formData.source591Url}
+                onChange={(e) => setFormData((p) => ({ ...p, source591Url: e.target.value }))}
+                placeholder="貼上 591 連結後按帶入"
+                className={`min-w-0 flex-1 ${field}`}
+              />
+              <button
+                type="button"
+                disabled={importing591}
+                onClick={() => void importFrom591Url()}
+                className="shrink-0 rounded-xl bg-[#0b2545] px-4 py-3 text-sm font-semibold text-white hover:bg-[#1e3a8a] disabled:opacity-60 sm:py-2"
+              >
+                {importing591 ? "帶入中…" : "從 591 帶入"}
+              </button>
+            </div>
             <p className="mt-1 text-xs text-zinc-500">
-              有上 591 的物件請填，客人貼連結問能不能看時才能對到同一間。尚未上架可先用上方「591
-              租賃刊登草稿」複製欄位到 591 後台。
+              貼上已刊登的 591 連結，會把標題、租金、地址等帶進這張表單。帶入後請再核對，圖片若沒出現可再手動上傳。
             </p>
           </div>
           {!lockedListingType ? (

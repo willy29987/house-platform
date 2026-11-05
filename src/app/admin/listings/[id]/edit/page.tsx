@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { AdminListingForm, type AdminListingFormData } from "@/components/admin-listing-form";
 import { GoPublicSiteButton } from "@/components/go-public-site-button";
+import { getCurrentAdmin } from "@/lib/admin-auth";
 import { getAdminListingById } from "@/lib/listings";
 
 type AdminEditListingPageProps = {
@@ -15,6 +16,9 @@ function boolToTri(v: boolean | null | undefined): "" | "yes" | "no" {
 }
 
 export default async function AdminEditListingPage({ params }: AdminEditListingPageProps) {
+  const current = await getCurrentAdmin();
+  if (!current) redirect("/admin/login");
+
   const { id } = await params;
   const listing = await getAdminListingById(id);
 
