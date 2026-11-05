@@ -76,6 +76,11 @@ async function writeStore(store: Store) {
   await writeAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.lineGuestProfile, store);
 }
 
+export async function listGuestProfileUserIds(): Promise<string[]> {
+  const store = await readStore();
+  return store.profiles.filter((row) => isCompleteGuestProfile(row)).map((row) => row.lineUserId);
+}
+
 export async function getGuestProfileByUserId(lineUserId: string): Promise<GuestProfile | null> {
   const id = lineUserId.trim();
   if (!id) return null;

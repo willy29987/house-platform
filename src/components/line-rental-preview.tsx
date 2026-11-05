@@ -16,6 +16,7 @@ import type {
 } from "@/lib/line-conversations";
 import type { LineRentalCase } from "@/lib/line-rental-cases";
 import type { GuestSession } from "@/lib/line-guest-sessions";
+import type { GuestWatchRecord } from "@/lib/line-guest-watch";
 import {
   buildViewingConfirmedGuestText,
   VIEWING_ASK_OTHER_TIME_TEXT,
@@ -78,6 +79,10 @@ type StaffGuest = {
   pipeline: PipelineBucket;
   watching: boolean;
   criteriaText: string;
+  /** 無配對時登記的最新找房條件 */
+  watchCriteriaText?: string;
+  /** 已有完整個資（電話等），可略過重填 */
+  profileSaved?: boolean;
   /** 列表預覽用 */
   summaryText: string;
   createdAt: string;
@@ -615,17 +620,41 @@ function caseToStaffGuest(item: LineRentalCase): StaffGuest {
   });
 }
 
+function watchSummary(watch: GuestWatchRecord) {
+  const budget =
+    watch.priceMin != null || watch.priceMax != null
+      ? `自訂預算 ${watch.priceMin ?? "不限"}～${watch.priceMax ?? "不限"}`
+      : "";
+  const pet = watch.petNote ? `寵物：${watch.petNote}` : "";
+  return [watch.criteriaText, budget, pet].filter(Boolean).join(" · ");
+}
+
 function buildLiveGuests(
   conversations: LineConversation[],
   cases: LineRentalCase[],
   openSessions: GuestSession[] = [],
+  watches: GuestWatchRecord[] = [],
+  profileUserIds: string[] = [],
 ): StaffGuest[] {
   const formInProgressIds = new Set(
     openSessions.map((session) => session.lineUserId).filter(Boolean),
   );
-  const fromConversations = conversations.map((item) =>
-    conversationToStaffGuest(item, cases, formInProgressIds),
-  );
+  const watchByUser = new Map(watches.map((watch) => [watch.lineUserId, watch]));
+  const profileIds = new Set(profileUserIds);
+  const fromConversations = conversations.map((item) => {
+    const guest = conversationToStaffGuest(item, cases, formInProgressIds);
+    const watch = item.lineUserId ? watchByUser.get(item.lineUserId) : undefined;
+    if (!watch && !profileIds.has(item.lineUserId)) return guest;
+    const summary = watch ? watchSummary(watch) : "";
+    return {
+      ...guest,
+      watching: watch ? watch.active : guest.watching,
+      watchCriteriaText: summary || undefined,
+      criteriaText: summary || guest.criteriaText,
+      petNote: watch?.petNote || guest.petNote,
+      profileSaved: profileIds.has(item.lineUserId),
+    };
+  });
   const covered = new Set(
     fromConversations.map((item) => item.lineUserId).filter(Boolean) as string[],
   );
@@ -753,6 +782,8 @@ export function LineRentalPreview({
   initialConversations = [],
   initialCases = [],
   initialSessions = [],
+  initialWatches = [],
+  initialProfileUserIds = [],
 }: {
   listings: RentalMatchListing[];
   lineBasicId: string;
@@ -760,11 +791,20 @@ export function LineRentalPreview({
   initialConversations?: LineConversation[];
   initialCases?: LineRentalCase[];
   initialSessions?: GuestSession[];
+  initialWatches?: GuestWatchRecord[];
+  initialProfileUserIds?: string[];
 }) {
   const demoGuests = useMemo(() => buildStaffGuests(listings), [listings]);
   const seedLive = useMemo(
-    () => buildLiveGuests(initialConversations, initialCases, initialSessions),
-    [initialConversations, initialCases, initialSessions],
+    () =>
+      buildLiveGuests(
+        initialConversations,
+        initialCases,
+        initialSessions,
+        initialWatches,
+        initialProfileUserIds,
+      ),
+    [initialConversations, initialCases, initialSessions, initialWatches, initialProfileUserIds],
   );
   const [liveGuests, setLiveGuests] = useState<StaffGuest[]>(() => seedLive);
   const [guests, setGuests] = useState<StaffGuest[]>(() =>
@@ -892,12 +932,16 @@ export function LineRentalPreview({
       conversations?: LineConversation[];
       cases?: LineRentalCase[];
       sessions?: GuestSession[];
+      watches?: GuestWatchRecord[];
+      profileUserIds?: string[];
     }) {
       if (cancelled) return;
       const next = buildLiveGuests(
         data.conversations ?? [],
         data.cases ?? [],
         data.sessions ?? [],
+        data.watches ?? [],
+        data.profileUserIds ?? [],
       );
       notifyNewGuestMessages(next);
       setLiveGuests(next);
@@ -914,6 +958,8 @@ export function LineRentalPreview({
           conversations?: LineConversation[];
           cases?: LineRentalCase[];
           sessions?: GuestSession[];
+          watches?: GuestWatchRecord[];
+          profileUserIds?: string[];
         };
         applySnapshot(data);
       } catch {
@@ -947,6 +993,8 @@ export function LineRentalPreview({
             conversations?: LineConversation[];
             cases?: LineRentalCase[];
             sessions?: GuestSession[];
+            watches?: GuestWatchRecord[];
+            profileUserIds?: string[];
           };
           applySnapshot(data);
           stopFallback();
@@ -1871,6 +1919,16 @@ function GuestDecisionPanel({
             .join(" · ")}
         </p>
       </div>
+
+      {guest.watchCriteriaText ? (
+        <div className="rounded-xl border border-[#c5d4e8] bg-[#eef3f9] p-3">
+          <p className="text-xs font-semibold text-[#0b2545]">已登記找房條件</p>
+          <p className="mt-1 break-words font-medium text-zinc-900">{guest.watchCriteriaText}</p>
+          <p className="mt-1 text-xs text-zinc-600">
+            {guest.profileSaved ? "已有個人資料，之後約看可只選時間" : "個人資料尚未填寫"}
+          </p>
+        </div>
+      ) : null}
 
       <div>
         <p className="text-xs font-semibold text-zinc-500">基本資料</p>

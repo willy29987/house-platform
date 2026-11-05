@@ -6,6 +6,7 @@ import { LineNativeChatPreview } from "@/components/line-native-chat-preview";
 import { LineRentalPreview } from "@/components/line-rental-preview";
 import type { LineConversation } from "@/lib/line-conversations";
 import type { GuestSession } from "@/lib/line-guest-sessions";
+import type { GuestWatchRecord } from "@/lib/line-guest-watch";
 import type { LineRentalCase } from "@/lib/line-rental-cases";
 import type { RentalMatchListing } from "@/lib/line-rental-assistant";
 
@@ -24,6 +25,8 @@ export function LineAssistantWorkbench({
   initialConversations = [],
   initialCases = [],
   initialSessions = [],
+  initialWatches = [],
+  initialProfileUserIds = [],
 }: {
   listings: RentalMatchListing[];
   lineBasicId: string;
@@ -31,6 +34,8 @@ export function LineAssistantWorkbench({
   initialConversations?: LineConversation[];
   initialCases?: LineRentalCase[];
   initialSessions?: GuestSession[];
+  initialWatches?: GuestWatchRecord[];
+  initialProfileUserIds?: string[];
 }) {
   const [tab, setTab] = useState<TabId>("staff");
 
@@ -63,6 +68,8 @@ export function LineAssistantWorkbench({
             initialConversations={initialConversations}
             initialCases={initialCases}
             initialSessions={initialSessions}
+            initialWatches={initialWatches}
+            initialProfileUserIds={initialProfileUserIds}
           />
         ) : tab === "guest" ? (
           <div className="h-full overflow-y-auto">

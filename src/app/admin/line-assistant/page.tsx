@@ -4,6 +4,8 @@ import { getCurrentAdmin } from "@/lib/admin-auth";
 import { patchLineConversationProfiles, readLineConversations } from "@/lib/line-conversations";
 import { getLineUserProfile } from "@/lib/line-messaging";
 import { listOpenGuestSessions } from "@/lib/line-guest-sessions";
+import { listGuestProfileUserIds } from "@/lib/line-guest-profile";
+import { listActiveGuestWatches } from "@/lib/line-guest-watch";
 import { getLineAccountLink } from "@/lib/line-official-account";
 import { loadRentalMatchListings } from "@/lib/line-rental-assistant";
 import { readLineRentalCases } from "@/lib/line-rental-cases";
@@ -53,13 +55,16 @@ export default async function LineAssistantPreviewPage() {
   const current = await getCurrentAdmin();
   if (!current) redirect("/admin/login");
 
-  const [cards, lineAccount, rawConversations, cases, sessions] = await Promise.all([
-    loadRentalMatchListings(60),
-    getLineAccountLink(),
-    readLineConversations(),
-    readLineRentalCases(),
-    listOpenGuestSessions(),
-  ]);
+  const [cards, lineAccount, rawConversations, cases, sessions, watches, profileUserIds] =
+    await Promise.all([
+      loadRentalMatchListings(60),
+      getLineAccountLink(),
+      readLineConversations(),
+      readLineRentalCases(),
+      listOpenGuestSessions(),
+      listActiveGuestWatches(),
+      listGuestProfileUserIds(),
+    ]);
   const conversations = await attachMissingGuestAvatars(rawConversations);
 
   return (
@@ -93,6 +98,8 @@ export default async function LineAssistantPreviewPage() {
           initialConversations={conversations}
           initialCases={cases}
           initialSessions={sessions}
+          initialWatches={watches}
+          initialProfileUserIds={profileUserIds}
         />
       </div>
     </div>

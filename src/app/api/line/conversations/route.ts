@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getCurrentAdmin } from "@/lib/admin-auth";
 import { readLineConversations } from "@/lib/line-conversations";
 import { listOpenGuestSessions } from "@/lib/line-guest-sessions";
+import { listGuestProfileUserIds } from "@/lib/line-guest-profile";
+import { listActiveGuestWatches } from "@/lib/line-guest-watch";
 import { buildPublicBaseUrl, pushLineMessages, type LineMessage } from "@/lib/line-messaging";
 import { readLineRentalCases } from "@/lib/line-rental-cases";
 
@@ -30,14 +32,16 @@ export async function GET() {
     return NextResponse.json({ error: "未登入" }, { status: 401, headers: NO_STORE });
   }
 
-  const [conversations, cases, sessions] = await Promise.all([
+  const [conversations, cases, sessions, watches, profileUserIds] = await Promise.all([
     readLineConversations(),
     readLineRentalCases(),
     listOpenGuestSessions(),
+    listActiveGuestWatches(),
+    listGuestProfileUserIds(),
   ]);
 
   return NextResponse.json(
-    { conversations, cases, sessions, fetchedAt: new Date().toISOString() },
+    { conversations, cases, sessions, watches, profileUserIds, fetchedAt: new Date().toISOString() },
     { headers: NO_STORE },
   );
 }
