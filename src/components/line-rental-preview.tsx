@@ -231,12 +231,7 @@ const STATUS_LABEL: Record<GuestStatus, string> = {
   agent_proposing: "業務改約中",
 };
 
-const REPLY_LABEL: Record<ReplyStatus, string> = {
-  awaiting_staff: "待回覆",
-  replied: "已回覆",
-};
-
-/** 待回覆＝客人最後發言（未讀未回／已讀未回）；已回覆＝客服／機器人已回 */
+/** 未回覆＝客人最後發言；已回覆＝客服／機器人已回（列表只在未回覆時顯示藍點） */
 function resolveReplyStatus(lines: ChatLine[]): ReplyStatus {
   const last = lines[lines.length - 1];
   if (!last || last.from === "guest") return "awaiting_staff";
@@ -545,10 +540,6 @@ function buildStaffGuests(listings: RentalMatchListing[]): StaffGuest[] {
   ];
 }
 
-function shortReplyStatus(status: ReplyStatus) {
-  return REPLY_LABEL[status];
-}
-
 function caseToStaffGuest(item: LineRentalCase): StaffGuest {
   const createdAt = item.createdAt || new Date().toISOString();
   const clock = formatLineClock(createdAt);
@@ -720,11 +711,6 @@ function conversationToStaffGuest(
 function matchesFilter(guest: StaffGuest, filter: ListFilter) {
   if (filter === "all") return true;
   return guest.pipeline === filter;
-}
-
-function statusPill(status: ReplyStatus) {
-  if (status === "replied") return "bg-emerald-100 text-emerald-950";
-  return "bg-amber-100 text-amber-950";
 }
 
 function LineSideAvatar({
@@ -1461,15 +1447,7 @@ export function LineRentalPreview({
                       active ? "bg-[#e7f8ee]" : "hover:bg-zinc-50"
                     }`}
                   >
-                    <span className="relative shrink-0">
-                      <LineSideAvatar name={guest.lineName} src={guest.pictureUrl} size="md" />
-                      {guest.watching ? (
-                        <span
-                          title="之後新案會問"
-                          className="absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-sky-500"
-                        />
-                      ) : null}
-                    </span>
+                    <LineSideAvatar name={guest.lineName} src={guest.pictureUrl} size="md" />
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-2">
                         <span className="min-w-0 flex-1 truncate text-sm font-bold text-zinc-900">
@@ -1481,11 +1459,13 @@ export function LineRentalPreview({
                       </span>
                       <span className="mt-0.5 block truncate text-xs text-zinc-500">{preview}</span>
                     </span>
-                    <span
-                      className={`ml-auto shrink-0 self-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${statusPill(guest.replyStatus)}`}
-                    >
-                      {shortReplyStatus(guest.replyStatus)}
-                    </span>
+                    {guest.replyStatus === "awaiting_staff" ? (
+                      <span
+                        className="ml-auto h-3.5 w-3.5 shrink-0 self-center rounded-full bg-sky-500"
+                        title="未回覆"
+                        aria-label="未回覆"
+                      />
+                    ) : null}
                   </button>
                 </li>
               );
@@ -1501,13 +1481,20 @@ export function LineRentalPreview({
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[15px] font-semibold leading-tight">{selected.lineName}</p>
                   <p className="truncate text-[11px] text-white/65">
-                    {shortReplyStatus(selected.replyStatus)}
-                    {selected.pipeline !== "none"
-                      ? ` · ${selected.pipeline === "active" ? "進行中" : selected.pipeline === "pending" ? "待確認" : "已確認"}`
-                      : ""}
-                    {selected.followedAt ? ` · 加入 ${formatLineDayLabel(selected.followedAt)}` : ""}
-                    {selected.unfollowedAt ? " · 已封鎖／刪除" : ""}
-                    {lineBasicId ? ` · ${lineBasicId}` : ""}
+                    {[
+                      selected.pipeline === "active"
+                        ? "進行中"
+                        : selected.pipeline === "pending"
+                          ? "待確認"
+                          : selected.pipeline === "confirmed"
+                            ? "已確認"
+                            : "",
+                      selected.followedAt ? `加入 ${formatLineDayLabel(selected.followedAt)}` : "",
+                      selected.unfollowedAt ? "已封鎖／刪除" : "",
+                      lineBasicId || "",
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </p>
                 </div>
                 <button
@@ -1870,13 +1857,20 @@ function GuestDecisionPanel({
         <p className="text-xs font-semibold text-zinc-500">這位客人</p>
         <p className="mt-1 font-bold text-zinc-900">{guest.lineName}</p>
         <p className="mt-0.5 text-xs text-zinc-500">
-          {shortReplyStatus(guest.replyStatus)}
-          {guest.pipeline !== "none"
-            ? ` · ${guest.pipeline === "active" ? "進行中" : guest.pipeline === "pending" ? "待確認" : "已確認"}`
-            : ""}
-          {guest.watching ? " · 之後新案會問" : ""}
-          {guest.followedAt ? ` · 加入 ${formatLineDayLabel(guest.followedAt)}` : ""}
-          {guest.unfollowedAt ? " · 已封鎖／刪除" : ""}
+          {[
+            guest.pipeline === "active"
+              ? "進行中"
+              : guest.pipeline === "pending"
+                ? "待確認"
+                : guest.pipeline === "confirmed"
+                  ? "已確認"
+                  : "",
+            guest.watching ? "之後新案會問" : "",
+            guest.followedAt ? `加入 ${formatLineDayLabel(guest.followedAt)}` : "",
+            guest.unfollowedAt ? "已封鎖／刪除" : "",
+          ]
+            .filter(Boolean)
+            .join(" · ")}
         </p>
       </div>
 
