@@ -116,6 +116,65 @@ export async function getLineRentalCase(id: string): Promise<LineRentalCase | nu
   return cases.find((item) => item.id === id) ?? null;
 }
 
+const OPEN_VIEWING_STATUSES = new Set<LineRentalCaseStatus>([
+  "pending_confirm",
+  "awaiting_agent",
+  "confirmed",
+  "reschedule_sent",
+]);
+
+export function isOpenViewingStatus(status: LineRentalCaseStatus) {
+  return OPEN_VIEWING_STATUSES.has(status);
+}
+
+/** 這位客人最新一筆還沒結束的約看（客服收件匣也是看最新一筆） */
+export async function findLatestOpenViewing(lineUserId: string): Promise<LineRentalCase | null> {
+  const id = lineUserId.trim();
+  if (!id) return null;
+  const cases = await readLineRentalCases();
+  return (
+    cases
+      .filter(
+        (item) =>
+          item.lineUserId === id &&
+          item.kind === "viewing" &&
+          isOpenViewingStatus(item.status) &&
+          Boolean(item.requestedWhen.trim()),
+      )
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null
+  );
+}
+
+/** 把新物件併進原約看。同一物件不重複。更新 createdAt，讓客服仍看到這一筆。 */
+export async function appendPickedToViewingCase(
+  id: string,
+  incoming: LineRentalCasePicked[],
+  summaryText: string,
+): Promise<LineRentalCase | null> {
+  const store = normalizeLineRentalCasesStore(
+    await readAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.lineRentalCases),
+  );
+  const index = store.cases.findIndex((item) => item.id === id);
+  if (index < 0) return null;
+  const current = store.cases[index];
+  const seen = new Set(current.picked.map((item) => item.id));
+  const picked = [...current.picked];
+  for (const item of incoming) {
+    if (!item.id || seen.has(item.id)) continue;
+    seen.add(item.id);
+    picked.push(item);
+  }
+  const next: LineRentalCase = {
+    ...current,
+    picked,
+    summaryText,
+    createdAt: new Date().toISOString(),
+  };
+  store.cases[index] = next;
+  await writeAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.lineRentalCases, store);
+  return next;
+}
+
 export async function appendLineRentalCase(
   input: Omit<LineRentalCase, "id" | "createdAt" | "status" | "kind" | "proposedWhen" | "handledByAgentLineUserId"> & {
     kind?: LineRentalCaseKind;

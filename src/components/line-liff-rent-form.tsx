@@ -646,6 +646,12 @@ export function LineLiffRentForm({
   const [done, setDone] = useState<{ when: string; titles: string[] } | null>(null);
   /** 已有完整個資：選完物件後只問時間 */
   const [profileReady, setProfileReady] = useState(false);
+  const [openViewing, setOpenViewing] = useState<{
+    id: string;
+    requestedWhen: string;
+    titles: string[];
+  } | null>(null);
+  const [bookSeparateTime, setBookSeparateTime] = useState(false);
   const [editingProfile, setEditingProfile] = useState(false);
   const profileBootRef = useRef(false);
   const listingBootRef = useRef(false);
@@ -712,6 +718,42 @@ export function LineLiffRentForm({
       .catch(() => {
         /* 沒有舊個資就照常填一次 */
       });
+  }, [lineUserId]);
+
+  useEffect(() => {
+    const uid =
+      lineUserId?.trim() ||
+      new URLSearchParams(window.location.search).get("uid")?.trim() ||
+      window.sessionStorage.getItem("line_messaging_uid")?.trim() ||
+      "";
+    if (!uid) return;
+    let cancelled = false;
+    void fetch(`/api/line/open-viewing?lineUserId=${encodeURIComponent(uid)}`)
+      .then(async (response) => {
+        if (!response.ok) return null;
+        return (await response.json()) as {
+          viewing?: { id?: string; requestedWhen?: string; titles?: string[] } | null;
+        };
+      })
+      .then((data) => {
+        if (cancelled) return;
+        const viewing = data?.viewing;
+        if (!viewing?.id || !viewing.requestedWhen) {
+          setOpenViewing(null);
+          return;
+        }
+        setOpenViewing({
+          id: viewing.id,
+          requestedWhen: viewing.requestedWhen,
+          titles: Array.isArray(viewing.titles) ? viewing.titles.filter(Boolean) : [],
+        });
+      })
+      .catch(() => {
+        /* 沒有進行中約看就照常選時間 */
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [lineUserId]);
 
   useEffect(() => {
@@ -969,8 +1011,18 @@ export function LineLiffRentForm({
     void submit();
   }
 
-  async function submit() {
-    const when = formatViewingRange(schedule.date, schedule.start);
+  function joinExistingViewing() {
+    const message = profileFieldError();
+    if (message) {
+      setError(message);
+      return;
+    }
+    if (!openViewing) return;
+    void submit({ mergeIntoCaseId: openViewing.id, when: openViewing.requestedWhen });
+  }
+
+  async function submit(options?: { mergeIntoCaseId?: string; when?: string }) {
+    const when = options?.when || formatViewingRange(schedule.date, schedule.start);
     if (!when) {
       setError("請選擇看屋時間");
       return;
@@ -995,19 +1047,31 @@ export function LineLiffRentForm({
     ].join(" · ");
     // priceKeys 已併入 budgetLabel，避免重複
 
-    const chatText = buildGuestChatMessage({
-      displayName: name,
-      phone: phoneTrim,
-      occupation: occupation.trim(),
-      nationality,
-      peopleCount,
-      petNote,
-      moveInDate: formatDateYmd(moveIn),
-      criteriaText,
-      when,
-      picked,
-      listingBaseUrl,
-    });
+    const chatText = [
+      options?.mergeIntoCaseId
+        ? [
+            `跟上次同一個時間一起看（${when}），上一間仍保留。`,
+            openViewing?.titles.length ? `原先已約：${openViewing.titles.join("、")}` : "",
+          ]
+            .filter(Boolean)
+            .join("\n")
+        : "",
+      buildGuestChatMessage({
+        displayName: name,
+        phone: phoneTrim,
+        occupation: occupation.trim(),
+        nationality,
+        peopleCount,
+        petNote,
+        moveInDate: formatDateYmd(moveIn),
+        criteriaText,
+        when,
+        picked,
+        listingBaseUrl,
+      }),
+    ]
+      .filter(Boolean)
+      .join("\n\n");
 
     setSubmitting(true);
     setError("");
@@ -1083,6 +1147,7 @@ export function LineLiffRentForm({
           picked,
           requestedWhen: when,
           summaryText: outboundText,
+          mergeIntoCaseId: options?.mergeIntoCaseId,
           // 永遠略過對客人的 push，避免吃群發額度
           skipGuestPush: true,
         }),
@@ -1162,6 +1227,7 @@ export function LineLiffRentForm({
   const canContinueListings = matched.length > 0 || similar.length > 0;
 
   const showSavedProfile = step === "profile" && profileReady && !editingProfile;
+  const offerJoin = step === "profile" && Boolean(openViewing) && !bookSeparateTime;
 
   const primaryLabel =
     step === "criteria"
@@ -1174,9 +1240,13 @@ export function LineLiffRentForm({
           : "重新挑選條件"
         : step === "profile" && editingProfile && profileReady
           ? "完成修改"
-          : submitting
-            ? "送出中…"
-            : "確認送出到對話";
+          : offerJoin
+            ? submitting
+              ? "送出中…"
+              : "跟上次同一個時間一起看"
+            : submitting
+              ? "送出中…"
+              : "確認送出到對話";
 
   function onPrimary() {
     if (step === "criteria") confirmCriteria();
@@ -1184,6 +1254,7 @@ export function LineLiffRentForm({
       if (!canContinueListings) reselectCriteria();
       else confirmListings();
     } else if (editingProfile && profileReady) finishProfileEdit();
+    else if (offerJoin) joinExistingViewing();
     else confirmProfileAndSubmit();
   }
 
@@ -1611,10 +1682,40 @@ export function LineLiffRentForm({
             </Section>
             )}
 
+            {openViewing && !bookSeparateTime ? (
+              <Section title="要跟上次一起看嗎？">
+                <p className="text-sm text-zinc-800">
+                  你已約 <span className="font-semibold">{openViewing.requestedWhen}</span>
+                  。選一起看會把這間加進同一筆，不會蓋掉上一間。
+                </p>
+                {openViewing.titles.length ? (
+                  <p className="text-xs text-zinc-500">原先已約：{openViewing.titles.join("、")}</p>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setError("");
+                    setBookSeparateTime(true);
+                  }}
+                  className="touch-manipulation w-full rounded-full border border-zinc-300 bg-white py-2.5 text-sm font-semibold text-zinc-800"
+                >
+                  另外約一個時間
+                </button>
+              </Section>
+            ) : (
             <Section title="看屋時間">
               <p className="text-xs text-zinc-500">
                 已選 {pickedIds.length} 間想看物件，選時間後送出會傳到對話。
               </p>
+              {openViewing && bookSeparateTime ? (
+                <button
+                  type="button"
+                  onClick={() => setBookSeparateTime(false)}
+                  className="text-xs font-semibold text-[#067a36]"
+                >
+                  改回跟上次同一個時間
+                </button>
+              ) : null}
               <ViewingSchedulePicker
                 heading="選擇日期與開始時間"
                 value={schedule}
@@ -1630,6 +1731,7 @@ export function LineLiffRentForm({
                 }}
               />
             </Section>
+            )}
           </>
         ) : null}
       </div>

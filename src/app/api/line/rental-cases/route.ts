@@ -1,7 +1,16 @@
 import { NextResponse } from "next/server";
 import { getCurrentAdmin } from "@/lib/admin-auth";
 import { appendLineConversationMessage } from "@/lib/line-conversations";
-import { appendLineRentalCase, readLineRentalCases } from "@/lib/line-rental-cases";
+import {
+  appendLineRentalCase,
+  appendPickedToViewingCase,
+  findLatestOpenViewing,
+  getLineRentalCase,
+  isOpenViewingStatus,
+  readLineRentalCases,
+  type LineRentalCase,
+  type LineRentalCasePicked,
+} from "@/lib/line-rental-cases";
 import { pushLineMessages } from "@/lib/line-messaging";
 import { VIEWING_SUBMIT_ACK_TEXT } from "@/lib/line-viewing-guest-copy";
 import { upsertGuestProfile } from "@/lib/line-guest-profile";
@@ -22,6 +31,8 @@ type PostBody = {
   picked?: { id: string; title: string; price: number }[];
   requestedWhen?: string;
   summaryText?: string;
+  /** 併進這一筆進行中約看，不新建 */
+  mergeIntoCaseId?: string;
   /** 客戶端已用 liff.sendMessages 送過時略過重複 push */
   skipGuestPush?: boolean;
 };
@@ -60,28 +71,58 @@ export async function POST(request: Request) {
       ? `已記下想看時間（${requestedWhen}），已送業務確認。`
       : `已記下想看時間（${requestedWhen}），待同事確認。`);
   const skipGuestPush = body.skipGuestPush === true;
+  const lineUserId = typeof body.lineUserId === "string" ? body.lineUserId.trim() || null : null;
+  const incomingPicked: LineRentalCasePicked[] = picked.map((item) => ({
+    id: String(item.id),
+    title: String(item.title),
+    price: Number(item.price) || 0,
+  }));
 
   try {
-    const created = await appendLineRentalCase({
-      kind: "viewing",
-      status,
-      lineUserId: typeof body.lineUserId === "string" ? body.lineUserId.trim() || null : null,
-      displayName: (typeof body.displayName === "string" && body.displayName.trim()) || "LINE 客人",
-      phone,
-      occupation: typeof body.occupation === "string" ? body.occupation.trim() : "",
-      nationality: typeof body.nationality === "string" ? body.nationality.trim() : "",
-      peopleCount: Number.isFinite(body.peopleCount) ? Number(body.peopleCount) : 1,
-      petNote: typeof body.petNote === "string" ? body.petNote.trim() : "",
-      moveInDate: typeof body.moveInDate === "string" ? body.moveInDate.trim() : "",
-      criteriaText: typeof body.criteriaText === "string" ? body.criteriaText.trim() : "",
-      picked: picked.map((item) => ({
-        id: String(item.id),
-        title: String(item.title),
-        price: Number(item.price) || 0,
-      })),
-      requestedWhen,
-      summaryText,
-    });
+    const requestedMergeId =
+      typeof body.mergeIntoCaseId === "string" ? body.mergeIntoCaseId.trim() : "";
+    let mergeTarget: LineRentalCase | null = null;
+    if (requestedMergeId) {
+      const requested = await getLineRentalCase(requestedMergeId);
+      if (
+        requested &&
+        requested.kind === "viewing" &&
+        isOpenViewingStatus(requested.status) &&
+        (!lineUserId || !requested.lineUserId || requested.lineUserId === lineUserId)
+      ) {
+        mergeTarget = requested;
+      }
+    }
+    if (!mergeTarget && lineUserId) {
+      const open = await findLatestOpenViewing(lineUserId);
+      if (open && open.requestedWhen.trim() === requestedWhen) mergeTarget = open;
+    }
+
+    const created = mergeTarget
+      ? await appendPickedToViewingCase(
+          mergeTarget.id,
+          incomingPicked,
+          summaryText,
+        )
+      : await appendLineRentalCase({
+          kind: "viewing",
+          status,
+          lineUserId,
+          displayName: (typeof body.displayName === "string" && body.displayName.trim()) || "LINE 客人",
+          phone,
+          occupation: typeof body.occupation === "string" ? body.occupation.trim() : "",
+          nationality: typeof body.nationality === "string" ? body.nationality.trim() : "",
+          peopleCount: Number.isFinite(body.peopleCount) ? Number(body.peopleCount) : 1,
+          petNote: typeof body.petNote === "string" ? body.petNote.trim() : "",
+          moveInDate: typeof body.moveInDate === "string" ? body.moveInDate.trim() : "",
+          criteriaText: typeof body.criteriaText === "string" ? body.criteriaText.trim() : "",
+          picked: incomingPicked,
+          requestedWhen,
+          summaryText,
+        });
+    if (!created) {
+      return NextResponse.json({ error: "找不到要併入的約看" }, { status: 404 });
+    }
 
     if (created.lineUserId && created.phone) {
       try {
@@ -108,26 +149,34 @@ export async function POST(request: Request) {
         item.price > 0 ? `（${item.price.toLocaleString("zh-TW")} 元/月）` : "";
       return `${index + 1}. ${item.title}${price}\n${listingBase}/listings/${item.id}`;
     });
-    const confirmText =
-      clientSummary ||
-      [
-        "【找房預約】已收到你的資料：",
-        "",
-        `看屋時間：${created.requestedWhen}`,
-        "",
-        "客戶資料：",
-        `暱稱：${created.displayName}`,
-        `電話：${created.phone}`,
-        `人數：${created.peopleCount} 人`,
-        `職業：${created.occupation || "未填"}`,
-        `預計入住：${created.moveInDate || "未填"}`,
-        `國籍：${created.nationality || "未填"}`,
-        `寵物：${created.petNote || "未填"}`,
-        `條件：${created.criteriaText}`,
-        "",
-        "想看的物件（網頁）：",
-        ...listingLines,
-      ].join("\n");
+    const confirmText = mergeTarget
+      ? [
+          "【找房預約】已加入同一時段，上一間仍保留。",
+          "",
+          `看屋時間：${created.requestedWhen}`,
+          "",
+          "想看的物件（含原先已約）：",
+          ...listingLines,
+        ].join("\n")
+      : clientSummary ||
+        [
+          "【找房預約】已收到你的資料：",
+          "",
+          `看屋時間：${created.requestedWhen}`,
+          "",
+          "客戶資料：",
+          `暱稱：${created.displayName}`,
+          `電話：${created.phone}`,
+          `人數：${created.peopleCount} 人`,
+          `職業：${created.occupation || "未填"}`,
+          `預計入住：${created.moveInDate || "未填"}`,
+          `國籍：${created.nationality || "未填"}`,
+          `寵物：${created.petNote || "未填"}`,
+          `條件：${created.criteriaText}`,
+          "",
+          "想看的物件（網頁）：",
+          ...listingLines,
+        ].join("\n");
 
     // 先把預約摘要寫進客服對話（不依賴 LIFF webhook 時序），再送「稍等確認」
     let pushSent = false;
@@ -139,7 +188,9 @@ export async function POST(request: Request) {
           from: "guest",
           text: confirmText,
           displayName: created.displayName,
-          messageId: `case:${created.id}:booking`,
+          messageId: mergeTarget
+            ? `case:${created.id}:merge:${Date.now().toString(36)}`
+            : `case:${created.id}:booking`,
         });
       } catch (error) {
         console.warn("[line/rental-cases] append booking to conversation failed", error);
