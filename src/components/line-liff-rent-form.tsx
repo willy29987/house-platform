@@ -18,6 +18,7 @@ import {
   formatDateYmd,
   formatViewingRange,
   matchRentals,
+  similarRentals,
   type RentalExtra,
   type RentalMatchCriteria,
   type RentalMatchListing,
@@ -71,6 +72,64 @@ function listingPhotos(item: RentalMatchListing) {
 
 function listingPageUrl(baseUrl: string, id: string) {
   return `${baseUrl.replace(/\/$/, "")}/listings/${id}`;
+}
+
+function ListingPickRow({
+  item,
+  selected,
+  onOpen,
+  onToggle,
+}: {
+  item: RentalMatchListing;
+  selected: boolean;
+  onOpen: () => void;
+  onToggle: () => void;
+}) {
+  const photo = listingPhotos(item)[0];
+  return (
+    <div
+      className={`flex overflow-hidden rounded-2xl border bg-white ${
+        selected ? "border-[#06c755]" : "border-zinc-200"
+      }`}
+    >
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex min-w-0 flex-1 items-center gap-3 p-3 text-left"
+      >
+        <span className="h-20 w-24 shrink-0 overflow-hidden rounded-xl bg-zinc-100">
+          {photo ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={photo} alt="" className="h-full w-full object-cover" />
+          ) : null}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="line-clamp-2 text-sm font-bold leading-snug text-zinc-900">
+            {item.title}
+          </span>
+          <span className="mt-1 block text-xs text-zinc-500">
+            {item.city}
+            {item.district} · {item.rooms} 房 · {item.areaPing} 坪
+          </span>
+          <span className="mt-1 block text-sm font-semibold tabular-nums text-red-600">
+            {formatRent(item.price)}
+          </span>
+        </span>
+      </button>
+      <button
+        type="button"
+        aria-label={selected ? "取消想看" : "想看這間"}
+        onClick={onToggle}
+        className={`flex w-[4.5rem] shrink-0 flex-col items-center justify-center border-l text-xs font-bold ${
+          selected
+            ? "border-[#06c755]/40 bg-[#06c755] text-white"
+            : "border-zinc-200 bg-zinc-50 text-zinc-700"
+        }`}
+      >
+        {selected ? "已選" : "想看"}
+      </button>
+    </div>
+  );
 }
 
 function Chip({
@@ -567,6 +626,9 @@ export function LineLiffRentForm({
   const [petDraft, setPetDraft] = useState("");
   const [matched, setMatched] = useState<RentalMatchListing[]>([]);
   const [matchedRelaxed, setMatchedRelaxed] = useState<string[]>([]);
+  const [similar, setSimilar] = useState<RentalMatchListing[]>([]);
+  const [similarNotes, setSimilarNotes] = useState<string[]>([]);
+  const [watchSaved, setWatchSaved] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [priceCustomOn, setPriceCustomOn] = useState(false);
   const [priceMin, setPriceMin] = useState("");
@@ -582,12 +644,104 @@ export function LineLiffRentForm({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState<{ when: string; titles: string[] } | null>(null);
+  /** 已有完整個資：選完物件後只問時間 */
+  const [profileReady, setProfileReady] = useState(false);
+  const [editingProfile, setEditingProfile] = useState(false);
+  const profileBootRef = useRef(false);
+  const listingBootRef = useRef(false);
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     document.documentElement.scrollTop = 0;
     document.body.scrollTop = 0;
   }, [step]);
+
+  useEffect(() => {
+    if (profileBootRef.current) return;
+    const uid =
+      lineUserId?.trim() ||
+      new URLSearchParams(window.location.search).get("uid")?.trim() ||
+      window.sessionStorage.getItem("line_messaging_uid")?.trim() ||
+      "";
+    if (!uid) return;
+    profileBootRef.current = true;
+    void fetch(`/api/line/guest-profile?lineUserId=${encodeURIComponent(uid)}`)
+      .then(async (response) => {
+        if (!response.ok) return null;
+        return (await response.json()) as {
+          complete?: boolean;
+          profile?: {
+            phone?: string;
+            occupation?: string;
+            nationality?: string;
+            peopleCount?: number;
+            petNote?: string;
+            moveInDate?: string;
+          } | null;
+        };
+      })
+      .then((data) => {
+        const profile = data?.profile;
+        if (!data?.complete || !profile) return;
+        setPhone(profile.phone?.trim() || "");
+        setOccupation(profile.occupation?.trim() || "");
+        setPeopleCount(
+          Number.isFinite(profile.peopleCount) && (profile.peopleCount ?? 0) >= 1
+            ? Math.min(6, Math.round(profile.peopleCount as number))
+            : 1,
+        );
+        setMoveIn(profile.moveInDate?.trim() || "");
+        const nation = profile.nationality?.trim() || "";
+        if (nation === "本國") {
+          setNationalityLocal("local");
+          setNationalityDraft("");
+        } else if (nation) {
+          setNationalityLocal("other");
+          setNationalityDraft(nation);
+        }
+        const pet = profile.petNote?.trim() || "";
+        if (pet === "沒有") {
+          setPetHas("no");
+          setPetDraft("");
+        } else if (pet) {
+          setPetHas("yes");
+          setPetDraft(pet);
+        }
+        setProfileReady(true);
+      })
+      .catch(() => {
+        /* 沒有舊個資就照常填一次 */
+      });
+  }, [lineUserId]);
+
+  useEffect(() => {
+    if (listingBootRef.current || !listings.length) return;
+    const params = new URLSearchParams(window.location.search);
+    const ids = params
+      .getAll("listingId")
+      .flatMap((value) => value.split(","))
+      .map((value) => value.trim())
+      .filter(Boolean);
+    if (!ids.length) return;
+    const found = ids
+      .map((id) => listings.find((item) => item.id === id))
+      .filter((item): item is RentalMatchListing => Boolean(item));
+    if (!found.length) return;
+    listingBootRef.current = true;
+    const seed = emptyCriteria();
+    seed.cities = [...new Set(found.map((item) => item.city).filter(Boolean))];
+    const similarResult = similarRentals(
+      listings,
+      seed,
+      found.map((item) => item.id),
+      8,
+    );
+    setMatched(found);
+    setSimilar(similarResult.items);
+    setSimilarNotes(similarResult.notes);
+    setPickedIds(found.map((item) => item.id));
+    setStep("listings");
+  }, [listings]);
 
   const cities = useMemo(
     () => [...new Set(listings.map((item) => item.city).filter(Boolean))].sort(),
@@ -600,9 +754,14 @@ export function LineLiffRentForm({
     return [...new Set(pool.map((item) => item.district).filter(Boolean))].sort();
   }, [listings, criteria.cities]);
 
-  const detailListing = detailId
-    ? matched.find((item) => item.id === detailId) ?? null
-    : null;
+  const listingPool = useMemo(() => {
+    const byId = new Map<string, RentalMatchListing>();
+    for (const item of matched) byId.set(item.id, item);
+    for (const item of similar) byId.set(item.id, item);
+    return byId;
+  }, [matched, similar]);
+
+  const detailListing = detailId ? listingPool.get(detailId) ?? null : null;
 
   const petNote =
     petHas === "no" ? "沒有" : petHas === "yes" ? petDraft.trim() : "";
@@ -642,6 +801,64 @@ export function LineLiffRentForm({
     else if (step === "profile") setStep("listings");
   }
 
+  function reselectCriteria() {
+    setError("");
+    setDetailId(null);
+    setPickedIds([]);
+    setWatchSaved(false);
+    setStep("criteria");
+  }
+
+  function applyBudgetFilter(
+    items: RentalMatchListing[],
+    minRaw: string,
+    maxRaw: string,
+    min: number,
+    max: number,
+  ) {
+    return items.filter((item) => {
+      if (minRaw && item.price < min) return false;
+      if (maxRaw && item.price > max) return false;
+      return true;
+    });
+  }
+
+  async function persistWatchCriteria(input: {
+    minRaw: string;
+    maxRaw: string;
+    min: number;
+    max: number;
+  }) {
+    const uid =
+      lineUserId?.trim() ||
+      (typeof window !== "undefined"
+        ? new URLSearchParams(window.location.search).get("uid")?.trim() ||
+          window.sessionStorage.getItem("line_messaging_uid")?.trim()
+        : null);
+    if (!uid) {
+      setWatchSaved(false);
+      return;
+    }
+    try {
+      const response = await fetch("/api/line/guest-watch-criteria", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lineUserId: uid,
+          displayName: displayName || undefined,
+          criteria,
+          priceMin: input.minRaw ? input.min : null,
+          priceMax: input.maxRaw ? input.max : null,
+          petNote,
+          active: true,
+        }),
+      });
+      setWatchSaved(response.ok);
+    } catch {
+      setWatchSaved(false);
+    }
+  }
+
   function confirmCriteria() {
     if (petHas === "yes" && !petDraft.trim()) {
       setError("請填寫寵物種類");
@@ -675,19 +892,35 @@ export function LineLiffRentForm({
     }
 
     const result = matchRentals(listings, criteria);
-    const items = result.items
-      .filter((item) => {
-        if (minRaw && item.price < min) return false;
-        if (maxRaw && item.price > max) return false;
-        return true;
-      })
-      .slice(0, MATCH_LIST_LIMIT);
+    const items = applyBudgetFilter(result.items, minRaw, maxRaw, min, max).slice(
+      0,
+      MATCH_LIST_LIMIT,
+    );
+    const similarResult = similarRentals(
+      listings,
+      criteria,
+      items.map((item) => item.id),
+      8,
+    );
+    const similarItems = applyBudgetFilter(
+      similarResult.items,
+      minRaw,
+      maxRaw,
+      min,
+      max,
+    ).slice(0, 8);
+
     setMatched(items);
     setMatchedRelaxed(result.relaxed);
+    setSimilar(similarItems);
+    setSimilarNotes(similarResult.notes);
     setPickedIds([]);
     setDetailId(null);
     setError("");
+    setWatchSaved(false);
     setStep("listings");
+    // 每次確認條件都以最新條件覆蓋寫入（關掉 LIFF 也保留，之後新案可推）
+    void persistWatchCriteria({ minRaw, maxRaw, min, max });
   }
 
   function confirmListings() {
@@ -697,25 +930,36 @@ export function LineLiffRentForm({
     }
     setError("");
     setDetailId(null);
+    setEditingProfile(!profileReady);
     setStep("profile");
   }
 
-  function confirmProfileAndSubmit() {
-    if (!occupation.trim()) {
-      setError("請填寫分別職業");
-      return;
-    }
-    if (!moveIn) {
-      setError("請選擇預計入住日");
-      return;
-    }
-    if (!nationality) {
-      setError("請填寫國籍");
-      return;
-    }
+  function profileFieldError() {
+    if (!occupation.trim()) return "請填寫分別職業";
+    if (!moveIn) return "請選擇預計入住日";
+    if (!nationality) return "請填寫國籍";
     const phoneTrim = phone.trim();
     if (!/^09\d{8}$/.test(phoneTrim) && !/^0\d{8,12}$/.test(phoneTrim)) {
-      setError("請留下有效電話");
+      return "請留下有效電話";
+    }
+    return "";
+  }
+
+  function finishProfileEdit() {
+    const message = profileFieldError();
+    if (message) {
+      setError(message);
+      return;
+    }
+    setError("");
+    setProfileReady(true);
+    setEditingProfile(false);
+  }
+
+  function confirmProfileAndSubmit() {
+    const message = profileFieldError();
+    if (message) {
+      setError(message);
       return;
     }
     if (!formatViewingRange(schedule.date, schedule.start)) {
@@ -736,8 +980,9 @@ export function LineLiffRentForm({
       return;
     }
 
-    const picked = matched
-      .filter((item) => pickedIds.includes(item.id))
+    const picked = [...pickedIds]
+      .map((id) => listingPool.get(id))
+      .filter((item): item is RentalMatchListing => Boolean(item))
       .map((item) => ({ id: item.id, title: item.title, price: item.price }));
     const phoneTrim = phone.trim();
     const name = displayName || "LINE 客人";
@@ -914,18 +1159,31 @@ export function LineLiffRentForm({
     );
   }
 
+  const canContinueListings = matched.length > 0 || similar.length > 0;
+
+  const showSavedProfile = step === "profile" && profileReady && !editingProfile;
+
   const primaryLabel =
     step === "criteria"
       ? "確認條件，看物件"
       : step === "listings"
-        ? "下一步：填基本資料"
-        : submitting
-          ? "送出中…"
-          : "確認送出到對話";
+        ? canContinueListings
+          ? profileReady
+            ? "下一步：選看屋時間"
+            : "下一步：填基本資料"
+          : "重新挑選條件"
+        : step === "profile" && editingProfile && profileReady
+          ? "完成修改"
+          : submitting
+            ? "送出中…"
+            : "確認送出到對話";
 
   function onPrimary() {
     if (step === "criteria") confirmCriteria();
-    else if (step === "listings") confirmListings();
+    else if (step === "listings") {
+      if (!canContinueListings) reselectCriteria();
+      else confirmListings();
+    } else if (editingProfile && profileReady) finishProfileEdit();
     else confirmProfileAndSubmit();
   }
 
@@ -949,7 +1207,9 @@ export function LineLiffRentForm({
                 ? "先填找房條件"
                 : step === "listings"
                   ? "點物件看照片與資訊，右側點「想看」"
-                  : "填基本資料與看屋時間後送出"}
+                  : showSavedProfile
+                    ? "已有個人資料，只要選看屋時間"
+                    : "填基本資料與看屋時間後送出"}
             </p>
           </div>
         </div>
@@ -1153,73 +1413,109 @@ export function LineLiffRentForm({
         ) : null}
 
         {step === "listings" ? (
-          <Section title={`配對物件（${matched.length}）`}>
-            <p className="text-xs text-zinc-500">
-              點物件卡片查看照片與資訊；右側「想看」可複選。
-              {matchedRelaxed.length ? `（已放寬：${matchedRelaxed.join("、")}）` : ""}
-            </p>
-            {matched.length === 0 ? (
-              <p className="rounded-xl bg-zinc-50 px-3 py-4 text-sm text-zinc-500">
-                目前沒有符合條件的物件，請返回調整條件。
+          <>
+            <Section title={`配對物件（${matched.length}）`}>
+              <p className="text-xs text-zinc-500">
+                點物件卡片查看照片與資訊；右側「想看」可複選。
+                {matchedRelaxed.length ? `（已放寬：${matchedRelaxed.join("、")}）` : ""}
               </p>
-            ) : (
-              <div className="space-y-2">
-                {matched.map((item) => {
-                  const on = pickedIds.includes(item.id);
-                  const photo = listingPhotos(item)[0];
-                  return (
-                    <div
+              {matched.length === 0 ? (
+                <div className="space-y-3 rounded-xl bg-zinc-50 px-3 py-4">
+                  <p className="text-sm text-zinc-600">
+                    目前沒有完全符合條件的物件。
+                    {watchSaved
+                      ? " 已幫你記住這組條件，之後有符合的新案會再通知。"
+                      : " 系統會盡量記住你的條件；若之後有符合的新案會再通知。"}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={reselectCriteria}
+                    className="touch-manipulation w-full rounded-full border border-zinc-300 bg-white py-2.5 text-sm font-semibold text-zinc-800"
+                  >
+                    重新挑選條件
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {matched.map((item) => (
+                    <ListingPickRow
                       key={item.id}
-                      className={`flex overflow-hidden rounded-2xl border bg-white ${
-                        on ? "border-[#06c755]" : "border-zinc-200"
-                      }`}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => setDetailId(item.id)}
-                        className="flex min-w-0 flex-1 items-center gap-3 p-3 text-left"
-                      >
-                        <span className="h-20 w-24 shrink-0 overflow-hidden rounded-xl bg-zinc-100">
-                          {photo ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={photo} alt="" className="h-full w-full object-cover" />
-                          ) : null}
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="line-clamp-2 text-sm font-bold leading-snug text-zinc-900">
-                            {item.title}
-                          </span>
-                          <span className="mt-1 block text-xs text-zinc-500">
-                            {item.city}
-                            {item.district} · {item.rooms} 房 · {item.areaPing} 坪
-                          </span>
-                          <span className="mt-1 block text-sm font-semibold tabular-nums text-red-600">
-                            {formatRent(item.price)}
-                          </span>
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        aria-label={on ? "取消想看" : "想看這間"}
-                        onClick={() => togglePick(item.id)}
-                        className={`flex w-[4.5rem] shrink-0 flex-col items-center justify-center border-l text-xs font-bold ${
-                          on
-                            ? "border-[#06c755]/40 bg-[#06c755] text-white"
-                            : "border-zinc-200 bg-zinc-50 text-zinc-700"
-                        }`}
-                      >
-                        {on ? "已選" : "想看"}
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </Section>
+                      item={item}
+                      selected={pickedIds.includes(item.id)}
+                      onOpen={() => setDetailId(item.id)}
+                      onToggle={() => togglePick(item.id)}
+                    />
+                  ))}
+                </div>
+              )}
+            </Section>
+
+            {similar.length > 0 ? (
+              <Section title={`類似物件（${similar.length}）`}>
+                <p className="text-xs text-zinc-500">
+                  符合你條件的相近物件，可一併勾選想看。
+                  {similarNotes[0] ? `（${similarNotes[0]}）` : ""}
+                </p>
+                <div className="space-y-2">
+                  {similar.map((item) => (
+                    <ListingPickRow
+                      key={item.id}
+                      item={item}
+                      selected={pickedIds.includes(item.id)}
+                      onOpen={() => setDetailId(item.id)}
+                      onToggle={() => togglePick(item.id)}
+                    />
+                  ))}
+                </div>
+              </Section>
+            ) : null}
+
+            {matched.length === 0 && similar.length === 0 ? (
+              <p className="px-1 text-center text-xs text-zinc-500">
+                也可先關閉表單；條件已登記的話，有新案再推給你。
+              </p>
+            ) : null}
+          </>
         ) : null}
 
         {step === "profile" ? (
           <>
+            {showSavedProfile ? (
+              <Section title="已存個人資料">
+                <dl className="space-y-1 text-sm text-zinc-800">
+                  <div className="flex gap-2">
+                    <dt className="w-16 shrink-0 text-zinc-500">電話</dt>
+                    <dd className="font-medium">{phone}</dd>
+                  </div>
+                  <div className="flex gap-2">
+                    <dt className="w-16 shrink-0 text-zinc-500">人數</dt>
+                    <dd className="font-medium">{peopleCount} 人</dd>
+                  </div>
+                  <div className="flex gap-2">
+                    <dt className="w-16 shrink-0 text-zinc-500">職業</dt>
+                    <dd className="font-medium">{occupation}</dd>
+                  </div>
+                  <div className="flex gap-2">
+                    <dt className="w-16 shrink-0 text-zinc-500">入住</dt>
+                    <dd className="font-medium">{moveIn ? formatDateYmd(moveIn) : "未填"}</dd>
+                  </div>
+                  <div className="flex gap-2">
+                    <dt className="w-16 shrink-0 text-zinc-500">國籍</dt>
+                    <dd className="font-medium">{nationality || "未填"}</dd>
+                  </div>
+                </dl>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setError("");
+                    setEditingProfile(true);
+                  }}
+                  className="touch-manipulation rounded-full border border-zinc-300 bg-white px-3 py-2 text-sm font-semibold text-zinc-800"
+                >
+                  修改資料
+                </button>
+              </Section>
+            ) : (
             <Section title="基本資料">
               <div>
                 <p className="mb-2 text-xs font-medium text-zinc-500">幾個人住</p>
@@ -1313,6 +1609,7 @@ export function LineLiffRentForm({
                 />
               </label>
             </Section>
+            )}
 
             <Section title="看屋時間">
               <p className="text-xs text-zinc-500">
@@ -1342,7 +1639,7 @@ export function LineLiffRentForm({
           {error ? <p className="mb-2 text-center text-sm text-red-600">{error}</p> : null}
           <button
             type="button"
-            disabled={submitting || (step === "listings" && matched.length === 0)}
+            disabled={submitting}
             onClick={onPrimary}
             className="touch-manipulation w-full rounded-full bg-[#06c755] py-3 text-sm font-bold text-white disabled:opacity-50"
           >

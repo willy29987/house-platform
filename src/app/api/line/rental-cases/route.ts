@@ -4,6 +4,7 @@ import { appendLineConversationMessage } from "@/lib/line-conversations";
 import { appendLineRentalCase, readLineRentalCases } from "@/lib/line-rental-cases";
 import { pushLineMessages } from "@/lib/line-messaging";
 import { VIEWING_SUBMIT_ACK_TEXT } from "@/lib/line-viewing-guest-copy";
+import { upsertGuestProfile } from "@/lib/line-guest-profile";
 import { getViewingAgentUserIds, notifyAgentsOfNewViewing } from "@/lib/line-viewing-agent";
 
 export const dynamic = "force-dynamic";
@@ -81,6 +82,23 @@ export async function POST(request: Request) {
       requestedWhen,
       summaryText,
     });
+
+    if (created.lineUserId && created.phone) {
+      try {
+        await upsertGuestProfile({
+          lineUserId: created.lineUserId,
+          displayName: created.displayName,
+          phone: created.phone,
+          occupation: created.occupation,
+          nationality: created.nationality,
+          peopleCount: created.peopleCount,
+          petNote: created.petNote,
+          moveInDate: created.moveInDate,
+        });
+      } catch (error) {
+        console.warn("[line/rental-cases] upsert guest profile failed", error);
+      }
+    }
 
     const listingBase =
       process.env.NEXT_PUBLIC_LISTING_BASE_URL?.replace(/\/$/, "") ||

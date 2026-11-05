@@ -272,6 +272,66 @@ export function matchRentals(listings: RentalMatchListing[], criteria: RentalMat
   return { items, relaxed };
 }
 
+/**
+ * 主配對以外的「類似／符合條件」物件：同縣市為主，略放寬行政區／房型等，排除已在主列表者。
+ */
+export function similarRentals(
+  listings: RentalMatchListing[],
+  criteria: RentalMatchCriteria,
+  excludeIds: Iterable<string>,
+  limit = 8,
+): { items: RentalMatchListing[]; notes: string[] } {
+  const exclude = new Set(excludeIds);
+  const pool = listings.filter((listing) => !exclude.has(listing.id));
+  const notes: string[] = [];
+
+  const tryMatch = (soft: RentalMatchCriteria, note: string) => {
+    const items = pool.filter((listing) => listingMatchesCriteria(listing, soft));
+    if (!items.length) return null;
+    notes.push(note);
+    return items;
+  };
+
+  let items =
+    tryMatch(
+      {
+        ...criteria,
+        districts: [],
+        bathrooms: [],
+        parking: [],
+        extras: [],
+      },
+      "同條件相近（已略放寬行政區／衛浴／車位等）",
+    ) ||
+    tryMatch(
+      {
+        ...emptyCriteria(),
+        cities: criteria.cities,
+        priceKeys: criteria.priceKeys,
+        rooms: criteria.rooms,
+      },
+      "同縣市＋預算／房型相近",
+    ) ||
+    tryMatch(
+      {
+        ...emptyCriteria(),
+        cities: criteria.cities,
+        priceKeys: criteria.priceKeys,
+      },
+      "同縣市＋預算相近",
+    ) ||
+    tryMatch(
+      {
+        ...emptyCriteria(),
+        cities: criteria.cities,
+      },
+      "同縣市其他物件",
+    ) ||
+    [];
+
+  return { items: items.slice(0, limit), notes };
+}
+
 function labelsOf(ids: string[], options: readonly { value?: string; id?: string; label: string }[], empty: string) {
   if (!ids.length) return empty;
   return ids

@@ -5,6 +5,8 @@ export const ADMIN_CLOUD_DATA_KEYS = {
   tenantManager: "tenant_manager",
   lineRentalCases: "line_rental_cases",
   lineGuestSessions: "line_guest_sessions",
+  lineGuestWatchCriteria: "line_guest_watch_criteria",
+  lineGuestProfile: "line_guest_profile",
   lineGuestPushQueue: "line_guest_push_queue",
   lineRuntimeSecrets: "line_runtime_secrets",
   lineConversations: "line_conversations",
