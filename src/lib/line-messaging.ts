@@ -104,6 +104,11 @@ export type LineMessage =
       previewImageUrl: string;
     }
   | {
+      type: "video";
+      originalContentUrl: string;
+      previewImageUrl: string;
+    }
+  | {
       type: "template";
       altText: string;
       template:
@@ -182,6 +187,16 @@ export async function pushLineMessages(
               from: "staff",
               text: "［圖片］",
               mediaType: "image",
+              messageId: message.originalContentUrl,
+            });
+            continue;
+          }
+          if (message.type === "video") {
+            await appendLineConversationMessage({
+              lineUserId,
+              from: "staff",
+              text: "［影片］",
+              mediaType: "video",
               messageId: message.originalContentUrl,
             });
             continue;

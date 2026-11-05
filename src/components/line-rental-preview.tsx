@@ -62,6 +62,8 @@ type ChatLine = {
   mediaType?: LineConversationMediaType;
   stickerId?: string;
   packageId?: string;
+  /** 已顯示在對話裡、尚未被伺服器快照收下 */
+  pending?: boolean;
 };
 
 type PickedListing = { id: string; title: string; price: number };
@@ -195,7 +197,7 @@ function LineMessageBody({ line }: { line: ChatLine }) {
   }
 
   if (mediaType === "image" && line.messageId) {
-    const href = /^https?:\/\//i.test(line.messageId)
+    const href = /^(https?:|blob:)/i.test(line.messageId)
       ? line.messageId
       : /^\d+$/.test(line.messageId)
         ? lineContentUrl(line.messageId)
@@ -215,15 +217,22 @@ function LineMessageBody({ line }: { line: ChatLine }) {
     }
   }
 
-  if (mediaType === "video" && line.messageId && /^\d+$/.test(line.messageId)) {
-    return (
-      <video
-        src={lineContentUrl(line.messageId)}
-        controls
-        playsInline
-        className="max-h-64 max-w-full rounded-lg bg-black"
-      />
-    );
+  if (mediaType === "video" && line.messageId) {
+    const href = /^(https?:|blob:)/i.test(line.messageId)
+      ? line.messageId
+      : /^\d+$/.test(line.messageId)
+        ? lineContentUrl(line.messageId)
+        : null;
+    if (href) {
+      return (
+        <video
+          src={href}
+          controls
+          playsInline
+          className="max-h-64 max-w-full rounded-lg bg-black"
+        />
+      );
+    }
   }
 
   if (mediaType === "audio" && line.messageId && /^\d+$/.test(line.messageId)) {
@@ -477,6 +486,55 @@ function attachPipelineAndReply(
     replyStatus,
     pipeline,
   };
+}
+
+function serverAlreadyHas(serverLines: ChatLine[], pending: ChatLine, used: Set<ChatLine>) {
+  const sent = pending.atIso ? Date.parse(pending.atIso) : 0;
+  return serverLines.some((line) => {
+    if (used.has(line) || line.from !== pending.from) return false;
+    const at = line.atIso ? Date.parse(line.atIso) : 0;
+    if (!Number.isFinite(at) || at < sent - 20000) return false;
+    const same =
+      pending.mediaType != null
+        ? line.mediaType === pending.mediaType
+        : line.text === pending.text;
+    if (!same) return false;
+    used.add(line);
+    return true;
+  });
+}
+
+/** 快照還沒寫入的送出訊息留在對話與列表，避免被同步蓋掉 */
+function mergePendingStaffLines(live: StaffGuest[], local: StaffGuest[]): StaffGuest[] {
+  const localById = new Map(local.map((guest) => [guest.id, guest]));
+  const merged = live.map((guest) => {
+    const pending = localById.get(guest.id)?.lines.filter((line) => line.pending) ?? [];
+    if (!pending.length) return guest;
+    const used = new Set<ChatLine>();
+    const kept = pending.filter((line) => !serverAlreadyHas(guest.lines, line, used));
+    for (const line of pending) {
+      if (!kept.includes(line) && line.messageId?.startsWith("blob:")) {
+        URL.revokeObjectURL(line.messageId);
+      }
+    }
+    if (!kept.length) return guest;
+    const lines = [...guest.lines, ...kept];
+    const last = lines[lines.length - 1];
+    const createdAt =
+      last?.atIso && last.atIso > guest.createdAt ? last.atIso : guest.createdAt;
+    return attachPipelineAndReply({
+      ...guest,
+      lines,
+      summaryText: last?.text || guest.summaryText,
+      createdAt,
+      replyStatus: resolveReplyStatus(lines),
+    });
+  });
+  return merged.sort((a, b) => {
+    const aIso = a.lines[a.lines.length - 1]?.atIso || a.createdAt || "";
+    const bIso = b.lines[b.lines.length - 1]?.atIso || b.createdAt || "";
+    return bIso.localeCompare(aIso);
+  });
 }
 
 function buildStaffGuests(listings: RentalMatchListing[]): StaffGuest[] {
@@ -1150,9 +1208,9 @@ export function LineRentalPreview({
   }
 
   useEffect(() => {
-    // 一律以伺服器對話為準（與 LINE 同步）；勿用本地舊 lines 蓋掉 webhook 新訊息
+    // 伺服器對話為準，但送出後還沒寫進快照的那幾則要留在畫面上
     if (liveGuests.length) {
-      setGuests(liveGuests);
+      setGuests((current) => mergePendingStaffLines(liveGuests, current));
       return;
     }
     setGuests(demoGuests);
@@ -1166,7 +1224,14 @@ export function LineRentalPreview({
     });
   }, [liveGuests]);
 
-  const visible = guests.filter((guest) => matchesFilter(guest, filter));
+  const visible = guests
+    .filter((guest) => matchesFilter(guest, filter))
+    .slice()
+    .sort((a, b) => {
+      const aIso = a.lines[a.lines.length - 1]?.atIso || a.createdAt || "";
+      const bIso = b.lines[b.lines.length - 1]?.atIso || b.createdAt || "";
+      return bIso.localeCompare(aIso);
+    });
   const selected = visible.find((guest) => guest.id === selectedId) ?? visible[0] ?? null;
 
   useEffect(() => {
@@ -1201,6 +1266,33 @@ export function LineRentalPreview({
     setGuests((current) => current.map((guest) => (guest.id === id ? update(guest) : guest)));
   }
 
+  function showOutgoing(guestId: string, line: ChatLine) {
+    patchGuest(guestId, (current) =>
+      attachPipelineAndReply({
+        ...current,
+        lines: [...current.lines, line],
+        summaryText: line.text,
+        createdAt: line.atIso || current.createdAt,
+        replyStatus: "replied",
+      }),
+    );
+  }
+
+  function dropOutgoing(guestId: string, lineIdLocal: number) {
+    patchGuest(guestId, (current) => {
+      const removed = current.lines.find((line) => line.id === lineIdLocal);
+      if (removed?.messageId?.startsWith("blob:")) URL.revokeObjectURL(removed.messageId);
+      const lines = current.lines.filter((line) => line.id !== lineIdLocal);
+      const last = lines[lines.length - 1];
+      return attachPipelineAndReply({
+        ...current,
+        lines,
+        summaryText: last?.text || current.summaryText,
+        replyStatus: resolveReplyStatus(lines),
+      });
+    });
+  }
+
   function pushStaffPayload(
     guest: StaffGuest,
     lineIdLocal: number,
@@ -1208,6 +1300,8 @@ export function LineRentalPreview({
       text?: string;
       sticker?: { packageId: string; stickerId: string };
       imageUrl?: string;
+      videoUrl?: string;
+      previewImageUrl?: string;
     },
   ) {
     if (!guest.lineUserId) return;
@@ -1217,10 +1311,8 @@ export function LineRentalPreview({
       body: JSON.stringify({ lineUserId: guest.lineUserId, ...payload }),
     }).then(async (response) => {
       if (response.ok) return;
-      patchGuest(guest.id, (current) => ({
-        ...current,
-        lines: current.lines.filter((line) => line.id !== lineIdLocal),
-      }));
+      dropOutgoing(guest.id, lineIdLocal);
+      window.alert("傳送失敗，請再試一次");
     });
   }
 
@@ -1241,68 +1333,97 @@ export function LineRentalPreview({
     const id = lineId.current++;
     const sentAt = new Date().toISOString();
     const at = formatLineClock(sentAt);
-    patchGuest(guest.id, (current) =>
-      attachPipelineAndReply({
-        ...current,
-        lines: [
-          ...current.lines,
-          {
-            id,
-            from: "staff",
-            text: "［貼圖］",
-            at,
-            atIso: sentAt,
-            mediaType: "sticker",
-            stickerId: sticker.stickerId,
-            packageId: sticker.packageId,
-          },
-        ],
-        replyStatus: "replied",
-      }),
-    );
+    showOutgoing(guest.id, {
+      id,
+      from: "staff",
+      text: "［貼圖］",
+      at,
+      atIso: sentAt,
+      mediaType: "sticker",
+      stickerId: sticker.stickerId,
+      packageId: sticker.packageId,
+      pending: true,
+    });
     setStickerOpen(false);
     pushStaffPayload(guest, id, {
       sticker: { packageId: sticker.packageId, stickerId: sticker.stickerId },
     });
   }
 
-  async function uploadAndSendImage(guest: StaffGuest, file: File) {
-    if (!guest.lineUserId || uploadingMedia) return;
+  async function uploadMediaFile(file: File) {
+    const form = new FormData();
+    form.append("files", file);
+    const uploadRes = await fetch("/api/admin/upload", { method: "POST", body: form });
+    const uploadJson = (await uploadRes.json().catch(() => null)) as
+      | { ok?: boolean; urls?: string[]; message?: string }
+      | null;
+    const url = uploadJson?.urls?.[0];
+    if (!uploadRes.ok || !url) {
+      throw new Error(uploadJson?.message || "上傳失敗");
+    }
+    return url;
+  }
+
+  async function videoPreviewFile(file: File): Promise<File | null> {
+    const src = URL.createObjectURL(file);
+    try {
+      const video = document.createElement("video");
+      video.muted = true;
+      video.playsInline = true;
+      video.preload = "auto";
+      video.src = src;
+      await new Promise<void>((resolve, reject) => {
+        video.onloadeddata = () => resolve();
+        video.onerror = () => reject(new Error("preview"));
+      });
+      const canvas = document.createElement("canvas");
+      canvas.width = 240;
+      canvas.height = 240;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return null;
+      ctx.drawImage(video, 0, 0, 240, 240);
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob(resolve, "image/jpeg", 0.8),
+      );
+      if (!blob) return null;
+      return new File([blob], "video-preview.jpg", { type: "image/jpeg" });
+    } catch {
+      return null;
+    } finally {
+      URL.revokeObjectURL(src);
+    }
+  }
+
+  async function uploadAndSendMedia(guest: StaffGuest, file: File, kind: "image" | "video") {
+    if (!guest.lineUserId) return;
+    const id = lineId.current++;
+    const sentAt = new Date().toISOString();
+    const at = formatLineClock(sentAt);
+    const blobUrl = URL.createObjectURL(file);
+    showOutgoing(guest.id, {
+      id,
+      from: "staff",
+      text: kind === "video" ? "［影片］" : "［圖片］",
+      at,
+      atIso: sentAt,
+      mediaType: kind,
+      messageId: blobUrl,
+      pending: true,
+    });
     setUploadingMedia(true);
     try {
-      const form = new FormData();
-      form.append("files", file);
-      const uploadRes = await fetch("/api/admin/upload", { method: "POST", body: form });
-      const uploadJson = (await uploadRes.json().catch(() => null)) as
-        | { ok?: boolean; urls?: string[]; message?: string }
-        | null;
-      const url = uploadJson?.urls?.[0];
-      if (!uploadRes.ok || !url) {
-        window.alert(uploadJson?.message || "上傳失敗");
-        return;
+      const url = await uploadMediaFile(file);
+      if (kind === "video") {
+        const previewFile = await videoPreviewFile(file);
+        const previewUrl = previewFile ? await uploadMediaFile(previewFile) : "";
+        if (!previewUrl) throw new Error("影片預覽圖上傳失敗");
+        pushStaffPayload(guest, id, { videoUrl: url, previewImageUrl: previewUrl });
+      } else {
+        pushStaffPayload(guest, id, { imageUrl: url });
       }
-      const id = lineId.current++;
-      const sentAt = new Date().toISOString();
-      const at = formatLineClock(sentAt);
-      patchGuest(guest.id, (current) =>
-        attachPipelineAndReply({
-          ...current,
-          lines: [
-            ...current.lines,
-            {
-              id,
-              from: "staff",
-              text: "［圖片］",
-              at,
-              atIso: sentAt,
-              mediaType: "image",
-              messageId: url.startsWith("http") ? url : `${window.location.origin}${url}`,
-            },
-          ],
-          replyStatus: "replied",
-        }),
-      );
-      pushStaffPayload(guest, id, { imageUrl: url });
+    } catch (error) {
+      dropOutgoing(guest.id, id);
+      window.alert(error instanceof Error ? error.message : "上傳失敗");
     } finally {
       setUploadingMedia(false);
     }
@@ -1311,11 +1432,15 @@ export function LineRentalPreview({
   function onPickMedia(guest: StaffGuest, files: FileList | null) {
     const file = files?.[0];
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      window.alert("目前僅支援傳送圖片到 LINE");
+    if (file.type.startsWith("video/")) {
+      void uploadAndSendMedia(guest, file, "video");
       return;
     }
-    void uploadAndSendImage(guest, file);
+    if (!file.type.startsWith("image/")) {
+      window.alert("請選擇圖片或影片");
+      return;
+    }
+    void uploadAndSendMedia(guest, file, "image");
   }
 
   function listingBaseUrl() {
@@ -1374,7 +1499,10 @@ export function LineRentalPreview({
         requestedWhen: when,
         proposedWhen: "",
         picked: orderedPicked.length ? orderedPicked : current.picked,
-        lines: [...current.lines, { id, from: "staff", text, at, atIso: sentAt }],
+        lines: [...current.lines, { id, from: "staff", text, at, atIso: sentAt, pending: true }],
+        summaryText: text,
+        createdAt: sentAt,
+        replyStatus: "replied",
       }),
     );
     pushStaffLine(guest, text, id);
@@ -1392,7 +1520,10 @@ export function LineRentalPreview({
         ...current,
         status: "reschedule_sent",
         proposedWhen: "",
-        lines: [...current.lines, { id, from: "staff", text, at, atIso: sentAt }],
+        lines: [...current.lines, { id, from: "staff", text, at, atIso: sentAt, pending: true }],
+        summaryText: text,
+        createdAt: sentAt,
+        replyStatus: "replied",
       }),
     );
     pushStaffLine(guest, text, id);
@@ -1414,7 +1545,10 @@ export function LineRentalPreview({
         status: "confirmed",
         requestedWhen: when,
         proposedWhen: "",
-        lines: [...current.lines, { id, from: "staff", text, at, atIso: sentAt }],
+        lines: [...current.lines, { id, from: "staff", text, at, atIso: sentAt, pending: true }],
+        summaryText: text,
+        createdAt: sentAt,
+        replyStatus: "replied",
       }),
     );
     pushStaffLine(guest, text, id);
@@ -1454,18 +1588,16 @@ export function LineRentalPreview({
     const text = (drafts[guestId] ?? "").trim();
     if (!text) return;
     const id = lineId.current++;
-    const lineUserId = selected.lineUserId;
     const sentAt = new Date().toISOString();
     const at = formatLineClock(sentAt);
     ignoreDraftChangeRef.current = guestId;
-    // 樂觀更新；輪詢會再以伺服器紀錄對齊
-    patchGuest(guestId, (current) => {
-      const lines = [...current.lines, { id, from: "staff" as const, text, at, atIso: sentAt }];
-      return attachPipelineAndReply({
-        ...current,
-        lines,
-        replyStatus: "replied",
-      });
+    showOutgoing(guestId, {
+      id,
+      from: "staff",
+      text,
+      at,
+      atIso: sentAt,
+      pending: true,
     });
     setDrafts((current) => ({ ...current, [guestId]: "" }));
     window.requestAnimationFrame(() => resizeDraftInput());
@@ -1474,7 +1606,7 @@ export function LineRentalPreview({
         ignoreDraftChangeRef.current = null;
       }
     }, 400);
-    pushStaffLine({ ...selected, lineUserId }, text, id);
+    pushStaffLine(selected, text, id);
   }
 
   function onDraftKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -1560,11 +1692,10 @@ export function LineRentalPreview({
           ) : (
             visible.map((guest) => {
               const active = guest.id === selected?.id;
-              const preview =
-                guest.summaryText.split("\n").find((row) => row.trim()) ||
-                guest.lines[guest.lines.length - 1]?.text ||
-                "";
               const lastLine = guest.lines[guest.lines.length - 1];
+              const preview =
+                lastLine?.text.split("\n").find((row) => row.trim()) ||
+                "";
               const clock = formatLineListStamp(lastLine?.atIso || guest.createdAt || "");
               return (
                 <li key={guest.id} className="border-b border-zinc-100 last:border-b-0">

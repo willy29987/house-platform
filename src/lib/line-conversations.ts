@@ -106,6 +106,7 @@ function previewTextFromLineMessage(message: LineMessage): string {
   if (message.type === "text") return message.text;
   if (message.type === "sticker") return "［貼圖］";
   if (message.type === "image") return "［圖片］";
+  if (message.type === "video") return "［影片］";
   if (message.type === "template") {
     const t = message.template;
     if (t.type === "buttons") return message.altText || t.text || t.title || "[卡片訊息]";
@@ -316,6 +317,17 @@ export async function appendLineConversationBotMessages(input: {
         text,
         displayName: input.displayName,
         mediaType: "image",
+        messageId: message.originalContentUrl,
+      });
+      continue;
+    }
+    if (message.type === "video") {
+      await appendLineConversationMessage({
+        lineUserId: input.lineUserId,
+        from: "bot",
+        text,
+        displayName: input.displayName,
+        mediaType: "video",
         messageId: message.originalContentUrl,
       });
       continue;

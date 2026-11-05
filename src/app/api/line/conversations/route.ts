@@ -58,6 +58,8 @@ export async function POST(request: Request) {
     text?: string;
     sticker?: { packageId?: string; stickerId?: string };
     imageUrl?: string;
+    videoUrl?: string;
+    previewImageUrl?: string;
   };
   try {
     body = (await request.json()) as typeof body;
@@ -74,10 +76,26 @@ export async function POST(request: Request) {
   const packageId = body.sticker?.packageId?.trim() ?? "";
   const stickerId = body.sticker?.stickerId?.trim() ?? "";
   const imageUrl = body.imageUrl?.trim() ?? "";
+  const videoUrl = body.videoUrl?.trim() ?? "";
+  const previewImageUrl = body.previewImageUrl?.trim() ?? "";
 
   let message: LineMessage | null = null;
   if (packageId && stickerId && /^\d+$/.test(packageId) && /^\d+$/.test(stickerId)) {
     message = { type: "sticker", packageId, stickerId };
+  } else if (videoUrl) {
+    const absolute = toAbsoluteHttpsUrl(videoUrl);
+    const preview = toAbsoluteHttpsUrl(previewImageUrl);
+    if (!absolute || !preview) {
+      return NextResponse.json(
+        { error: "影片與預覽圖需為 HTTPS 公開網址" },
+        { status: 400 },
+      );
+    }
+    message = {
+      type: "video",
+      originalContentUrl: absolute,
+      previewImageUrl: preview,
+    };
   } else if (imageUrl) {
     const absolute = toAbsoluteHttpsUrl(imageUrl);
     if (!absolute) {
@@ -96,7 +114,7 @@ export async function POST(request: Request) {
   }
 
   if (!message) {
-    return NextResponse.json({ error: "缺少 text、sticker 或 imageUrl" }, { status: 400 });
+    return NextResponse.json({ error: "缺少 text、sticker、imageUrl 或 videoUrl" }, { status: 400 });
   }
 
   const pushed = await pushLineMessages(lineUserId, [message], {
