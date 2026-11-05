@@ -122,6 +122,12 @@ export function AdminShell({ current: currentProp = null, children }: AdminShell
   }, [pathname]);
 
   useEffect(() => {
+    const openMenu = () => setMenuOpen(true);
+    window.addEventListener("house-platform:open-admin-menu", openMenu);
+    return () => window.removeEventListener("house-platform:open-admin-menu", openMenu);
+  }, []);
+
+  useEffect(() => {
     if (!menuOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setMenuOpen(false);
@@ -248,7 +254,7 @@ export function AdminShell({ current: currentProp = null, children }: AdminShell
       </header>
 
       {menuOpen ? (
-        <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true" aria-label="後台選單">
+        <div className="fixed inset-0 z-[80] lg:hidden" role="dialog" aria-modal="true" aria-label="後台選單">
           <button
             type="button"
             className="absolute inset-0 bg-black/40"

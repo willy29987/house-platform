@@ -9,8 +9,6 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
-import Link from "next/link";
-import { BrandLogo } from "@/components/brand-logo";
 import { taipeiTodayYmd } from "@/lib/owner-tracking-next-contact";
 import { formatViewingRange, RENT_PRICE_OPTIONS, type RentalMatchListing } from "@/lib/line-rental-assistant";
 import type {
@@ -1499,13 +1497,16 @@ export function LineRentalPreview({
           mobilePane === "chat" ? "max-lg:hidden" : ""
         }`}
       >
-        <Link
-          href="/admin"
-          aria-label="回內網首頁"
-          className="flex h-9 w-9 shrink-0 items-center justify-center lg:hidden"
+        <button
+          type="button"
+          aria-label="開啟選單"
+          onClick={() => window.dispatchEvent(new Event("house-platform:open-admin-menu"))}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-800 lg:hidden"
         >
-          <BrandLogo className="h-8 w-8" />
-        </Link>
+          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+            <path strokeLinecap="round" d="M4 7h16M4 12h16M4 17h16" />
+          </svg>
+        </button>
         {FILTERS.map((item) => {
           const count = guests.filter((guest) => matchesFilter(guest, item.id)).length;
           const active = filter === item.id;
