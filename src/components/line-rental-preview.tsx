@@ -54,6 +54,8 @@ type ChatLine = {
   from: "guest" | "bot" | "staff";
   text: string;
   at?: string;
+  /** 原始時間，名單用「昨天／星期／日期」；氣泡仍用 at 的時分 */
+  atIso?: string;
   messageId?: string;
   mediaType?: LineConversationMediaType;
   stickerId?: string;
@@ -111,6 +113,36 @@ function formatLineClock(iso: string) {
     hour12: false,
     timeZone: "Asia/Taipei",
   });
+}
+
+const WEEKDAY_ZH = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"] as const;
+
+function taipeiYmd(date: Date): string {
+  return date.toLocaleDateString("en-CA", { timeZone: "Asia/Taipei" });
+}
+
+function taipeiWeekday(date: Date): string {
+  const ymd = taipeiYmd(date);
+  const [year, month, day] = ymd.split("-").map(Number);
+  const index = new Date(Date.UTC(year, (month ?? 1) - 1, day ?? 1)).getUTCDay();
+  return WEEKDAY_ZH[index] ?? "";
+}
+
+/** 名單右側：今天顯示時間、昨天、一週內顯示星期、更早顯示月/日 */
+function formatLineListStamp(iso: string, now = new Date()): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const today = taipeiYmd(now);
+  const target = taipeiYmd(date);
+  if (target === today) return formatLineClock(iso);
+  const [ty, tm, td] = today.split("-").map(Number);
+  const [y, m, d] = target.split("-").map(Number);
+  const diff = Math.round(
+    (Date.UTC(ty, (tm ?? 1) - 1, td ?? 1) - Date.UTC(y, (m ?? 1) - 1, d ?? 1)) / 86400000,
+  );
+  if (diff === 1) return "昨天";
+  if (diff > 1 && diff < 7) return taipeiWeekday(date);
+  return `${m}/${d}`;
 }
 
 function formatLineDayLabel(iso: string) {
@@ -681,6 +713,7 @@ function conversationToStaffGuest(
     from: message.from === "guest" ? "guest" : message.from === "staff" ? "staff" : "bot",
     text: message.text,
     at: formatLineClock(message.createdAt),
+    atIso: message.createdAt,
     messageId: message.messageId,
     mediaType: message.mediaType,
     stickerId: message.stickerId,
@@ -701,6 +734,7 @@ function conversationToStaffGuest(
             from: "guest" as const,
             text: lastGuestText || "（尚無訊息）",
             at: formatLineClock(conversation.updatedAt),
+            atIso: conversation.updatedAt,
           },
         ];
 
@@ -1186,7 +1220,8 @@ export function LineRentalPreview({
   function sendSticker(guest: StaffGuest, sticker: LineCsSticker) {
     if (!guest.lineUserId) return;
     const id = lineId.current++;
-    const at = formatLineClock(new Date().toISOString());
+    const sentAt = new Date().toISOString();
+    const at = formatLineClock(sentAt);
     patchGuest(guest.id, (current) =>
       attachPipelineAndReply({
         ...current,
@@ -1197,6 +1232,7 @@ export function LineRentalPreview({
             from: "staff",
             text: "［貼圖］",
             at,
+            atIso: sentAt,
             mediaType: "sticker",
             stickerId: sticker.stickerId,
             packageId: sticker.packageId,
@@ -1227,7 +1263,8 @@ export function LineRentalPreview({
         return;
       }
       const id = lineId.current++;
-      const at = formatLineClock(new Date().toISOString());
+      const sentAt = new Date().toISOString();
+      const at = formatLineClock(sentAt);
       patchGuest(guest.id, (current) =>
         attachPipelineAndReply({
           ...current,
@@ -1238,6 +1275,7 @@ export function LineRentalPreview({
               from: "staff",
               text: "［圖片］",
               at,
+              atIso: sentAt,
               mediaType: "image",
               messageId: url.startsWith("http") ? url : `${window.location.origin}${url}`,
             },
@@ -1308,7 +1346,8 @@ export function LineRentalPreview({
       confirmListingsForGuest(guest, orderedIds),
     );
     const id = lineId.current++;
-    const at = formatLineClock(new Date().toISOString());
+    const sentAt = new Date().toISOString();
+    const at = formatLineClock(sentAt);
     patchGuest(guest.id, (current) =>
       attachPipelineAndReply({
         ...current,
@@ -1316,7 +1355,7 @@ export function LineRentalPreview({
         requestedWhen: when,
         proposedWhen: "",
         picked: orderedPicked.length ? orderedPicked : current.picked,
-        lines: [...current.lines, { id, from: "staff", text, at }],
+        lines: [...current.lines, { id, from: "staff", text, at, atIso: sentAt }],
       }),
     );
     pushStaffLine(guest, text, id);
@@ -1327,13 +1366,14 @@ export function LineRentalPreview({
   function askOtherTime(guest: StaffGuest) {
     const text = VIEWING_ASK_OTHER_TIME_TEXT;
     const id = lineId.current++;
-    const at = formatLineClock(new Date().toISOString());
+    const sentAt = new Date().toISOString();
+    const at = formatLineClock(sentAt);
     patchGuest(guest.id, (current) =>
       attachPipelineAndReply({
         ...current,
         status: "reschedule_sent",
         proposedWhen: "",
-        lines: [...current.lines, { id, from: "staff", text, at }],
+        lines: [...current.lines, { id, from: "staff", text, at, atIso: sentAt }],
       }),
     );
     pushStaffLine(guest, text, id);
@@ -1347,14 +1387,15 @@ export function LineRentalPreview({
     // 客服另選時間後確認：與「可以這個時間」同句式，帶入新時間
     const text = buildViewingConfirmedGuestText(when, confirmListingsForGuest(guest));
     const id = lineId.current++;
-    const at = formatLineClock(new Date().toISOString());
+    const sentAt = new Date().toISOString();
+    const at = formatLineClock(sentAt);
     patchGuest(guest.id, (current) =>
       attachPipelineAndReply({
         ...current,
         status: "confirmed",
         requestedWhen: when,
         proposedWhen: "",
-        lines: [...current.lines, { id, from: "staff", text, at }],
+        lines: [...current.lines, { id, from: "staff", text, at, atIso: sentAt }],
       }),
     );
     pushStaffLine(guest, text, id);
@@ -1395,11 +1436,12 @@ export function LineRentalPreview({
     if (!text) return;
     const id = lineId.current++;
     const lineUserId = selected.lineUserId;
-    const at = formatLineClock(new Date().toISOString());
+    const sentAt = new Date().toISOString();
+    const at = formatLineClock(sentAt);
     ignoreDraftChangeRef.current = guestId;
     // 樂觀更新；輪詢會再以伺服器紀錄對齊
     patchGuest(guestId, (current) => {
-      const lines = [...current.lines, { id, from: "staff" as const, text, at }];
+      const lines = [...current.lines, { id, from: "staff" as const, text, at, atIso: sentAt }];
       return attachPipelineAndReply({
         ...current,
         lines,
@@ -1483,9 +1525,8 @@ export function LineRentalPreview({
                 guest.summaryText.split("\n").find((row) => row.trim()) ||
                 guest.lines[guest.lines.length - 1]?.text ||
                 "";
-              const clock =
-                guest.lines[guest.lines.length - 1]?.at ||
-                (guest.createdAt ? formatLineClock(guest.createdAt) : "");
+              const lastLine = guest.lines[guest.lines.length - 1];
+              const clock = formatLineListStamp(lastLine?.atIso || guest.createdAt || "");
               return (
                 <li key={guest.id} className="border-b border-zinc-100 last:border-b-0">
                   <button
