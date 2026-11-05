@@ -1546,8 +1546,8 @@ export function LineRentalPreview({
               ) : null}
             </header>
 
-            <div ref={chatScrollRef} className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 py-3">
-              <div className="mx-auto flex w-full max-w-3xl flex-col gap-3">
+            <div ref={chatScrollRef} className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-3 py-3 sm:px-4">
+              <div className="flex w-full flex-col gap-3">
                 {selected.createdAt ? (
                   <div className="flex justify-center py-1">
                     <span className="rounded-full bg-black/20 px-3 py-0.5 text-[11px] font-medium text-white/95">
