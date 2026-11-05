@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import Link from "next/link";
+import { BrandLogo } from "@/components/brand-logo";
 import { taipeiTodayYmd } from "@/lib/owner-tracking-next-contact";
 import { formatViewingRange, RENT_PRICE_OPTIONS, type RentalMatchListing } from "@/lib/line-rental-assistant";
 import type {
@@ -1500,9 +1501,10 @@ export function LineRentalPreview({
       >
         <Link
           href="/admin"
-          className="shrink-0 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-sm font-semibold text-zinc-800 lg:hidden"
+          aria-label="回內網首頁"
+          className="flex h-9 w-9 shrink-0 items-center justify-center lg:hidden"
         >
-          首頁
+          <BrandLogo className="h-8 w-8" />
         </Link>
         {FILTERS.map((item) => {
           const count = guests.filter((guest) => matchesFilter(guest, item.id)).length;
