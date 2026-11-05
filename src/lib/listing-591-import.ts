@@ -2,7 +2,9 @@ import "server-only";
 
 import { EQUIPMENT_ITEMS, FURNITURE_ITEMS } from "@/lib/furniture-appliance-value";
 import { extract591ListingId, resolve591IdFromUrlOrId } from "@/lib/listing-591-id";
+import { getMrtStationsForLine, MRT_LINE_OPTIONS } from "@/lib/mrt-stations";
 import { is591ListingUrl, normalize591ListingUrl } from "@/lib/owner-tracking-listing-checks";
+import { PARKING_TYPE_LABELS, PARKING_TYPE_OPTIONS } from "@/lib/parking-type-label";
 import { PROPERTY_TYPE_OPTIONS, type PropertyTypeOption } from "@/lib/property-type-label";
 import { TAIWAN_REGIONS } from "@/lib/taiwan-regions";
 
@@ -17,6 +19,7 @@ export type Listing591ImportDraft = {
   community: string;
   propertyType: PropertyTypeOption | "";
   areaPing: string;
+  areaParkingSpace: string;
   rooms: string;
   livingRooms: string;
   bathrooms: string;
@@ -24,21 +27,74 @@ export type Listing591ImportDraft = {
   floor: string;
   totalFloors: string;
   managementFee: string;
+  /** 有讀到管理費（含 0／含在租金內）才覆寫表單 */
+  managementFeeSet: boolean;
   otherFees: string;
   securityDeposit: string;
   availableFrom: string;
   petsAllowed: "" | "yes" | "no";
+  /** 特殊事項先不帶入 */
   specialMatters: string;
   images: string[];
   coverImage: string;
   furnitureItems: string[];
   equipmentItems: string[];
+  /** 有讀到 591 設備勾選才覆寫；沒讀到就留著表單原勾選 */
+  facilitiesKnown: boolean;
+  parkingType: string;
+  parkingKnown: boolean;
+  parkingPriceMode: "" | "included" | "separate";
+  parkingRent: string;
+  parkingPrice: string;
+  parkingIncluded: "" | "yes" | "no";
+  mrtLine: string;
+  mrtStation: string;
   contactName: string;
   contactPhone: string;
 };
 
 const BROWSER_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
+
+const MRT_WALK_METERS = 700;
+
+const KIND_BY_CODE: Record<string, string> = {
+  "1": "整層住家",
+  "2": "獨立套房",
+  "3": "分租套房",
+  "4": "雅房",
+  "5": "店面",
+  "6": "辦公",
+  "7": "廠房",
+  "12": "住辦",
+};
+
+const PARKING_CODE_RULES: Array<[string, string[]]> = [
+  ["LIFT_MECHANICAL", ["升降機械"]],
+  ["LIFT_FLAT", ["升降平面"]],
+  ["RAMP_MECHANICAL", ["坡道機械"]],
+  ["FLAT_RAMP", ["坡道平面"]],
+  ["STORAGE", ["倉儲"]],
+  ["FRONT_DOOR", ["門口可停", "門口停車"]],
+];
+
+const EQUIPMENT_BY_KEY: Record<string, (typeof EQUIPMENT_ITEMS)[number]> = {
+  fridge: "冰箱",
+  washer: "洗衣機",
+  tv: "電視",
+  cold: "冷氣",
+  heater: "熱水器",
+  fourth: "第四台",
+  net: "網路",
+  gas: "天然瓦斯",
+};
+
+const FURNITURE_BY_KEY: Record<string, readonly (typeof FURNITURE_ITEMS)[number][]> = {
+  bed: ["床"],
+  closet: ["衣櫃"],
+  sofa: ["沙發"],
+  table_chairs: ["桌子", "椅子"],
+};
 
 function listingTypeFromUrl(url: string): "RENT" | "SALE" {
   const u = url.toLowerCase();
@@ -54,53 +110,29 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 function textOf(value: unknown): string {
   if (typeof value === "string") return value.trim();
   if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  if (typeof value === "boolean") return value ? "true" : "false";
   return "";
 }
 
-function firstText(record: Record<string, unknown>, keys: string[]): string {
-  for (const key of keys) {
-    const direct = textOf(record[key]);
-    if (direct) return direct;
-  }
-  for (const nested of Object.values(record)) {
-    const child = asRecord(nested);
-    if (!child) continue;
-    for (const key of keys) {
-      const found = textOf(child[key]);
-      if (found) return found;
-    }
-  }
-  return "";
-}
-
-function findDetailNode(root: unknown): Record<string, unknown> | null {
-  const stack: unknown[] = [root];
-  let best: Record<string, unknown> | null = null;
-  let bestScore = 0;
-  let seen = 0;
-  while (stack.length > 0 && seen < 800) {
-    const current = stack.pop();
-    seen += 1;
-    if (Array.isArray(current)) {
-      for (const item of current.slice(0, 30)) stack.push(item);
-      continue;
-    }
-    const record = asRecord(current);
+function rowsOf(value: unknown): Array<{ key: string; name: string; value: string }> {
+  if (!Array.isArray(value)) return [];
+  const rows: Array<{ key: string; name: string; value: string }> = [];
+  for (const item of value) {
+    const record = asRecord(item);
     if (!record) continue;
-    let score = 0;
-    if (firstText(record, ["title", "address", "cases_name"]).length > 1) score += 2;
-    if (firstText(record, ["price", "priceValue", "price_value"])) score += 2;
-    if (firstText(record, ["area", "areaPing", "house_area"])) score += 1;
-    if (firstText(record, ["room", "layout", "floor"])) score += 1;
-    if (score > bestScore) {
-      bestScore = score;
-      best = record;
-    }
-    for (const value of Object.values(record)) {
-      if (value && typeof value === "object") stack.push(value);
-    }
+    const rowValue = textOf(record.value);
+    if (!rowValue) continue;
+    rows.push({ key: textOf(record.key), name: textOf(record.name), value: rowValue });
   }
-  return bestScore >= 4 ? best : null;
+  return rows;
+}
+
+function rowText(rows: Array<{ key: string; name: string; value: string }>, ...names: string[]): string {
+  for (const name of names) {
+    const found = rows.find((row) => row.key === name || row.name === name);
+    if (found?.value) return found.value;
+  }
+  return "";
 }
 
 function normalizeCityName(raw: string): string {
@@ -112,46 +144,51 @@ function matchRegion(cityRaw: string, districtRaw: string, addressRaw: string) {
   const districtName = districtRaw.trim();
   const address = addressRaw.trim();
   const city =
-    TAIWAN_REGIONS.find((region) => cityName.includes(region.city) || address.includes(region.city)) ??
-    null;
-  const district =
-    city?.districts.find((item) => districtName.includes(item) || address.includes(item)) ?? "";
+    TAIWAN_REGIONS.find((region) => cityName.includes(region.city) || address.includes(region.city)) ?? null;
+  const district = city?.districts.find((item) => districtName.includes(item) || address.includes(item)) ?? "";
   return { city: city?.city ?? "", district };
 }
 
-function propertyTypeFromLabels(labels: string[]): PropertyTypeOption | "" {
-  const text = labels.join(" ");
-  const rules: Array<[PropertyTypeOption, string[]]> = [
-    ["ELEVATOR_BUILDING", ["電梯大樓", "華廈"]],
-    ["APARTMENT", ["公寓"]],
-    ["HOUSE", ["透天", "別墅"]],
-    ["STUDIO", ["獨立套房"]],
-    ["SUITE", ["分租套房", "雅房", "套房"]],
-    ["OFFICE", ["辦公"]],
-    ["SHOP", ["店面", "攤位"]],
-  ];
-  for (const [type, words] of rules) {
-    if (words.some((word) => text.includes(word))) return type;
-  }
-  return "";
+function stripRegion(address: string, city: string, district: string): string {
+  let next = address.trim();
+  if (city) next = next.replace(city, "");
+  if (district) next = next.replace(district, "");
+  return next.replace(/^[\s,，\-]+/, "").trim();
+}
+
+/** 套房／店面／辦公優先於建物型態；整層住家才用公寓、電梯大樓、透天。 */
+function propertyTypeFromKindAndShape(kindName: string, shapeName: string): PropertyTypeOption | "" {
+  const kind = kindName.trim();
+  const shape = shapeName.trim();
+  let type: PropertyTypeOption | "" = "";
+  if (/獨立套房/.test(kind)) type = "STUDIO";
+  else if (/分租套房|雅房/.test(kind)) type = "SUITE";
+  else if (/辦公|住辦/.test(kind)) type = "OFFICE";
+  else if (/店面|攤位/.test(kind)) type = "SHOP";
+  else if (/電梯大樓|華廈/.test(shape)) type = "ELEVATOR_BUILDING";
+  else if (/公寓/.test(shape)) type = "APARTMENT";
+  else if (/透天|別墅/.test(shape)) type = "HOUSE";
+  return (PROPERTY_TYPE_OPTIONS as readonly string[]).includes(type) ? type : "";
+}
+
+function floorToken(token: string): string {
+  const cleaned = token.trim().replace(/[Ff樓層]/g, "");
+  const basement = cleaned.match(/^(?:B|地下)(\d+)$/i);
+  if (basement?.[1]) return `-${basement[1]}`;
+  return cleaned.match(/^(\d+)$/)?.[1] ?? "";
 }
 
 function splitFloor(raw: string): { floor: string; totalFloors: string } {
-  const text = raw.replace(/樓/g, "");
-  const pair = text.match(/(\d+)\s*[/／]\s*(\d+)/);
-  if (pair) return { floor: pair[1] ?? "", totalFloors: pair[2] ?? "" };
-  const one = text.match(/(\d+)/);
-  return { floor: one?.[1] ?? "", totalFloors: "" };
+  const text = raw.trim();
+  if (!text || text === "-" || text === "—") return { floor: "", totalFloors: "" };
+  const pair = text.match(/([^/／]+)\s*[/／]\s*([^/／]+)/);
+  if (pair) {
+    return { floor: floorToken(pair[1] ?? ""), totalFloors: floorToken(pair[2] ?? "") };
+  }
+  return { floor: floorToken(text), totalFloors: "" };
 }
 
-function layoutCounts(record: Record<string, unknown>, layoutText: string) {
-  const fromFields = {
-    rooms: firstText(record, ["room", "rooms"]),
-    livingRooms: firstText(record, ["hall", "livingRoom", "living"]),
-    bathrooms: firstText(record, ["toilet", "bathroom", "bathrooms"]),
-    balconies: firstText(record, ["balcony", "balconies"]),
-  };
-  if (Object.values(fromFields).some(Boolean)) return fromFields;
+function layoutCounts(layoutText: string) {
   const pick = (label: string) => layoutText.match(new RegExp(`(\\d+)\\s*${label}`))?.[1] ?? "";
   return {
     rooms: pick("房"),
@@ -171,219 +208,389 @@ function priceForForm(raw: string, listingType: "RENT" | "SALE"): string {
   return String(Math.round(num));
 }
 
+function feeAmount(raw: string): { set: boolean; amount: string } {
+  const text = raw.trim();
+  if (!text) return { set: false, amount: "" };
+  if (/無|免|不含|沒有/.test(text) && !/\d/.test(text)) return { set: true, amount: "0" };
+  if (/含/.test(text) && !/\d/.test(text)) return { set: true, amount: "0" };
+  const num = text.replace(/[,，]/g, "").match(/(\d+(?:\.\d+)?)/);
+  if (!num?.[1]) return { set: false, amount: "" };
+  return { set: true, amount: String(Math.round(Number(num[1]))) };
+}
+
 function yesNo(raw: string): "" | "yes" | "no" {
   if (!raw) return "";
   if (/不可|禁止|不允許|不准/.test(raw)) return "no";
-  if (/可|允許|歡迎|yes/i.test(raw)) return "yes";
+  if (/可|允許|歡迎/.test(raw)) return "yes";
   return "";
 }
 
 function depositText(raw: string): string {
   if (/兩|二|2\s*個/.test(raw)) return "2個月";
-  return raw.trim();
+  return raw.replace(/租金/g, "").trim();
 }
 
 function availableText(raw: string): string {
   if (/隨時|即可|立即/.test(raw)) return "隨時可遷入";
   const date = raw.match(/(20\d{2})[./年-](\d{1,2})[./月-](\d{1,2})/);
   if (!date) return "";
-  const month = date[2]?.padStart(2, "0");
-  const day = date[3]?.padStart(2, "0");
-  return `${date[1]}-${month}-${day}`;
+  return `${date[1]}-${date[2]?.padStart(2, "0")}-${date[3]?.padStart(2, "0")}`;
 }
 
-function collectImages(root: unknown): string[] {
-  const found: string[] = [];
-  const stack: unknown[] = [root];
-  let seen = 0;
-  while (stack.length > 0 && seen < 800 && found.length < 12) {
-    const current = stack.pop();
-    seen += 1;
-    if (typeof current === "string" && /^https?:\/\/.+\.(?:jpe?g|png|webp)(?:\?|$)/i.test(current)) {
-      if (!found.includes(current)) found.push(current);
-      continue;
-    }
-    if (Array.isArray(current)) {
-      for (const item of current.slice(0, 40)) stack.push(item);
-      continue;
-    }
-    const record = asRecord(current);
-    if (!record) continue;
-    for (const value of Object.values(record)) stack.push(value);
+function pingNumber(raw: string): string {
+  const num = raw.replace(/[,，]/g, "").match(/(\d+(?:\.\d+)?)/);
+  return num?.[1] ?? "";
+}
+
+function parkingCode(label: string): string {
+  const text = label.trim();
+  if (!text || /無車位|沒有車位|^無$/.test(text)) return "";
+  for (const [code, words] of PARKING_CODE_RULES) {
+    if (words.some((word) => text.includes(word))) return code;
   }
-  return found;
-}
-
-function collectLabels(root: unknown): string[] {
-  const labels: string[] = [];
-  const stack: unknown[] = [root];
-  let seen = 0;
-  while (stack.length > 0 && seen < 400) {
-    const current = stack.pop();
-    seen += 1;
-    if (typeof current === "string") {
-      const text = current.trim();
-      if (text && text.length <= 12) labels.push(text);
-      continue;
-    }
-    if (Array.isArray(current)) {
-      for (const item of current.slice(0, 40)) stack.push(item);
-      continue;
-    }
-    const record = asRecord(current);
-    if (!record) continue;
-    for (const [key, value] of Object.entries(record)) {
-      if (/contain|fixture|facility|equipment|furniture|provide|label|name/i.test(key)) {
-        stack.push(value);
-      }
-    }
+  for (const code of PARKING_TYPE_OPTIONS) {
+    const name = PARKING_TYPE_LABELS[code];
+    if (name && text.includes(name)) return code;
   }
-  return labels;
+  const named = text
+    .split(/[，,、]/)
+    .map((part) => part.trim())
+    .find((part) => /平面|機械|坡道|升降|倉儲|門口|車位/.test(part) && !/坪|元|含|售/.test(part));
+  if (named) return named.replace(/^\d+/, "").trim();
+  const short = text.replace(/^\d+/, "").trim();
+  return short.length > 12 ? "有車位" : short;
 }
 
-const KNOWN_KEYS = [
-  "title",
-  "cases_name",
-  "address",
-  "price",
-  "priceValue",
-  "price_value",
-  "regionName",
-  "region",
-  "city",
-  "sectionName",
-  "section",
-  "district",
-  "streetName",
-  "street",
-  "addr",
-  "communityName",
-  "community",
-  "kindStr",
-  "kindName",
-  "kind",
-  "shapeStr",
-  "shapeName",
-  "shape",
-  "layout",
-  "layoutStr",
-  "room",
-  "rooms",
-  "hall",
-  "livingRoom",
-  "toilet",
-  "bathroom",
-  "balcony",
-  "area",
-  "areaPing",
-  "house_area",
-  "floor",
-  "floorStr",
-  "allfloor",
-  "allFloor",
-  "totalFloor",
-  "manageprice",
-  "managePrice",
-  "priceadd",
-  "deposit",
-  "depositStr",
-  "cometime",
-  "comeTime",
-  "pet",
-  "petStr",
-  "remark",
-  "desc",
-  "description",
-  "linkman",
-  "linkMan",
-  "mobile",
-  "phone",
-] as const;
+function stationKey(name: string): string {
+  return name.replaceAll("臺", "台").replace(/\s/g, "").replace(/捷運/g, "").replace(/站$/, "");
+}
 
-function flattenKnown(root: unknown): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
+function collectSubway(root: unknown): Array<{ name: string; distance: number }> {
+  const found: Array<{ name: string; distance: number }> = [];
   const stack: unknown[] = [root];
   let seen = 0;
-  while (stack.length > 0 && seen < 800) {
+  while (stack.length > 0 && seen < 600) {
     const current = stack.pop();
     seen += 1;
     if (Array.isArray(current)) {
-      for (const item of current.slice(0, 20)) stack.push(item);
+      for (const item of current) stack.push(item);
       continue;
     }
     const record = asRecord(current);
     if (!record) continue;
-    for (const key of KNOWN_KEYS) {
-      if (out[key]) continue;
-      const value = textOf(record[key]);
-      if (value) out[key] = value;
+    const type = textOf(record.type);
+    const name = textOf(record.name);
+    const distance = Number(textOf(record.distance));
+    if ((type === "subway" || type === "subway_station") && name && Number.isFinite(distance) && distance > 0) {
+      found.push({ name, distance });
     }
     for (const value of Object.values(record)) {
       if (value && typeof value === "object") stack.push(value);
     }
   }
-  return out;
+  const nearest = new Map<string, { name: string; distance: number }>();
+  for (const item of found) {
+    const key = stationKey(item.name);
+    const prev = nearest.get(key);
+    if (!prev || item.distance < prev.distance) nearest.set(key, item);
+  }
+  return [...nearest.values()];
 }
 
-export function map591DetailToDraft(
-  detail: Record<string, unknown>,
-  listingType: "RENT" | "SALE",
-  source591Url: string,
-  imageRoot: unknown = detail,
-): Listing591ImportDraft {
-  const title = firstText(detail, ["title", "cases_name", "address"]);
-  const cityRaw = firstText(detail, ["regionName", "region", "city"]);
-  const districtRaw = firstText(detail, ["sectionName", "section", "district"]);
-  const street = firstText(detail, ["streetName", "street", "addr", "address"]);
-  const region = matchRegion(cityRaw, districtRaw, `${cityRaw}${districtRaw}${street}`);
-  let address = street;
-  if (region.city) address = address.replace(region.city, "");
-  if (region.district) address = address.replace(region.district, "");
-  address = address.replace(/^[\s,，]+/, "").trim();
+function nearestMrt(stations: Array<{ name: string; distance: number }>): { mrtLine: string; mrtStation: string } {
+  const within = stations.filter((item) => item.distance <= MRT_WALK_METERS).sort((a, b) => a.distance - b.distance);
+  const nearest = within[0];
+  if (!nearest) return { mrtLine: "", mrtStation: "" };
+  const key = stationKey(nearest.name);
+  const lines = MRT_LINE_OPTIONS.filter((line) =>
+    getMrtStationsForLine(line).some((station) => stationKey(station) === key),
+  );
+  if (lines.length === 0) return { mrtLine: "", mrtStation: "" };
+  let line = lines[0] ?? "";
+  if (lines.length > 1) {
+    let bestScore = -1;
+    for (const candidate of lines) {
+      const names = new Set(getMrtStationsForLine(candidate).map(stationKey));
+      const score = stations.filter((item) => names.has(stationKey(item.name))).length;
+      if (score > bestScore) {
+        bestScore = score;
+        line = candidate;
+      }
+    }
+  }
+  const station = getMrtStationsForLine(line).find((item) => stationKey(item) === key) ?? "";
+  if (!station) return { mrtLine: "", mrtStation: "" };
+  return { mrtLine: line, mrtStation: station };
+}
 
-  const layoutText = firstText(detail, ["layout", "layoutStr"]);
-  const counts = layoutCounts(detail, layoutText);
-  const floors = splitFloor(firstText(detail, ["floor", "floorStr", "allfloor"]));
-  const totalFromField = firstText(detail, ["allfloor", "allFloor", "totalFloor"]);
-  const labels = [
-    firstText(detail, ["kindStr", "kindName", "kind"]),
-    firstText(detail, ["shapeStr", "shapeName", "shape"]),
-    ...collectLabels(detail),
-  ];
-  const propertyType = propertyTypeFromLabels(labels);
-  const images = collectImages(imageRoot);
-  const facilityText = labels.join(" ");
+function mapFacilities(facility: unknown): {
+  furnitureItems: string[];
+  equipmentItems: string[];
+  parkingLabel: string;
+  balcony: string;
+  known: boolean;
+} {
+  if (!Array.isArray(facility)) {
+    return { furnitureItems: [], equipmentItems: [], parkingLabel: "", balcony: "", known: false };
+  }
+  const furniture = new Set<string>();
+  const equipment = new Set<string>();
+  let parkingLabel = "";
+  let balcony = "";
+  for (const item of facility) {
+    const record = asRecord(item);
+    if (!record) continue;
+    const active = record.active === 1 || record.active === true || textOf(record.active) === "1";
+    if (!active) continue;
+    const key = textOf(record.key);
+    const name = textOf(record.name).replace(/^\d+/, "").trim();
+    const equipmentName = EQUIPMENT_BY_KEY[key] ?? EQUIPMENT_ITEMS.find((entry) => name === entry || name.includes(entry));
+    if (equipmentName) equipment.add(equipmentName);
+    const furnitureNames =
+      FURNITURE_BY_KEY[key] ??
+      (name === "桌椅" ? (["桌子", "椅子"] as const) : FURNITURE_ITEMS.filter((entry) => name === entry));
+    for (const entry of furnitureNames) furniture.add(entry);
+    if (key === "park" || name.includes("車位")) parkingLabel = textOf(record.name).trim() || name;
+    if (name.includes("陽台") || key === "balcony") {
+      balcony = textOf(record.name).match(/(\d+)/)?.[1] ?? "1";
+    }
+  }
+  return {
+    furnitureItems: FURNITURE_ITEMS.filter((item) => furniture.has(item)),
+    equipmentItems: EQUIPMENT_ITEMS.filter((item) => equipment.has(item)),
+    parkingLabel,
+    balcony,
+    known: true,
+  };
+}
 
+function emptyDraft(listingType: "RENT" | "SALE", source591Url: string, images: string[]): Listing591ImportDraft {
   return {
     listingType,
     source591Url,
+    title: "",
+    price: "",
+    city: "",
+    district: "",
+    address: "",
+    community: "",
+    propertyType: "",
+    areaPing: "",
+    areaParkingSpace: "",
+    rooms: "",
+    livingRooms: "",
+    bathrooms: "",
+    balconies: "",
+    floor: "",
+    totalFloors: "",
+    managementFee: "",
+    managementFeeSet: false,
+    otherFees: "",
+    securityDeposit: "",
+    availableFrom: "",
+    petsAllowed: "",
+    specialMatters: "",
+    images,
+    coverImage: images[0] ?? "",
+    furnitureItems: [],
+    equipmentItems: [],
+    facilitiesKnown: false,
+    parkingType: "",
+    parkingKnown: false,
+    parkingPriceMode: "",
+    parkingRent: "",
+    parkingPrice: "",
+    parkingIncluded: "",
+    mrtLine: "",
+    mrtStation: "",
+    contactName: "",
+    contactPhone: "",
+  };
+}
+
+function galleryImages(payload: unknown): string[] {
+  const data = asRecord(asRecord(payload)?.data) ?? asRecord(payload);
+  const groups = Array.isArray(data?.list) ? data.list : [];
+  const urls: string[] = [];
+  const seen = new Set<string>();
+  for (const group of groups) {
+    const record = asRecord(group);
+    if (!record) continue;
+    const key = textOf(record.key);
+    const name = textOf(record.name);
+    if (key !== "picture" && name !== "圖片") continue;
+    const items = Array.isArray(record.items) ? record.items : [];
+    const ordered = [...items].sort((a, b) => {
+      const aCover = asRecord(a)?.isCover === 1 ? 1 : 0;
+      const bCover = asRecord(b)?.isCover === 1 ? 1 : 0;
+      return bCover - aCover;
+    });
+    for (const item of ordered) {
+      const photo = asRecord(item);
+      const url = textOf(photo?.photo) || textOf(photo?.origPhoto);
+      if (!/^https?:\/\//i.test(url) || /\.(?:mp4|webm|mov)(?:\?|$)/i.test(url)) continue;
+      const dedupe = url.replace(/![^/]+$/, "");
+      if (seen.has(dedupe)) continue;
+      seen.add(dedupe);
+      urls.push(url);
+      if (urls.length >= 60) return urls;
+    }
+  }
+  return urls;
+}
+
+function mapRentPayload(
+  data: Record<string, unknown>,
+  listingType: "RENT" | "SALE",
+  source591Url: string,
+  images: string[],
+): Listing591ImportDraft | null {
+  const info = rowsOf(data.info);
+  const gtm = asRecord(data.gtm_detail_data) ?? {};
+  const calc = asRecord(data.rent_calculation_data) ?? {};
+  const position = asRecord(data.positionRound) ?? {};
+  const service = asRecord(data.service) ?? {};
+  const link = asRecord(data.linkInfo) ?? {};
+  const crumbs = Array.isArray(data.breadcrumb) ? data.breadcrumb : [];
+  const crumbName = (index: number) => textOf(asRecord(crumbs[index])?.name);
+  const title = textOf(data.title) || textOf(gtm.item_name);
+  if (!title && info.length === 0) return null;
+
+  const kindName =
+    rowText(info, "kind", "類型") ||
+    textOf(gtm.kind_name) ||
+    crumbName(2) ||
+    KIND_BY_CODE[textOf(data.kind)] ||
+    "";
+  const shapeName = rowText(info, "shape", "型態") || textOf(gtm.shape_name);
+  const floors = splitFloor(rowText(info, "floor", "樓層") || textOf(gtm.floor_name));
+  const counts = layoutCounts(rowText(info, "layout", "格局"));
+  const facilities = mapFacilities(service.facility);
+  const cityRaw = textOf(gtm.region_name) || crumbName(0);
+  const districtRaw = textOf(gtm.section_name) || crumbName(1);
+  const street = textOf(position.address);
+  const region = matchRegion(cityRaw, districtRaw, `${cityRaw}${districtRaw}${street}`);
+  const fee = feeAmount(textOf(calc.manage_fee_text) || textOf(calc.manage_fee));
+  const costFee = rowText(rowsOf(asRecord(data.costData)?.data), "manageprice", "管理費");
+  const management = fee.set ? fee : feeAmount(costFee);
+  const parkingLabel = facilities.parkingLabel;
+  const hasCarport = calc.price_has_carport === true || textOf(calc.price_has_carport) === "true";
+  const carportText = textOf(calc.carport_price_text);
+  const noParking = /無車位/.test(carportText) && !parkingLabel && !hasCarport;
+  const parkingKnown = facilities.known || "price_has_carport" in calc || Boolean(carportText);
+  const parkingType = noParking ? "" : parkingCode(parkingLabel) || (hasCarport ? "有車位" : "");
+  const carportAmount = feeAmount(textOf(calc.carport_price) === "0" ? carportText : textOf(calc.carport_price) || carportText);
+  const parkingSeparate = carportAmount.set && carportAmount.amount !== "0" && !/含/.test(carportText);
+  const desc = Array.isArray(service.descData) ? service.descData : [];
+  const descValue = (label: string) => {
+    const row = desc.map(asRecord).find((item) => textOf(item?.label).includes(label));
+    return textOf(row?.value);
+  };
+  const mrt = nearestMrt(collectSubway(position));
+  const community = textOf(position.communityName);
+  const draft = emptyDraft(listingType, source591Url, images);
+  return {
+    ...draft,
     title,
-    price: priceForForm(firstText(detail, ["price", "priceValue", "price_value"]), listingType),
+    price: priceForForm(textOf(calc.rent_price) || textOf(data.price), listingType),
     city: region.city,
     district: region.district,
-    address,
-    community: firstText(detail, ["communityName", "community", "cases_name"]),
-    propertyType: (PROPERTY_TYPE_OPTIONS as readonly string[]).includes(propertyType) ? propertyType : "",
-    areaPing: firstText(detail, ["area", "areaPing", "house_area"]).replace(/坪/g, ""),
+    address: stripRegion(street, region.city, region.district),
+    community: community === "依現場名稱" ? "" : community,
+    propertyType: propertyTypeFromKindAndShape(kindName, shapeName),
+    areaPing: pingNumber(rowText(info, "area", "使用坪數") || textOf(gtm.area_name)),
+    rooms: counts.rooms,
+    livingRooms: counts.livingRooms,
+    bathrooms: counts.bathrooms,
+    balconies: counts.balconies || facilities.balcony,
+    floor: floors.floor,
+    totalFloors: floors.totalFloors,
+    managementFee: management.amount,
+    managementFeeSet: management.set,
+    securityDeposit: depositText(textOf(data.deposit) || textOf(calc.deposit)),
+    availableFrom: availableText(descValue("遷入")),
+    petsAllowed: yesNo(descValue("寵物")),
+    furnitureItems: facilities.furnitureItems,
+    equipmentItems: facilities.equipmentItems,
+    facilitiesKnown: facilities.known,
+    parkingType: parkingKnown ? parkingType : "",
+    parkingKnown,
+    parkingPriceMode: !parkingKnown || !parkingType ? "" : parkingSeparate ? "separate" : "included",
+    parkingRent: parkingSeparate ? carportAmount.amount : "",
+    mrtLine: mrt.mrtLine,
+    mrtStation: mrt.mrtStation,
+    contactName: textOf(link.name),
+    contactPhone: textOf(link.mobile || link.phone).replace(/[^\d-]/g, ""),
+  };
+}
+
+function mapSalePayload(
+  data: Record<string, unknown>,
+  listingType: "RENT" | "SALE",
+  source591Url: string,
+  images: string[],
+): Listing591ImportDraft | null {
+  const base = asRecord(data.baseInfo);
+  if (!base) return null;
+  const info = rowsOf(base.info);
+  const address = asRecord(base.address) ?? {};
+  const gtm = asRecord(data.gtm_detail_data) ?? {};
+  const link = asRecord(data.linkInfo) ?? {};
+  const title = textOf(base.title) || textOf(gtm.item_name);
+  if (!title) return null;
+  const kindName = rowText(info, "現況") || textOf(data.kindStr) || textOf(gtm.kind_name);
+  const shapeName = rowText(info, "型態") || textOf(gtm.shape_name);
+  const floors = splitFloor(rowText(info, "樓層") || textOf(gtm.floor_name));
+  const counts = layoutCounts(textOf(base.layout));
+  const cityRaw = textOf(address.region) || textOf(gtm.region_name);
+  const districtRaw = textOf(address.section) || textOf(gtm.section_name);
+  const street = [textOf(address.street), textOf(address.lane) ? `${textOf(address.lane)}巷` : "", textOf(address.alley) ? `${textOf(address.alley)}弄` : ""]
+    .filter(Boolean)
+    .join("");
+  const number = textOf(address.hide_addr_detail) === "1" ? "" : textOf(address.addr_number);
+  const fullStreet = `${street}${number ? `${number}號` : ""}`;
+  const region = matchRegion(cityRaw, districtRaw, `${cityRaw}${districtRaw}${fullStreet}`);
+  const management = feeAmount(rowText(info, "管理費"));
+  const parkingRaw = textOf(base.parking);
+  const parkingKnown = parkingRaw.length > 0;
+  const noParking = /無車位|^無$|沒有/.test(parkingRaw);
+  const parkingType = !parkingKnown || noParking ? "" : parkingCode(parkingRaw);
+  const included = /已含|含售|含於/.test(parkingRaw);
+  const separate = /另計|不含/.test(parkingRaw);
+  const draft = emptyDraft(listingType, source591Url, images);
+  return {
+    ...draft,
+    title,
+    price: priceForForm(textOf(base.price), "SALE"),
+    city: region.city,
+    district: region.district,
+    address: stripRegion(fullStreet, region.city, region.district),
+    propertyType: propertyTypeFromKindAndShape(/住宅|住家/.test(kindName) ? "" : kindName, shapeName),
+    areaPing: pingNumber(textOf(base.unitArea) || textOf(base.area)),
+    areaParkingSpace: pingNumber(parkingRaw.includes("坪") ? parkingRaw : ""),
     rooms: counts.rooms,
     livingRooms: counts.livingRooms,
     bathrooms: counts.bathrooms,
     balconies: counts.balconies,
     floor: floors.floor,
-    totalFloors: totalFromField.replace(/\D/g, "") || floors.totalFloors,
-    managementFee: firstText(detail, ["manageprice", "managePrice", "managementFee"]),
-    otherFees: firstText(detail, ["priceadd", "priceAdd", "otherFee"]),
-    securityDeposit: depositText(firstText(detail, ["deposit", "depositStr"])),
-    availableFrom: availableText(firstText(detail, ["cometime", "comeTime", "availableFrom"])),
-    petsAllowed: yesNo(firstText(detail, ["pet", "petStr"])),
-    specialMatters: firstText(detail, ["remark", "desc", "description"]).slice(0, 2000),
-    images,
-    coverImage: images[0] ?? "",
-    furnitureItems: FURNITURE_ITEMS.filter((item) => facilityText.includes(item)),
-    equipmentItems: EQUIPMENT_ITEMS.filter((item) => facilityText.includes(item)),
-    contactName: firstText(detail, ["linkman", "linkMan", "contact"]),
-    contactPhone: firstText(detail, ["mobile", "phone", "telephone"]).replace(/[^\d-]/g, ""),
+    totalFloors: floors.totalFloors,
+    managementFee: management.amount,
+    managementFeeSet: management.set,
+    parkingType,
+    parkingKnown,
+    parkingPriceMode: !parkingType ? "" : separate ? "separate" : "included",
+    parkingIncluded: !parkingType ? "" : included ? "yes" : separate ? "no" : "",
+    contactName: textOf(link.name),
+    contactPhone: textOf(link.mobile || link.phone).replace(/[^\d-]/g, ""),
   };
+}
+
+function payloadData(json: unknown): Record<string, unknown> | null {
+  const root = asRecord(json);
+  if (!root) return null;
+  const status = root.status;
+  if (status === 0 || status === "0") return null;
+  return asRecord(root.data) ?? root;
 }
 
 async function readJson(url: string, referer: string): Promise<unknown | null> {
@@ -400,32 +607,11 @@ async function readJson(url: string, referer: string): Promise<unknown | null> {
     signal: AbortSignal.timeout(12_000),
   });
   if (!response.ok) return null;
-  const text = await response.text();
   try {
-    return JSON.parse(text) as unknown;
+    return (await response.json()) as unknown;
   } catch {
     return null;
   }
-}
-
-function embeddedJson(html: string): unknown[] {
-  const found: unknown[] = [];
-  const next = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
-  if (next?.[1]) {
-    try {
-      found.push(JSON.parse(next[1]) as unknown);
-    } catch {
-      /* ignore */
-    }
-  }
-  for (const match of html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)) {
-    try {
-      found.push(JSON.parse(match[1] ?? "") as unknown);
-    } catch {
-      /* ignore */
-    }
-  }
-  return found;
 }
 
 export async function import591ListingFromUrl(raw: string): Promise<Listing591ImportDraft> {
@@ -440,46 +626,24 @@ export async function import591ListingFromUrl(raw: string): Promise<Listing591Im
 
   const listingType = listingTypeFromUrl(source591Url);
   const referer = listingType === "SALE" ? "https://sale.591.com.tw/" : "https://rent.591.com.tw/";
-  const endpoints =
+  const detailUrl =
     listingType === "SALE"
-      ? [
-          `https://bff.591.com.tw/v1/house/sale/detail?id=${id}`,
-          `https://bff-house.591.com.tw/v1/web/sale/detail?id=${id}`,
-        ]
-      : [
-          `https://bff.591.com.tw/v1/house/rent/detail?id=${id}`,
-          `https://bff-house.591.com.tw/v1/web/rent/detail?id=${id}`,
-        ];
+      ? `https://bff.591.com.tw/v1/house/sale/detail?id=${id}`
+      : `https://bff-house.591.com.tw/v2/web/rent/detail?id=${id}`;
+  const photoType = listingType === "SALE" ? "2" : "1";
+  const photoUrl = `https://bff-house.591.com.tw/v1/ware/photos?id=${id}&type=${photoType}`;
 
-  for (const endpoint of endpoints) {
-    const json = await readJson(endpoint, referer).catch(() => null);
-    if (json) {
-      const detail = { ...flattenKnown(json), ...(findDetailNode(json) ?? {}) };
-      if (firstText(detail, ["title", "address"]) && firstText(detail, ["price", "area", "room"])) {
-        return map591DetailToDraft(detail, listingType, source591Url, json);
-      }
-    }
-  }
-
-  const page = await fetch(source591Url, {
-    headers: {
-      "User-Agent": BROWSER_UA,
-      Accept: "text/html",
-      "Accept-Language": "zh-TW,zh;q=0.9",
-      Referer: referer,
-    },
-    cache: "no-store",
-    signal: AbortSignal.timeout(12_000),
-  }).catch(() => null);
-  if (page?.ok) {
-    const html = await page.text();
-    for (const json of embeddedJson(html)) {
-      const detail = { ...flattenKnown(json), ...(findDetailNode(json) ?? {}) };
-      if (firstText(detail, ["title", "address"])) {
-        return map591DetailToDraft(detail, listingType, source591Url, json);
-      }
-    }
-  }
-
+  const [detailJson, photoJson] = await Promise.all([
+    readJson(detailUrl, referer).catch(() => null),
+    readJson(photoUrl, referer).catch(() => null),
+  ]);
+  const images = galleryImages(photoJson);
+  const data = payloadData(detailJson);
+  const draft = data
+    ? listingType === "SALE"
+      ? mapSalePayload(data, listingType, source591Url, images)
+      : mapRentPayload(data, listingType, source591Url, images)
+    : null;
+  if (draft && (draft.title || draft.price)) return draft;
   throw new Error("讀不到這則 591 的欄位。請確認連結還在刊登，或改為手動填寫。");
 }

@@ -265,6 +265,7 @@ export function AdminListingForm({
           community: string;
           propertyType: string;
           areaPing: string;
+          areaParkingSpace?: string;
           rooms: string;
           livingRooms: string;
           bathrooms: string;
@@ -272,15 +273,24 @@ export function AdminListingForm({
           floor: string;
           totalFloors: string;
           managementFee: string;
+          managementFeeSet?: boolean;
           otherFees: string;
           securityDeposit: string;
           availableFrom: string;
           petsAllowed: "" | "yes" | "no";
-          specialMatters: string;
           images: string[];
           coverImage: string;
           furnitureItems: string[];
           equipmentItems: string[];
+          facilitiesKnown?: boolean;
+          parkingType?: string;
+          parkingKnown?: boolean;
+          parkingPriceMode?: "" | "included" | "separate";
+          parkingRent?: string;
+          parkingPrice?: string;
+          parkingIncluded?: "" | "yes" | "no";
+          mrtLine?: string;
+          mrtStation?: string;
           contactName: string;
           contactPhone: string;
         };
@@ -311,19 +321,32 @@ export function AdminListingForm({
         balconies: draft.balconies || prev.balconies,
         floor: draft.floor || prev.floor,
         totalFloors: draft.totalFloors || prev.totalFloors,
-        managementFee: draft.managementFee || prev.managementFee,
+        managementFee: draft.managementFeeSet ? draft.managementFee : draft.managementFee || prev.managementFee,
         otherFees: draft.otherFees || prev.otherFees,
         securityDeposit: draft.securityDeposit || prev.securityDeposit,
         availableFrom: draft.availableFrom || prev.availableFrom,
         petsAllowed: draft.petsAllowed || prev.petsAllowed,
-        specialMatters: draft.specialMatters || prev.specialMatters,
+        areaParkingSpace: draft.areaParkingSpace || prev.areaParkingSpace,
         images: draft.images.length > 0 ? draft.images : prev.images,
         coverImage: draft.coverImage || prev.coverImage,
-        furnitureItems: draft.furnitureItems.length > 0 ? draft.furnitureItems : prev.furnitureItems,
-        equipmentItems: draft.equipmentItems.length > 0 ? draft.equipmentItems : prev.equipmentItems,
+        furnitureItems: draft.facilitiesKnown ? draft.furnitureItems : prev.furnitureItems,
+        equipmentItems: draft.facilitiesKnown ? draft.equipmentItems : prev.equipmentItems,
+        parkingType: draft.parkingKnown ? draft.parkingType || "" : prev.parkingType,
+        parkingPrice: draft.parkingPrice || prev.parkingPrice,
+        parkingIncluded: draft.parkingIncluded || prev.parkingIncluded,
+        mrtLine: draft.mrtLine || prev.mrtLine,
+        mrtStation: draft.mrtStation || prev.mrtStation,
         contactName: draft.contactName || prev.contactName,
         contactPhone: draft.contactPhone || prev.contactPhone,
       }));
+      if (draft.parkingKnown) {
+        setParkingUi(inferParking(draft.parkingType || ""));
+        setParkingPriceUi(
+          draft.parkingPriceMode === "separate"
+            ? { mode: "separate", amount: draft.parkingRent || "" }
+            : { mode: "included", amount: "" },
+        );
+      }
       if (draft.securityDeposit) setDepositUi(inferDeposit(draft.securityDeposit));
       if (draft.availableFrom) setAvailableUi(inferAvailable(draft.availableFrom));
       const typeNote =
@@ -731,7 +754,7 @@ export function AdminListingForm({
               </button>
             </div>
             <p className="mt-1 text-xs text-zinc-500">
-              貼上已刊登的 591 連結，會把標題、租金、地址等帶進這張表單。帶入後請再核對，圖片若沒出現可再手動上傳。
+              貼上已刊登的 591 連結，會帶入類別、租金、樓層、管理費、車位、設備家具，以及「查看全部照片」裡的圖片。700 公尺內的捷運會對到路線和站名。帶入後請再核對。
             </p>
           </div>
           {!lockedListingType ? (
