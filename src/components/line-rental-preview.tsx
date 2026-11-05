@@ -846,6 +846,8 @@ export function LineRentalPreview({
   );
   const [filter, setFilter] = useState<ListFilter>("all");
   const [selectedId, setSelectedId] = useState(() => seedLive[0]?.id ?? "wang");
+  /** 手機：列表與對話分開全螢幕；桌機三欄不受這個狀態影響 */
+  const [mobilePane, setMobilePane] = useState<"list" | "chat">("list");
   const [editingTime, setEditingTime] = useState(false);
   const [schedule, setSchedule] = useState<ViewingScheduleValue>(emptyViewingSchedule);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -953,6 +955,7 @@ export function LineRentalPreview({
           popup.onclick = () => {
             window.focus();
             setSelectedId(latest.guestId);
+            setMobilePane("chat");
             setFilter("all");
             popup.close();
           };
@@ -1172,6 +1175,7 @@ export function LineRentalPreview({
 
   function selectGuest(id: string) {
     setSelectedId(id);
+    setMobilePane("chat");
     setEditingTime(false);
     setSchedule(emptyViewingSchedule());
     setDetailsOpen(false);
@@ -1472,8 +1476,12 @@ export function LineRentalPreview({
     LINE_CS_STICKER_PACKS[0];
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-[#c9ced6] bg-[#edf0f5] shadow-sm">
-      <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-[#d8dde6] bg-white px-2 py-2">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-[#c9ced6] bg-[#edf0f5] shadow-sm max-lg:rounded-none max-lg:shadow-none">
+      <div
+        className={`flex shrink-0 gap-1 overflow-x-auto border-b border-[#d8dde6] bg-white px-2 py-2 ${
+          mobilePane === "chat" ? "max-lg:hidden" : ""
+        }`}
+      >
         {FILTERS.map((item) => {
           const count = guests.filter((guest) => matchesFilter(guest, item.id)).length;
           const active = filter === item.id;
@@ -1514,8 +1522,12 @@ export function LineRentalPreview({
         ) : null}
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,9rem)_minmax(0,1fr)] overflow-hidden lg:grid-cols-[minmax(16rem,20%)_minmax(0,1fr)_minmax(18rem,22%)] lg:grid-rows-1">
-        <ul className="min-h-0 overflow-y-auto border-b border-[#d8dde6] bg-white lg:border-r lg:border-b-0">
+      <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-1 overflow-hidden lg:grid-cols-[minmax(16rem,20%)_minmax(0,1fr)_minmax(18rem,22%)]">
+        <ul
+          className={`min-h-0 overflow-y-auto border-b border-[#d8dde6] bg-white lg:border-r lg:border-b-0 ${
+            mobilePane === "chat" ? "max-lg:hidden" : ""
+          }`}
+        >
           {visible.length === 0 ? (
             <li className="px-4 py-8 text-center text-sm text-zinc-500">這個篩選目前沒有客人</li>
           ) : (
@@ -1563,9 +1575,32 @@ export function LineRentalPreview({
         </ul>
 
         {selected ? (
-          <section className="flex min-h-0 min-w-0 flex-col overflow-hidden border-b border-[#d8dde6] bg-[#7494c0] lg:border-b-0 lg:border-r lg:border-[#d8dde6]">
+          <section
+            className={`flex min-h-0 min-w-0 flex-col overflow-hidden border-b border-[#d8dde6] bg-[#7494c0] lg:border-b-0 lg:border-r lg:border-[#d8dde6] ${
+              mobilePane === "list" ? "max-lg:hidden" : ""
+            }`}
+          >
             <header className="shrink-0 border-b border-black/10 bg-[#432e1f] px-3 py-2.5 text-white">
               <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (detailsOpen) {
+                      setDetailsOpen(false);
+                      setEditingTime(false);
+                      return;
+                    }
+                    setMobilePane("list");
+                    setDetailsOpen(false);
+                    setStickerOpen(false);
+                  }}
+                  className="-ml-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white hover:bg-white/10 lg:hidden"
+                  aria-label={detailsOpen ? "返回對話" : "返回聊天列表"}
+                >
+                  <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                    <path d="M15 6 9 12l6 6" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
                 <LineSideAvatar name={selected.lineName} src={selected.pictureUrl} size="sm" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[15px] font-semibold leading-tight">{selected.lineName}</p>
@@ -1594,35 +1629,41 @@ export function LineRentalPreview({
                   }}
                   className="shrink-0 rounded-md bg-white/10 px-2.5 py-1 text-xs font-medium text-white hover:bg-white/15 lg:hidden"
                 >
-                  {detailsOpen ? "收起" : "物件／時間"}
+                  {detailsOpen ? "回對話" : "物件／時間"}
                 </button>
               </div>
-              {detailsOpen ? (
-                <div className="mt-3 rounded-lg bg-white p-3 text-zinc-900 lg:hidden">
-                  <GuestDecisionPanel
-                    guest={selected}
-                    needsConfirm={Boolean(needsConfirm)}
-                    editingTime={editingTime}
-                    schedule={schedule}
-                    today={today}
-                    onConfirm={(orderedIds) => confirmTime(selected, orderedIds)}
-                    onAskOtherTime={() => askOtherTime(selected)}
-                    onStartEdit={() => {
-                      setEditingTime(true);
-                      setSchedule(emptyViewingSchedule());
-                    }}
-                    onCancelEdit={() => {
-                      setEditingTime(false);
-                      setSchedule(emptyViewingSchedule());
-                    }}
-                    onScheduleChange={setSchedule}
-                    onSendNewTime={() => sendNewTime(selected)}
-                  />
-                </div>
-              ) : null}
             </header>
 
-            <div ref={chatScrollRef} className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-3 py-3 sm:px-4">
+            {detailsOpen ? (
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-white px-4 py-4 lg:hidden">
+                <GuestDecisionPanel
+                  guest={selected}
+                  needsConfirm={Boolean(needsConfirm)}
+                  editingTime={editingTime}
+                  schedule={schedule}
+                  today={today}
+                  onConfirm={(orderedIds) => confirmTime(selected, orderedIds)}
+                  onAskOtherTime={() => askOtherTime(selected)}
+                  onStartEdit={() => {
+                    setEditingTime(true);
+                    setSchedule(emptyViewingSchedule());
+                  }}
+                  onCancelEdit={() => {
+                    setEditingTime(false);
+                    setSchedule(emptyViewingSchedule());
+                  }}
+                  onScheduleChange={setSchedule}
+                  onSendNewTime={() => sendNewTime(selected)}
+                />
+              </div>
+            ) : null}
+
+            <div
+              ref={chatScrollRef}
+              className={`min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-3 py-3 sm:px-4 ${
+                detailsOpen ? "max-lg:hidden" : ""
+              }`}
+            >
               <div className="flex w-full flex-col gap-3">
                 {selected.createdAt ? (
                   <div className="flex justify-center py-1">
@@ -1691,7 +1732,11 @@ export function LineRentalPreview({
             </div>
 
             {selected.status === "picking_time" ? (
-              <div className="flex max-h-[48%] min-h-[14rem] flex-col border-t border-[#ebebeb] bg-white px-3 py-3">
+              <div
+                className={`flex max-h-[48%] min-h-[14rem] flex-col border-t border-[#ebebeb] bg-white px-3 py-3 ${
+                  detailsOpen ? "max-lg:hidden" : ""
+                }`}
+              >
                 <div className="mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col">
                   <ViewingSchedulePicker
                     heading="客人選希望看屋時間"
@@ -1706,7 +1751,11 @@ export function LineRentalPreview({
             ) : null}
 
             {stickerOpen ? (
-              <div className="shrink-0 border-t border-[#ebebeb] bg-white px-3 py-2">
+              <div
+                className={`shrink-0 border-t border-[#ebebeb] bg-white px-3 py-2 ${
+                  detailsOpen ? "max-lg:hidden" : ""
+                }`}
+              >
                 <div className="mb-2 flex gap-1 overflow-x-auto">
                   {LINE_CS_STICKER_PACKS.map((pack) => (
                     <button
@@ -1747,7 +1796,9 @@ export function LineRentalPreview({
 
             <form
               onSubmit={sendDraft}
-              className="shrink-0 border-t border-[#ebebeb] bg-white px-3 py-2.5"
+              className={`shrink-0 border-t border-[#ebebeb] bg-white px-3 py-2.5 max-lg:px-2 max-lg:py-1.5 ${
+                detailsOpen ? "max-lg:hidden" : ""
+              }`}
             >
               <input
                 ref={imageInputRef}
@@ -1769,8 +1820,8 @@ export function LineRentalPreview({
                   event.target.value = "";
                 }}
               />
-              <div className="rounded-lg border border-[#e5e5e5] bg-white">
-                <label className="block px-3 pt-2.5">
+              <div className="rounded-lg border border-[#e5e5e5] bg-white max-lg:flex max-lg:items-end max-lg:gap-1 max-lg:rounded-none max-lg:border-0">
+                <label className="block px-3 pt-2.5 max-lg:min-w-0 max-lg:flex-1 max-lg:rounded-[1.25rem] max-lg:bg-[#f2f2f2] max-lg:px-3 max-lg:py-1">
                   <span className="sr-only">輸入訊息</span>
                   <textarea
                     ref={draftInputRef}
@@ -1784,10 +1835,10 @@ export function LineRentalPreview({
                       resizeDraftInput(event.target);
                     }}
                     onKeyDown={onDraftKeyDown}
-                    className="max-h-32 min-h-[2.5rem] w-full resize-none overflow-y-auto bg-transparent text-[14px] leading-6 text-[#222] outline-none placeholder:text-[#bbb]"
+                    className="max-h-32 min-h-[2.5rem] w-full resize-none overflow-y-auto bg-transparent text-[14px] leading-6 text-[#222] outline-none placeholder:text-[#bbb] max-lg:min-h-[1.5rem] max-lg:py-0.5"
                   />
                 </label>
-                <div className="flex items-center gap-1 px-2 pb-2 pt-1">
+                <div className="flex items-center gap-1 px-2 pb-2 pt-1 max-lg:shrink-0 max-lg:gap-0 max-lg:px-0 max-lg:pb-0.5 max-lg:pt-0">
                   <button
                     type="button"
                     aria-label="貼圖"
@@ -1840,7 +1891,18 @@ export function LineRentalPreview({
             </form>
           </section>
         ) : (
-          <div className="flex min-h-0 items-center justify-center border-b border-zinc-100 bg-[#7494c0] px-4 text-sm text-white/90 lg:border-b-0 lg:border-r">
+          <div
+            className={`flex min-h-0 flex-col items-center justify-center gap-3 border-b border-zinc-100 bg-[#7494c0] px-4 text-sm text-white/90 lg:border-b-0 lg:border-r ${
+              mobilePane === "list" ? "max-lg:hidden" : ""
+            }`}
+          >
+            <button
+              type="button"
+              onClick={() => setMobilePane("list")}
+              className="rounded-full bg-white/15 px-3 py-1.5 text-xs font-medium text-white lg:hidden"
+            >
+              返回聊天列表
+            </button>
             選左邊的客人查看 LINE 對話
           </div>
         )}

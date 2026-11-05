@@ -41,7 +41,7 @@ export function LineAssistantWorkbench({
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2 overflow-hidden">
-      <div className="flex shrink-0 flex-wrap gap-1 self-start rounded-full border border-zinc-200 bg-zinc-50 p-1">
+      <div className="flex shrink-0 gap-1 self-start overflow-x-auto rounded-full border border-zinc-200 bg-zinc-50 p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {TABS.map((item) => {
           const on = tab === item.id;
           return (
@@ -49,7 +49,7 @@ export function LineAssistantWorkbench({
               key={item.id}
               type="button"
               onClick={() => setTab(item.id)}
-              className={`rounded-full px-4 py-1.5 text-sm font-semibold transition ${
+              className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-semibold transition ${
                 on ? "bg-[#0b2545] text-white" : "text-zinc-600 hover:bg-white"
               }`}
             >

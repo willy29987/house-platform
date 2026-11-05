@@ -72,7 +72,7 @@ export default async function LineAssistantPreviewPage() {
       <div className="flex shrink-0 flex-wrap items-end justify-between gap-2">
         <div>
           <h1 className="text-xl font-bold text-zinc-900 sm:text-2xl">租屋配對客服</h1>
-          <p className="mt-0.5 text-sm text-zinc-500">
+          <p className="mt-0.5 hidden text-sm text-zinc-500 lg:block">
             {lineAccount.basicId || "官方帳號"}
             {" · "}
             對話內容以 LINE webhook 真實訊息為準（與聊天室同步）
