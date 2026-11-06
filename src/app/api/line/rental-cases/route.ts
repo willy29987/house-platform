@@ -64,6 +64,9 @@ export async function POST(request: Request) {
   if (!phone || !requestedWhen || !picked.length) {
     return NextResponse.json({ error: "缺少電話、看屋時間或想看物件" }, { status: 400 });
   }
+  if (picked.length > 3) {
+    return NextResponse.json({ error: "一次最多只能選 3 間想看" }, { status: 400 });
+  }
 
   const hasAgents = getViewingAgentUserIds().length > 0;
   const status = hasAgents ? "awaiting_agent" : "pending_confirm";

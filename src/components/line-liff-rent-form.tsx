@@ -61,6 +61,8 @@ function CalendarIcon({ className }: { className?: string }) {
   );
 }
 
+const MAX_WANTED_LISTINGS = 3;
+
 function toggleIn(list: string[], id: string) {
   return list.includes(id) ? list.filter((item) => item !== id) : [...list, id];
 }
@@ -704,7 +706,7 @@ export function LineLiffRentForm({
   const [phone, setPhone] = useState("");
   const [schedule, setSchedule] = useState<ViewingScheduleValue>(emptyViewingSchedule);
   const [pickedIds, setPickedIds] = useState<string[]>(
-    skipCriteria ? [...(directListing?.listingIds ?? [])] : [],
+    skipCriteria ? [...(directListing?.listingIds ?? [])].slice(0, MAX_WANTED_LISTINGS) : [],
   );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -858,7 +860,7 @@ export function LineLiffRentForm({
     setMatched(found);
     setSimilar(similarResult.items);
     setSimilarNotes(similarResult.notes);
-    setPickedIds(found.map((item) => item.id));
+    setPickedIds(found.map((item) => item.id).slice(0, MAX_WANTED_LISTINGS));
     if (skipCriteria) setDetailId(found[0]?.id ?? null);
     setStep("listings");
   }, [listings, skipCriteria]);
@@ -895,7 +897,16 @@ export function LineLiffRentForm({
         : "";
 
   function togglePick(id: string) {
-    setPickedIds((current) => toggleIn(current, id));
+    if (!pickedIds.includes(id) && pickedIds.length >= MAX_WANTED_LISTINGS) {
+      setError("一次最多只能選 3 間想看");
+      return;
+    }
+    setError("");
+    setPickedIds((current) => {
+      if (current.includes(id)) return current.filter((item) => item !== id);
+      if (current.length >= MAX_WANTED_LISTINGS) return current;
+      return [...current, id];
+    });
   }
 
   function budgetLabel() {
@@ -1035,7 +1046,14 @@ export function LineLiffRentForm({
   function wantCurrentListing() {
     const id = detailId;
     if (!id) return;
-    setPickedIds((current) => (current.includes(id) ? current : [...current, id]));
+    if (!pickedIds.includes(id) && pickedIds.length >= MAX_WANTED_LISTINGS) {
+      setError("一次最多只能選 3 間想看");
+      return;
+    }
+    setPickedIds((current) => {
+      if (current.includes(id) || current.length >= MAX_WANTED_LISTINGS) return current;
+      return [...current, id];
+    });
     setError("");
     setDetailReadOnly(false);
     setDetailId(null);
@@ -1046,6 +1064,10 @@ export function LineLiffRentForm({
   function confirmListings() {
     if (!pickedIds.length) {
       setError("請至少選一間想看的物件");
+      return;
+    }
+    if (pickedIds.length > MAX_WANTED_LISTINGS) {
+      setError("一次最多只能選 3 間想看");
       return;
     }
     setError("");
@@ -1107,6 +1129,10 @@ export function LineLiffRentForm({
     }
     if (!pickedIds.length) {
       setError("請至少選一間物件");
+      return;
+    }
+    if (pickedIds.length > MAX_WANTED_LISTINGS) {
+      setError("一次最多只能選 3 間想看");
       return;
     }
 
@@ -1546,7 +1572,7 @@ export function LineLiffRentForm({
               className="rounded-none border-x-0 px-2 py-3"
             >
               <p className="px-1 text-sm text-zinc-500">
-                點照片查看照片與資訊；點文字可複選想看。
+                點照片查看照片與資訊；點文字可複選想看，一次最多 3 間。
                 {matchedRelaxed.length ? `（已放寬：${matchedRelaxed.join("、")}）` : ""}
               </p>
               {matched.length === 0 ? (
@@ -1588,7 +1614,7 @@ export function LineLiffRentForm({
                 className="rounded-none border-x-0 px-2 py-3"
               >
                 <p className="text-xs text-zinc-500">
-                  符合你條件的相近物件，可一併勾選想看。
+                  符合你條件的相近物件，可一併勾選想看，一次最多 3 間。
                   {similarNotes[0] ? `（${similarNotes[0]}）` : ""}
                 </p>
                 <div className="divide-y divide-zinc-300">
@@ -1809,7 +1835,7 @@ export function LineLiffRentForm({
             {!openViewing || bookSeparateTime ? (
             <Section title="看屋時間">
               <p className="text-xs text-zinc-500">
-                已選 {pickedIds.length} 間想看物件，選時間後送出會傳到對話。
+                已選 {pickedIds.length} 間想看物件（最多 3 間），選時間後送出會傳到對話。
               </p>
               <ViewingSchedulePicker
                 heading="選擇日期與開始時間"
