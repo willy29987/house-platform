@@ -10,7 +10,6 @@ import {
   normalizeOwnerTrackingStore,
   ownerCaseToInput,
   patchOwnerCaseLinkedListing,
-  patchOwnerCaseMarked591Posted,
   updateOwnerCase,
   type OwnerCaseInput,
   type OwnerTrackingStore,
@@ -200,7 +199,6 @@ export async function addPublishedListingToViewableOwnerCase(input: {
   }
 
   next = patchOwnerCaseLinkedListing(next, caseId, listingId);
-  next = patchOwnerCaseMarked591Posted(next, caseId, true);
   await writeAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.ownerTracking, next);
   return caseId;
 }

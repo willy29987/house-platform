@@ -394,9 +394,11 @@ export function OwnerTrackingDetail({
             {ownerCase.marked591Posted ? "已上591 ✓" : "標記已上591"}
           </button>
           <span className="text-xs text-zinc-500">
-            {ownerCase.marked591Posted
-              ? "總覽地址下會顯示「已上591」小標（再點可取消）"
-              : "獨立上591、無本站物件時可手動標記"}
+            {ownerCase.linkedListingId.trim()
+              ? "已連到本站廣告，總覽地址下只顯示「已上網站」"
+              : ownerCase.marked591Posted
+                ? "總覽地址下會顯示「已上591」小標（再點可取消）"
+                : "獨立上591、無本站物件時可手動標記"}
           </span>
           </>
           ) : null}

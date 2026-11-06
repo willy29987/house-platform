@@ -1279,14 +1279,16 @@ const CaseRow = memo(function CaseRow({
             </p>
             <div className="flex min-w-0 flex-wrap items-center gap-1">
               <SiteListingBadge linkedListingId={item.linkedListingId} />
-              <Marked591PostedBadge
-                marked={Boolean(item.marked591Posted)}
-                onToggle={
-                  canEdit
-                    ? () => onToggleMarked591Posted(item.id, !item.marked591Posted)
-                    : undefined
-                }
-              />
+              {item.linkedListingId.trim() ? null : (
+                <Marked591PostedBadge
+                  marked={Boolean(item.marked591Posted)}
+                  onToggle={
+                    canEdit
+                      ? () => onToggleMarked591Posted(item.id, !item.marked591Posted)
+                      : undefined
+                  }
+                />
+              )}
             </div>
           </div>
         </div>
