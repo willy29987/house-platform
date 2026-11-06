@@ -282,7 +282,7 @@ export function AdminListingRecords({ records, staffLabels = {} }: Props) {
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
                     <Link href={`/listings/${r.id}`} className="line-clamp-1 text-sm font-bold leading-snug text-zinc-950 hover:text-[#0b2545] sm:text-base">
-                      {r.propertyType === "SUITE" && r.roomNumber ? (
+                      {(r.houseCondition === "SUITE" || r.propertyType === "SUITE") && r.roomNumber ? (
                         <span className="mr-1.5 rounded bg-[#0b2545]/10 px-1.5 py-0.5 align-middle text-[11px] font-bold text-[#0b2545]">
                           房號 {r.roomNumber}
                         </span>
@@ -328,7 +328,7 @@ export function AdminListingRecords({ records, staffLabels = {} }: Props) {
             <details className="border-t border-zinc-100 bg-zinc-50 px-4 py-1 text-xs">
               <summary className="flex cursor-pointer list-none justify-center text-base font-bold leading-none text-zinc-600 [&::-webkit-details-marker]:hidden">⌄</summary>
               <div className="mt-1 grid gap-x-6 gap-y-1.5 sm:grid-cols-2 lg:grid-cols-3">
-                {r.propertyType === "SUITE" ? <DetailRow label="房間號碼" value={r.roomNumber} /> : null}
+                {r.houseCondition === "SUITE" || r.propertyType === "SUITE" ? <DetailRow label="房間號碼" value={r.roomNumber} /> : null}
                 <DetailRow label="朝向" value={r.orientation} />
                 <DetailRow label="一層幾戶" value={r.householdsPerFloor} />
                 <DetailRow label="主建物" value={formatPing(r.areaMain)} />

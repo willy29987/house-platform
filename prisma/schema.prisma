@@ -26,6 +26,7 @@ enum PropertyType {
   SUITE
   OFFICE
   SHOP
+  VILLA
 }
 
 model Listing {

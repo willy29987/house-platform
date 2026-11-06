@@ -125,6 +125,7 @@ export type AdminListingDetail = ListingDetail & {
   availableFrom?: string | null;
   householdsPerFloor?: string | null;
   roomNumber?: string | null;
+  houseCondition?: string | null;
   furnitureProvided?: FurnitureApplianceValue;
   applianceProvided?: FurnitureApplianceValue;
   furnitureItems?: string[];
@@ -202,6 +203,7 @@ export type AdminListing = {
   availableFrom: string | null;
   householdsPerFloor: string | null;
   roomNumber: string | null;
+  houseCondition: string | null;
   isPublished: boolean;
   unpublishCategory: "DEAL" | "PAUSE" | "OTHER" | null;
   unpublishNote: string | null;
@@ -635,6 +637,7 @@ async function getAdminListingByIdImpl(id: string): Promise<AdminListingDetail |
       availableFrom: meta.availableFrom ?? null,
       householdsPerFloor: meta.householdsPerFloor ?? null,
       roomNumber: meta.roomNumber ?? null,
+      houseCondition: meta.houseCondition ?? null,
       furnitureProvided: normalizeFurnitureApplianceValue(meta.furnitureProvided),
       applianceProvided: normalizeFurnitureApplianceValue(meta.applianceProvided),
       furnitureItems: normalizeItemList(meta.furnitureItems),
@@ -693,6 +696,7 @@ async function getAdminListingsImpl(): Promise<AdminListing[]> {
       availableFrom: null,
       householdsPerFloor: null,
       roomNumber: null,
+      houseCondition: null,
       isPublished: true,
       unpublishCategory: null,
       unpublishNote: null,
@@ -765,6 +769,7 @@ async function getAdminListingsImpl(): Promise<AdminListing[]> {
         availableFrom: meta.availableFrom ?? null,
         householdsPerFloor: meta.householdsPerFloor ?? null,
         roomNumber: meta.roomNumber ?? null,
+        houseCondition: meta.houseCondition ?? null,
         unpublishCategory: meta.unpublishCategory ?? null,
         unpublishNote: meta.unpublishNote ?? null,
         expectedReleaseDate: meta.expectedReleaseDate ?? null,
@@ -822,6 +827,7 @@ export type AdminListingRecord = {
   availableFrom: string | null;
   householdsPerFloor: string | null;
   roomNumber: string | null;
+  houseCondition: string | null;
   hasElevator: boolean | null;
   contactName: string;
   contactPhone: string;
@@ -892,6 +898,7 @@ async function getAdminListingRecordsImpl(): Promise<AdminListingRecord[]> {
       availableFrom: meta.availableFrom ?? null,
       householdsPerFloor: meta.householdsPerFloor ?? null,
       roomNumber: meta.roomNumber ?? null,
+      houseCondition: meta.houseCondition ?? null,
       hasElevator: r.hasElevator,
       contactName: r.contactName,
       contactPhone: r.contactPhone,

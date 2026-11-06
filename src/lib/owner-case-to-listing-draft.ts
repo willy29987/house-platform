@@ -8,17 +8,10 @@ import {
   inferRentSubsidy,
   parseLayoutStored,
 } from "@/lib/owner-tracking-form-ui";
-import { PROPERTY_TYPE_OPTIONS, type PropertyTypeOption } from "@/lib/property-type-label";
+import { isBuildingType, isHouseCondition, splitHouseFields } from "@/lib/house-fields";
 import { parseTaiwanAddress } from "@/lib/taiwan-address";
 
 export { parseTaiwanAddress } from "@/lib/taiwan-address";
-
-function resolvePropertyType(code: string): PropertyTypeOption {
-  if ((PROPERTY_TYPE_OPTIONS as readonly string[]).includes(code)) {
-    return code as PropertyTypeOption;
-  }
-  return "APARTMENT";
-}
 
 function digitsOnly(value: string): string {
   return value.replace(/[^\d.]/g, "");
@@ -39,6 +32,7 @@ export function ownerCaseToListingDraft(
   const parkingPrice = inferParkingPrice(ownerCase.parkingPrice);
   const pets = inferPets(ownerCase.pets);
   const subsidy = inferRentSubsidy(ownerCase.rentSubsidy);
+  const houseFields = splitHouseFields(ownerCase.propertyType, ownerCase.houseCondition);
 
   return {
     ...base,
@@ -49,7 +43,8 @@ export function ownerCaseToListingDraft(
     district,
     address,
     community: ownerCase.community.trim(),
-    propertyType: resolvePropertyType(ownerCase.propertyType),
+    propertyType: isBuildingType(houseFields.building) ? houseFields.building : "",
+    houseCondition: isHouseCondition(houseFields.condition) ? houseFields.condition : "",
     price: digitsOnly(ownerCase.rent),
     floor: ownerCase.floor.trim() ? ownerCase.floor.trim() : "",
     totalFloors: ownerCase.totalFloors.trim() ? ownerCase.totalFloors.trim() : "",

@@ -17,6 +17,7 @@ export type ListingInternalMeta = {
   availableFrom?: string | null;
   householdsPerFloor?: string | null;
   roomNumber?: string | null;
+  houseCondition?: string | null;
   unpublishCategory?: "DEAL" | "PAUSE" | "OTHER" | null;
   unpublishNote?: string | null;
   expectedReleaseDate?: string | null;

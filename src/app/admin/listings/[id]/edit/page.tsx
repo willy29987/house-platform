@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { AdminListingForm, type AdminListingFormData } from "@/components/admin-listing-form";
+import { isBuildingType, isHouseCondition, splitHouseFields } from "@/lib/house-fields";
 import { GoPublicSiteButton } from "@/components/go-public-site-button";
 import { getCurrentAdmin } from "@/lib/admin-auth";
 import { getAdminListingById } from "@/lib/listings";
@@ -29,6 +30,7 @@ export default async function AdminEditListingPage({ params }: AdminEditListingP
   const existingFeatures = listing.features ?? [];
   const features = Array.from({ length: 6 }, (_, i) => existingFeatures[i] ?? "");
 
+  const houseFields = splitHouseFields(listing.propertyType, listing.houseCondition ?? "");
   const initialData: AdminListingFormData = {
     title: listing.title,
     features,
@@ -37,7 +39,8 @@ export default async function AdminEditListingPage({ params }: AdminEditListingP
     address: listing.address,
     community: listing.community ?? "",
     listingType: listing.listingType,
-    propertyType: listing.propertyType as AdminListingFormData["propertyType"],
+    propertyType: isBuildingType(houseFields.building) ? houseFields.building : "",
+    houseCondition: isHouseCondition(houseFields.condition) ? houseFields.condition : "",
     price: listing.listingType === "SALE"
       ? String(listing.price / 10000)
       : String(listing.price),

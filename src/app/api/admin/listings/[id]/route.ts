@@ -74,6 +74,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
           availableFrom: data.availableFrom ?? null,
           householdsPerFloor: data.householdsPerFloor ?? null,
           roomNumber: data.roomNumber ?? null,
+          houseCondition: data.houseCondition || null,
         }),
         features: data.features ?? [],
         city: data.city,

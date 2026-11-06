@@ -10,6 +10,7 @@ export function createEmptyFormData(type: "RENT" | "SALE" = "RENT"): AdminListin
     community: "",
     listingType: type,
     propertyType: "APARTMENT",
+    houseCondition: "",
     price: "",
     areaPing: "",
     areaMain: "",

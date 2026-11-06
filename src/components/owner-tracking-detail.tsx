@@ -29,7 +29,7 @@ import {
 } from "@/lib/owner-tracking-preview";
 import { COMMUNITY_PROPERTY_TYPES, PARKING_PRICE_INCLUDED_LABEL } from "@/lib/owner-tracking-form-ui";
 import { formatParkingTypeLabel } from "@/lib/parking-type-label";
-import { propertyTypeLabel } from "@/lib/property-type-label";
+import { buildingTypeLabel, houseConditionLabel, splitHouseFields } from "@/lib/house-fields";
 import {
   hydrateOwnerTrackingStoreOnce,
   invalidateOwnerTrackingHydrateCache,
@@ -526,7 +526,9 @@ export function OwnerTrackingDetail({
 }
 
 function CaseInfoGrid({ item }: { item: OwnerCasePreview }) {
-  const typeText = propertyTypeLabel(item.propertyType);
+  const houseFields = splitHouseFields(item.propertyType, item.houseCondition);
+  const typeText = houseFields.customBuilding ? item.propertyType : buildingTypeLabel(houseFields.building);
+  const conditionText = houseConditionLabel(houseFields.condition);
   const parkingText = formatParkingTypeLabel(item.parking);
   const showCommunityRow =
     Boolean(item.community.trim()) ||
@@ -534,7 +536,8 @@ function CaseInfoGrid({ item }: { item: OwnerCasePreview }) {
 
   const rows: { label: string; value: string; href?: string; wide?: boolean }[] = [
     { label: "物件地址", value: formatOwnerCaseAddress(item), wide: true },
-    { label: "物件類別", value: typeText !== "—" ? typeText : item.propertyType },
+    { label: "房屋現況", value: conditionText },
+    { label: "房屋型態", value: typeText !== "—" ? typeText : item.propertyType },
     ...(showCommunityRow ? [{ label: "社區名稱", value: item.community }] : []),
     {
       label: "網址",

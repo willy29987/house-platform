@@ -13,7 +13,16 @@ import {
   type ParkingPriceUi,
 } from "@/lib/owner-tracking-form-ui";
 import { TAIWAN_REGIONS } from "@/lib/taiwan-regions";
-import { PROPERTY_TYPE_LABEL, PROPERTY_TYPE_OPTIONS, type PropertyTypeOption } from "@/lib/property-type-label";
+import {
+  BUILDING_TYPE_LABEL,
+  BUILDING_TYPE_OPTIONS,
+  HOUSE_CONDITION_LABEL,
+  HOUSE_CONDITION_OPTIONS,
+  isBuildingType,
+  skipsLayout,
+  type BuildingTypeOption,
+  type HouseConditionOption,
+} from "@/lib/house-fields";
 import { getMrtStationOptions, getMrtStationsForLine, MRT_LINE_OPTIONS } from "@/lib/mrt-stations";
 import { LEGACY_PARKING_TYPES, PARKING_TYPE_LABELS, PARKING_TYPE_OPTIONS } from "@/lib/parking-type-label";
 
@@ -25,7 +34,8 @@ export type AdminListingFormData = {
   address: string;
   community: string;
   listingType: "RENT" | "SALE";
-  propertyType: PropertyTypeOption;
+  propertyType: BuildingTypeOption | "";
+  houseCondition: HouseConditionOption | "";
   price: string;
   areaPing: string;
   areaMain: string;
@@ -275,6 +285,7 @@ export function AdminListingForm({
           address: string;
           community: string;
           propertyType: string;
+          houseCondition?: string;
           areaPing: string;
           areaParkingSpace?: string;
           rooms: string;
@@ -312,10 +323,11 @@ export function AdminListingForm({
       }
       const draft = json.draft;
       const keepType = Boolean(lockedListingType);
-      const importedPropertyType = (PROPERTY_TYPE_OPTIONS as readonly string[]).includes(draft.propertyType)
-        ? (draft.propertyType as PropertyTypeOption)
+      const importedPropertyType = isBuildingType(draft.propertyType) ? draft.propertyType : null;
+      const importedCondition = (HOUSE_CONDITION_OPTIONS as readonly string[]).includes(draft.houseCondition ?? "")
+        ? (draft.houseCondition as HouseConditionOption)
         : null;
-      const skipLayout = importedPropertyType === "STUDIO" || importedPropertyType === "SUITE";
+      const skipLayout = skipsLayout(importedCondition ?? "");
       setFormData((prev) => ({
         ...prev,
         listingType: keepType ? prev.listingType : draft.listingType,
@@ -327,6 +339,7 @@ export function AdminListingForm({
         address: draft.address || prev.address,
         community: draft.community ?? "",
         propertyType: importedPropertyType ?? prev.propertyType,
+        houseCondition: importedCondition ?? prev.houseCondition,
         areaPing: draft.areaPing || prev.areaPing,
         rooms: skipLayout ? "" : draft.rooms || prev.rooms,
         livingRooms: skipLayout ? "" : draft.livingRooms || prev.livingRooms,
@@ -382,7 +395,7 @@ export function AdminListingForm({
 
   const isRent = formData.listingType === "RENT";
   const isSale = formData.listingType === "SALE";
-  const layoutOptional = formData.propertyType === "STUDIO" || formData.propertyType === "SUITE";
+  const layoutOptional = skipsLayout(formData.houseCondition);
   const hasParking = parkingUi.select !== "";
   const parkingExtraDisabled = !hasParking;
   const selectedRegion = TAIWAN_REGIONS.find((r) => r.city === formData.city);
@@ -533,6 +546,12 @@ export function AdminListingForm({
       }
     }
 
+    if (!isBuildingType(formData.propertyType)) {
+      setStatus("請選擇房屋型態");
+      setLoading(false);
+      return;
+    }
+
     let cleanFeatures = formData.features.map((f) => f.trim()).filter(Boolean);
     cleanFeatures = cleanFeatures.filter((f) => !f.includes(LAYOUT_OPEN_LABEL));
     if (layoutOpenLayout) {
@@ -549,6 +568,7 @@ export function AdminListingForm({
       community: formData.community || null,
       listingType: formData.listingType,
       propertyType: formData.propertyType,
+      houseCondition: formData.houseCondition,
       price: formData.listingType === "SALE"
         ? Math.round(Number(formData.price) * 10000)
         : Number(formData.price),
@@ -624,7 +644,7 @@ export function AdminListingForm({
             : null
         : null,
       householdsPerFloor: formData.householdsPerFloor || null,
-      roomNumber: formData.propertyType === "SUITE" ? formData.roomNumber.trim() || null : null,
+      roomNumber: formData.houseCondition === "SUITE" ? formData.roomNumber.trim() || null : null,
       // 屋主追蹤帶入：直接上架，不走草稿
       isPublished: fromOwnerCaseId?.trim() ? true : formData.isPublished,
       ...(mode === "create" && fromOwnerCaseId?.trim()
@@ -728,7 +748,7 @@ export function AdminListingForm({
               </button>
             </div>
             <p className="mt-1 text-xs text-zinc-500">
-              貼上已刊登的 591 連結，會帶入類別、租金、樓層、管理費、車位、設備家具，以及「查看全部照片」裡的圖片。700 公尺內的捷運會對到路線和站名。帶入後請再核對。
+              貼上已刊登的 591 連結，會帶入房屋現況、房屋型態、租金、樓層、管理費、車位、設備家具，以及「查看全部照片」裡的圖片。套房也會帶入公寓或電梯。700 公尺內的捷運會對到路線和站名。帶入後請再核對。
             </p>
           </div>
           {!lockedListingType ? (
@@ -790,7 +810,27 @@ export function AdminListingForm({
 
             <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:gap-3">
               <label className="block w-full min-w-0 sm:w-[7.25rem] sm:shrink-0">
-                <span className={labelCompact}>物件類別</span>
+                <span className={labelCompact}>房屋現況</span>
+                <select
+                  value={formData.houseCondition}
+                  onChange={(e) =>
+                    setFormData((p) => ({
+                      ...p,
+                      houseCondition: e.target.value as AdminListingFormData["houseCondition"],
+                    }))
+                  }
+                  className={`${selectCompact} h-[42px] px-2 text-xs`}
+                >
+                  <option value="">請選擇</option>
+                  {HOUSE_CONDITION_OPTIONS.map((type) => (
+                    <option key={type} value={type}>
+                      {HOUSE_CONDITION_LABEL[type]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block w-full min-w-0 sm:w-[7.25rem] sm:shrink-0">
+                <span className={labelCompact}>房屋型態</span>
                 <select
                   value={formData.propertyType}
                   onChange={(e) =>
@@ -801,9 +841,10 @@ export function AdminListingForm({
                   }
                   className={`${selectCompact} h-[42px] px-2 text-xs`}
                 >
-                  {PROPERTY_TYPE_OPTIONS.map((type) => (
+                  <option value="">請選擇</option>
+                  {BUILDING_TYPE_OPTIONS.map((type) => (
                     <option key={type} value={type}>
-                      {PROPERTY_TYPE_LABEL[type]}
+                      {BUILDING_TYPE_LABEL[type]}
                     </option>
                   ))}
                 </select>
@@ -837,7 +878,7 @@ export function AdminListingForm({
               </label>
             </div>
           </div>
-          {formData.propertyType === "SUITE" ? (
+          {formData.houseCondition === "SUITE" ? (
             <div className="sm:col-span-2">
               <label className={labelCls}>房間號碼</label>
               <input

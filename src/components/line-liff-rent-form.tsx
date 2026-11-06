@@ -77,9 +77,10 @@ function listingPageUrl(baseUrl: string, id: string) {
   return `${baseUrl.replace(/\/$/, "")}/listings/${id}`;
 }
 
-function layoutLabel(item: Pick<RentalMatchListing, "propertyType" | "rooms" | "livingRooms" | "bathrooms" | "balconies">) {
-  if (item.propertyType === "STUDIO") return "獨立套房";
-  if (item.propertyType === "SUITE") return "分租套房";
+function layoutLabel(item: Pick<RentalMatchListing, "propertyType" | "houseCondition" | "rooms" | "livingRooms" | "bathrooms" | "balconies">) {
+  const condition = item.houseCondition || item.propertyType;
+  if (condition === "STUDIO") return "獨立套房";
+  if (condition === "SUITE") return "分租套房";
   return [
     `${item.rooms}房`,
     item.livingRooms != null ? `${item.livingRooms}廳` : null,
@@ -93,6 +94,8 @@ function layoutLabel(item: Pick<RentalMatchListing, "propertyType" | "rooms" | "
 function buildingTypeLabel(item: Pick<RentalMatchListing, "propertyType" | "hasElevator">) {
   if (item.propertyType === "APARTMENT") return "公寓";
   if (item.propertyType === "ELEVATOR_BUILDING") return "電梯";
+  if (item.propertyType === "VILLA") return "別墅";
+  if (item.propertyType === "HOUSE") return "透天厝";
   if (item.propertyType === "STUDIO" || item.propertyType === "SUITE") {
     if (item.hasElevator === true) return "電梯";
     if (item.hasElevator === false) return "公寓";

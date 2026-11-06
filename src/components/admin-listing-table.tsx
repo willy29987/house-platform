@@ -45,6 +45,7 @@ type AdminListing = {
   listingType: "RENT" | "SALE";
   propertyType?: string;
   roomNumber?: string | null;
+  houseCondition?: string | null;
   city: string;
   district: string;
   address?: string;
@@ -543,7 +544,7 @@ export function AdminListingTable({
                       title="點擊查看客人外網廣告"
                       className="line-clamp-2 text-base font-bold leading-snug text-zinc-950 hover:text-[#0b2545] hover:underline"
                     >
-                      {l.propertyType === "SUITE" && l.roomNumber ? (
+                      {(l.houseCondition === "SUITE" || l.propertyType === "SUITE") && l.roomNumber ? (
                         <span className="mr-1.5 rounded bg-[#0b2545]/10 px-1.5 py-0.5 align-middle text-[11px] font-bold text-[#0b2545]">
                           房號 {l.roomNumber}
                         </span>
@@ -563,7 +564,7 @@ export function AdminListingTable({
                           title="點擊查看客人外網廣告"
                           className="line-clamp-2 text-lg font-bold leading-snug text-zinc-950 hover:text-[#0b2545] hover:underline"
                         >
-                          {l.propertyType === "SUITE" && l.roomNumber ? (
+                          {(l.houseCondition === "SUITE" || l.propertyType === "SUITE") && l.roomNumber ? (
                             <span className="mr-1.5 rounded bg-[#0b2545]/10 px-1.5 py-0.5 align-middle text-xs font-bold text-[#0b2545]">
                               房號 {l.roomNumber}
                             </span>

@@ -51,7 +51,16 @@ import {
   PARKING_TYPE_LABELS,
   PARKING_TYPE_OPTIONS,
 } from "@/lib/parking-type-label";
-import { PROPERTY_TYPE_OPTIONS, propertyTypeLabel } from "@/lib/property-type-label";
+import {
+  BUILDING_TYPE_LABEL,
+  BUILDING_TYPE_OPTIONS,
+  HOUSE_CONDITION_LABEL,
+  HOUSE_CONDITION_OPTIONS,
+  isBuildingType,
+  isHouseCondition,
+  skipsLayout,
+  splitHouseFields,
+} from "@/lib/house-fields";
 import { TAIWAN_REGIONS } from "@/lib/taiwan-regions";
 import { hydrateOwnerTrackingStoreOnce } from "@/lib/admin-cloud-sync-client";
 import { OwnerTrackingNextContactField } from "@/components/owner-tracking-next-contact-field";
@@ -74,6 +83,7 @@ const emptyForm = (): OwnerCaseInput => ({
   floor: "",
   totalFloors: "",
   propertyType: "ELEVATOR_BUILDING",
+  houseCondition: "",
   community: "",
   ownerName: "",
   phone: "",
@@ -178,7 +188,14 @@ export function OwnerTrackingNewForm({
       setHydrated(true);
       return;
     }
-    const synced = syncOwnerTrackingFormUiFromStored(ownerCaseToInput(found));
+    const split = splitHouseFields(found.propertyType, found.houseCondition);
+    const synced = syncOwnerTrackingFormUiFromStored(
+      ownerCaseToInput({
+        ...found,
+        propertyType: split.customBuilding ? found.propertyType : split.building,
+        houseCondition: split.condition,
+      }),
+    );
     setForm(synced.form);
     setParkingUi(synced.parkingUi);
     setPetsUi(synced.petsUi);
@@ -189,8 +206,7 @@ export function OwnerTrackingNewForm({
     setManagementFeeUi(synced.managementFeeUi);
     setParkingPriceUi(synced.parkingPriceUi);
     setLayoutUi(synced.layoutUi);
-    const knownType = (PROPERTY_TYPE_OPTIONS as readonly string[]).includes(found.propertyType);
-    setPropertyTypeCustom(!knownType);
+    setPropertyTypeCustom(split.customBuilding);
     setHydrated(true);
       },
     );
@@ -226,6 +242,9 @@ export function OwnerTrackingNewForm({
           address: string;
           community: string;
           propertyType: string;
+          houseCondition?: string;
+          contactName?: string;
+          contactPhone?: string;
           areaPing: string;
           rooms: string;
           livingRooms: string;
@@ -247,8 +266,9 @@ export function OwnerTrackingNewForm({
         return;
       }
       const draft = json.draft;
-      const knownType = (PROPERTY_TYPE_OPTIONS as readonly string[]).includes(draft.propertyType);
-      const skipLayout = draft.propertyType === "STUDIO" || draft.propertyType === "SUITE";
+      const importedBuilding = isBuildingType(draft.propertyType) ? draft.propertyType : "";
+      const importedCondition = isHouseCondition(draft.houseCondition ?? "") ? draft.houseCondition ?? "" : "";
+      const skipLayout = skipsLayout(importedCondition);
       setPropertyTypeCustom(false);
       setForm((prev) => ({
         ...prev,
@@ -258,10 +278,13 @@ export function OwnerTrackingNewForm({
         address: draft.address || prev.address,
         floor: draft.floor,
         totalFloors: draft.totalFloors,
-        propertyType: knownType ? draft.propertyType : prev.propertyType,
+        propertyType: importedBuilding || prev.propertyType,
+        houseCondition: importedCondition || prev.houseCondition,
         community: draft.community ?? "",
         rent: draft.price || prev.rent,
         areaPing: draft.areaPing || prev.areaPing,
+        ownerName: draft.contactName?.trim() || prev.ownerName,
+        phone: draft.contactPhone?.trim() || prev.phone,
       }));
       setLayoutUi(
         skipLayout
@@ -322,6 +345,10 @@ export function OwnerTrackingNewForm({
       !payload.phone.trim()
     ) {
       setError("請至少填寫縣市、行政區、地址、姓名與電話");
+      return;
+    }
+    if (!propertyTypeCustom && !isBuildingType(payload.propertyType)) {
+      setError("請選擇房屋型態");
       return;
     }
     if (parkingUi.select === PARKING_CUSTOM && !parkingUi.custom.trim()) {
@@ -422,7 +449,7 @@ export function OwnerTrackingNewForm({
                 {importing591 ? "帶入中…" : "從 591 帶入"}
               </button>
             </div>
-            <p className="mt-1 text-xs text-zinc-500">會帶入地址、類別、租金、樓層、管理費、車位。沒有社區名稱時，社區會留白。獨立套房和分租套房不帶格局。</p>
+            <p className="mt-1 text-xs text-zinc-500">會帶入地址、房屋現況、房屋型態、租金、樓層、管理費、車位、屋主姓名與電話。沒有社區名稱時，社區會留白。獨立套房和分租套房不帶格局。</p>
             {importStatus ? (
               <p className={`mt-1 text-xs ${importStatus.includes("成功") ? "text-emerald-700" : "text-red-600"}`}>{importStatus}</p>
             ) : null}
@@ -498,15 +525,29 @@ export function OwnerTrackingNewForm({
 
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:gap-3">
             <label className="block w-full min-w-0 sm:w-[7.25rem] sm:shrink-0">
+              <span className="mb-1 block text-xs font-medium text-zinc-600">房屋現況</span>
+              <select
+                value={form.houseCondition}
+                onChange={(e) => setField("houseCondition", e.target.value)}
+                className={`${selectCompact} h-[42px] px-2 text-xs`}
+              >
+                <option value="">請選擇</option>
+                {HOUSE_CONDITION_OPTIONS.map((code) => (
+                  <option key={code} value={code}>
+                    {HOUSE_CONDITION_LABEL[code]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block w-full min-w-0 sm:w-[7.25rem] sm:shrink-0">
               <span className="mb-1 flex items-center justify-between gap-1 text-xs font-medium text-zinc-600">
-                <span>物件類別</span>
+                <span>房屋型態</span>
                 <button
                   type="button"
                   onClick={() => {
                     if (!propertyTypeCustom) {
                       setPropertyTypeCustom(true);
                       setField("propertyType", "");
-                      setField("community", "");
                     } else {
                       setPropertyTypeCustom(false);
                       setField("propertyType", "ELEVATOR_BUILDING");
@@ -527,23 +568,14 @@ export function OwnerTrackingNewForm({
               ) : (
                 <select
                   value={form.propertyType}
-                  onChange={(e) => {
-                    const next = e.target.value;
-                    setField("propertyType", next);
-                    if (!(["ELEVATOR_BUILDING", "OFFICE", "SHOP"] as string[]).includes(next)) {
-                      setField("community", "");
-                    }
-                  }}
+                  onChange={(e) => setField("propertyType", e.target.value)}
                   className={`${selectCompact} h-[42px] px-2 text-xs`}
-                  title={
-                    (PROPERTY_TYPE_OPTIONS as readonly string[]).includes(form.propertyType)
-                      ? propertyTypeLabel(form.propertyType as (typeof PROPERTY_TYPE_OPTIONS)[number])
-                      : form.propertyType
-                  }
+                  title={isBuildingType(form.propertyType) ? BUILDING_TYPE_LABEL[form.propertyType] : form.propertyType}
                 >
-                  {PROPERTY_TYPE_OPTIONS.map((code) => (
+                  <option value="">請選擇</option>
+                  {BUILDING_TYPE_OPTIONS.map((code) => (
                     <option key={code} value={code}>
-                      {propertyTypeLabel(code)}
+                      {BUILDING_TYPE_LABEL[code]}
                     </option>
                   ))}
                 </select>
@@ -562,9 +594,11 @@ export function OwnerTrackingNewForm({
           </div>
         </div>
 
-        <FormField label="使用坪數">
-          <input type="text" value={form.areaPing} onChange={(e) => setField("areaPing", e.target.value)} className={field} />
-        </FormField>
+        <div className="grid grid-cols-1 gap-x-5 gap-y-4 sm:col-span-2 sm:grid-cols-3">
+          <FormField label="使用坪數">
+            <input type="text" value={form.areaPing} onChange={(e) => setField("areaPing", e.target.value)} className={field} />
+          </FormField>
+          <div className="sm:col-span-2">
         <FormField label="格局">
           <div className="flex h-[42px] min-w-0 items-center gap-1.5 sm:gap-2">
             {(
@@ -607,6 +641,8 @@ export function OwnerTrackingNewForm({
             </label>
           </div>
         </FormField>
+          </div>
+        </div>
 
         <div className="sm:col-span-2 grid grid-cols-1 gap-x-5 gap-y-4 sm:grid-cols-3">
           <FormField label="租金">

@@ -3,7 +3,8 @@ import { formatAdminStaffLabel } from "@/lib/admin-staff-labels";
 import { formatFollowUpWhen, formatOwnerCaseAddress, type OwnerTrackingStore } from "@/lib/owner-tracking-preview";
 import { listCommunityCell, type OwnerTrackingListRow } from "@/lib/owner-tracking-list-query";
 import { formatParkingTypeLabel } from "@/lib/parking-type-label";
-import { PROPERTY_TYPE_OPTIONS, propertyTypeLabel, type PropertyTypeOption } from "@/lib/property-type-label";
+import { houseConditionLabel, splitHouseFields } from "@/lib/house-fields";
+import { propertyTypeLabel } from "@/lib/property-type-label";
 
 type ColumnSpec = { header: string; width: number };
 
@@ -24,7 +25,8 @@ const caseColumns: ColumnSpec[] = [
   { header: "上次追蹤", width: 18 },
   { header: "電訪", width: 8 },
   { header: "上次備註", width: 24 },
-  { header: "物件類別", width: 12 },
+  { header: "房屋現況", width: 12 },
+  { header: "房屋型態", width: 12 },
   { header: "租金", width: 10 },
   { header: "格局", width: 14 },
   { header: "使用坪數", width: 10 },
@@ -60,10 +62,8 @@ function normalizeUrl(url: string): string | null {
 }
 
 function propertyTypeText(code: string): string {
-  if ((PROPERTY_TYPE_OPTIONS as readonly string[]).includes(code)) {
-    return propertyTypeLabel(code as PropertyTypeOption);
-  }
-  return code;
+  const label = propertyTypeLabel(code);
+  return label !== "—" ? label : code;
 }
 
 function setupSimpleSheet(sheet: Worksheet, columns: ColumnSpec[], dataRows: CellValue[][]) {
@@ -124,7 +124,8 @@ function caseRow(
     row.last ? formatFollowUpWhen(row.last.createdAt) : "",
     row.contactCount,
     row.last?.note?.trim() ?? "",
-    propertyTypeText(c.propertyType),
+    houseConditionLabel(splitHouseFields(c.propertyType, c.houseCondition).condition),
+    propertyTypeText(splitHouseFields(c.propertyType, c.houseCondition).customBuilding ? c.propertyType : splitHouseFields(c.propertyType, c.houseCondition).building),
     c.rent,
     c.layout,
     c.areaPing,

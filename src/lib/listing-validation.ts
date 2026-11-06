@@ -1,5 +1,6 @@
-import { ListingType, PropertyType } from "@prisma/client";
+import { ListingType } from "@prisma/client";
 import { z } from "zod";
+import { BUILDING_TYPE_OPTIONS, HOUSE_CONDITION_OPTIONS } from "@/lib/house-fields";
 
 const optionalNumber = z.preprocess((val) => {
   if (val === "" || val === null || val === undefined) return undefined;
@@ -72,7 +73,8 @@ export const listingInputSchema = z.object({
   floor: optionalNumber,
   totalFloors: optionalNumber,
   listingType: z.nativeEnum(ListingType),
-  propertyType: z.nativeEnum(PropertyType),
+  propertyType: z.enum(BUILDING_TYPE_OPTIONS),
+  houseCondition: z.enum(HOUSE_CONDITION_OPTIONS).optional().or(z.literal("")),
   coverImage: optionalString,
   images: z.array(z.string()).optional(),
   contactName: z.string().min(1, "請填寫聯絡人"),
@@ -97,7 +99,7 @@ export const listingInputSchema = z.object({
   /** 從屋主追蹤帶入上架時帶入；建立時強制已刊登（不落庫） */
   fromOwnerCaseId: optionalString,
 }).refine(
-  (data) => data.propertyType !== PropertyType.SUITE || Boolean(data.roomNumber),
+  (data) => data.houseCondition !== "SUITE" || Boolean(data.roomNumber),
   { message: "分租套房需填寫房間號碼", path: ["roomNumber"] },
 );
 

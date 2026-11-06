@@ -27,7 +27,8 @@ import {
   countContactUpcomingCases,
   listCommunityCell,
 } from "@/lib/owner-tracking-list-query";
-import { PROPERTY_TYPE_OPTIONS, propertyTypeLabel } from "@/lib/property-type-label";
+import { BUILDING_TYPE_LABEL, BUILDING_TYPE_OPTIONS } from "@/lib/house-fields";
+import { propertyTypeLabel } from "@/lib/property-type-label";
 import {
   ADMIN_CLOUD_DATA_KEYS,
   hydrateOwnerTrackingStoreOnce,
@@ -719,18 +720,22 @@ function OwnerTrackingListInner({
             </select>
           </label>
           <label className={COMPACT_FILTER_LABEL}>
-            <span className="mb-1 block text-xs font-medium text-zinc-600">物件類別</span>
+            <span className="mb-1 block text-xs font-medium text-zinc-600">房屋型態</span>
             <select
               value={propertyTypeFilter}
               onChange={(e) => patchListUrl({ propertyTypeFilter: e.target.value, page: 1 })}
               className={COMPACT_FILTER_SELECT}
             >
               <option value="ALL">全部</option>
-              {PROPERTY_TYPE_OPTIONS.map((code) => (
+              {BUILDING_TYPE_OPTIONS.map((code) => (
                 <option key={code} value={code}>
-                  {propertyTypeLabel(code)}
+                  {BUILDING_TYPE_LABEL[code]}
                 </option>
               ))}
+              {propertyTypeFilter !== "ALL" &&
+              !(BUILDING_TYPE_OPTIONS as readonly string[]).includes(propertyTypeFilter) ? (
+                <option value={propertyTypeFilter}>{propertyTypeLabel(propertyTypeFilter)}</option>
+              ) : null}
             </select>
           </label>
           {isSuperAdmin ? (

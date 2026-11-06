@@ -22,6 +22,7 @@ export type RentalMatchListing = {
   floor: number | null;
   totalFloors: number | null;
   propertyType: string;
+  houseCondition?: string | null;
   hasElevator: boolean | null;
   community: string | null;
   managementFee: number | null;
@@ -63,6 +64,7 @@ export function toRentalMatchListing(listing: {
   floor: number | null;
   totalFloors: number | null;
   propertyType?: string;
+  houseCondition?: string | null;
   hasElevator?: boolean | null;
   community?: string | null;
   managementFee?: number | null;
@@ -102,6 +104,7 @@ export function toRentalMatchListing(listing: {
     floor: listing.floor,
     totalFloors: listing.totalFloors,
     propertyType: listing.propertyType ?? "",
+    houseCondition: listing.houseCondition ?? null,
     hasElevator: listing.hasElevator ?? null,
     community: listing.community ?? null,
     managementFee: listing.managementFee ?? null,
@@ -160,6 +163,7 @@ export async function loadRentalMatchListings(
         availableFrom: meta.availableFrom ?? null,
         shortTermRent: meta.shortTermRent ?? null,
         serviceFee: meta.serviceFee ?? null,
+        houseCondition: meta.houseCondition ?? null,
       });
     });
   } catch (error) {
@@ -243,9 +247,10 @@ export function listingMatchesCriteria(listing: RentalMatchListing, criteria: Re
   if (criteria.cities.length && !criteria.cities.includes(listing.city)) return false;
   if (criteria.districts.length && !criteria.districts.includes(listing.district)) return false;
   if (criteria.rooms.length) {
-    const suite = listing.propertyType === "STUDIO" || listing.propertyType === "SUITE";
+    const condition = listing.houseCondition || listing.propertyType;
+    const suite = condition === "STUDIO" || condition === "SUITE";
     const ok = criteria.rooms.some((value) => {
-      if (value === "studio") return listing.propertyType === "STUDIO";
+      if (value === "studio") return condition === "STUDIO";
       const rooms = Number.parseInt(value, 10);
       if (!Number.isFinite(rooms) || suite) return false;
       return rooms === 4 ? listing.rooms >= 4 : listing.rooms === rooms;

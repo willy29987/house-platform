@@ -45,8 +45,10 @@ export type OwnerCasePreview = {
   district: string;
   floor: string;
   totalFloors: string;
-  /** 物件類別（PropertyType 代碼或自填文字） */
+  /** 房屋型態（公寓／電梯／別墅／透天厝，或舊的自填文字） */
   propertyType: string;
+  /** 房屋現況（整層住家／獨立套房／分租套房／住辦／辦公／店面） */
+  houseCondition: string;
   /** 社區名稱（電梯大樓／辦公／店面） */
   community: string;
   /** 姓名 */
@@ -141,6 +143,7 @@ export function normalizeCase(raw: Record<string, unknown>, fallbackAssignee = "
     floor: String(raw.floor ?? ""),
     totalFloors: String(raw.totalFloors ?? ""),
     propertyType: String(raw.propertyType ?? ""),
+    houseCondition: String(raw.houseCondition ?? ""),
     community: String(raw.community ?? ""),
     ownerName: String(raw.ownerName ?? ""),
     phone: String(raw.phone ?? ""),
@@ -597,6 +600,7 @@ export function ownerCaseToInput(c: OwnerCasePreview): OwnerCaseInput {
     floor: c.floor,
     totalFloors: c.totalFloors,
     propertyType: c.propertyType,
+    houseCondition: c.houseCondition,
     community: c.community,
     ownerName: c.ownerName,
     phone: c.phone,
@@ -742,6 +746,7 @@ function trimOwnerCaseInput(input: OwnerCaseInput): OwnerCaseInput {
     floor: input.floor.trim(),
     totalFloors: input.totalFloors.trim(),
     propertyType: input.propertyType.trim(),
+    houseCondition: input.houseCondition.trim(),
     community: input.community.trim(),
     ownerName: input.ownerName.trim(),
     phone: input.phone.trim(),
@@ -794,7 +799,8 @@ export const OWNER_CASE_FIELD_LABELS: { key: keyof OwnerCaseInput; label: string
   { key: "address", label: "地址" },
   { key: "floor", label: "樓層" },
   { key: "totalFloors", label: "總樓層" },
-  { key: "propertyType", label: "物件類別" },
+  { key: "houseCondition", label: "房屋現況" },
+  { key: "propertyType", label: "房屋型態" },
   { key: "community", label: "社區名稱" },
   { key: "ownerName", label: "姓名" },
   { key: "phone", label: "電話" },
