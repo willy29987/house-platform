@@ -16,7 +16,6 @@ import {
   type RentalExtra,
   type RentalMatchListing,
 } from "@/lib/line-rental-assistant";
-import { LINE_LIFF_RENT_ASSISTANT_ID } from "@/lib/line-liff-id";
 import {
   buildLiffRentAssistantUrl,
   buildPublicBaseUrl,
@@ -62,12 +61,7 @@ function postback(label: string, data: string, displayText?: string): LineMessag
 }
 
 export function buildGuestLiffPickUrl(sessionId: string) {
-  const liffId = LINE_LIFF_RENT_ASSISTANT_ID;
   const base = buildPublicBaseUrl() || "https://house-platform.vercel.app";
-  // 正式 LIFF：帶 mode=pick；同時附網頁備援參數
-  if (liffId) {
-    return `https://liff.line.me/${liffId}?mode=pick&session=${encodeURIComponent(sessionId)}`;
-  }
   return `${base.replace(/\/$/, "")}/liff/rent-assistant?mode=pick&session=${encodeURIComponent(sessionId)}`;
 }
 
@@ -337,7 +331,6 @@ async function finishCase(session: GuestSession) {
 }
 
 function openFullLiffFormMessages(lineUserId?: string): LineMessage[] {
-  // 必須走 liff.line.me，sendMessages 才會進對話；Endpoint 請指向 Vercel 表單頁
   const uri = buildLiffRentAssistantUrl(
     lineUserId ? { uid: lineUserId } : undefined,
   );

@@ -272,17 +272,15 @@ export function buildPublicBaseUrl() {
 }
 
 export function buildLiffRentAssistantUrl(query?: Record<string, string>) {
-  const liffId =
-    process.env.NEXT_PUBLIC_LIFF_ID?.trim() || "2012308800-rDFp5dsT";
   const qs = query
     ? `?${Object.entries(query)
-        .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+        .filter(([, value]) => value)
+        .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
         .join("&")}`
     : "";
-  if (liffId) return `https://liff.line.me/${liffId}${qs}`;
-  const base = buildPublicBaseUrl();
-  const path = `/liff/rent-assistant${qs}`;
-  return base ? `${base}${path}` : path;
+  // LIFF 頻道仍是 Developing，liff.line.me 會對一般客人回 400。直接開表單頁。
+  const base = buildPublicBaseUrl() || "https://house-platform.vercel.app";
+  return `${base}/liff/rent-assistant${qs}`;
 }
 
 export function buildAgentRescheduleUrl(caseId: string) {
