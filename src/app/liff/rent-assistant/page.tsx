@@ -1,7 +1,7 @@
 import { LineLiffRentAssistant } from "@/components/line-liff-rent-assistant";
 import { getGuestWatchByUserId, watchRecordToCriteria } from "@/lib/line-guest-watch";
 import { findLatestOpenViewing } from "@/lib/line-rental-cases";
-import { LINE_LIFF_RENT_ASSISTANT_ID } from "@/lib/line-liff-id";
+import { LINE_LIFF_RENT_ASSISTANT_ID, messagingUidFromSearch } from "@/lib/line-liff-id";
 import { loadRentalMatchListings } from "@/lib/line-rental-assistant";
 import type { LiffDirectListingEntry } from "@/components/line-liff-rent-form";
 
@@ -22,11 +22,19 @@ function listingIdsFromParam(raw: string | string[] | undefined) {
 export default async function LiffRentAssistantPage({
   searchParams,
 }: {
-  searchParams: Promise<{ liffId?: string; uid?: string; listingId?: string | string[] }>;
+  searchParams: Promise<{
+    liffId?: string;
+    uid?: string;
+    listingId?: string | string[];
+    "liff.state"?: string;
+  }>;
 }) {
   const params = await searchParams;
   const liffId = params.liffId?.trim() || LINE_LIFF_RENT_ASSISTANT_ID;
-  const fallbackLineUserId = params.uid?.trim() || null;
+  const search = new URLSearchParams();
+  if (params.uid) search.set("uid", params.uid);
+  if (params["liff.state"]) search.set("liff.state", params["liff.state"]);
+  const fallbackLineUserId = messagingUidFromSearch(search.toString());
   const pushedListingIds = listingIdsFromParam(params.listingId);
   const openViewing = fallbackLineUserId
     ? await findLatestOpenViewing(fallbackLineUserId)

@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { getCurrentAdmin } from "@/lib/admin-auth";
-import { appendLineConversationMessage } from "@/lib/line-conversations";
+import {
+  appendLineConversationMessage,
+  findRecentGuestUserIdByExactText,
+} from "@/lib/line-conversations";
 import {
   appendLineRentalCase,
   appendPickedToViewingCase,
@@ -71,7 +74,12 @@ export async function POST(request: Request) {
       ? `已記下想看時間（${requestedWhen}），已送業務確認。`
       : `已記下想看時間（${requestedWhen}），待同事確認。`);
   const skipGuestPush = body.skipGuestPush === true;
-  const lineUserId = typeof body.lineUserId === "string" ? body.lineUserId.trim() || null : null;
+  const fromBody = typeof body.lineUserId === "string" ? body.lineUserId.trim() || null : null;
+  const fromChat =
+    clientSummary.includes("【找房預約】")
+      ? await findRecentGuestUserIdByExactText(clientSummary)
+      : null;
+  const lineUserId = fromChat || fromBody;
   const incomingPicked: LineRentalCasePicked[] = picked.map((item) => ({
     id: String(item.id),
     title: String(item.title),

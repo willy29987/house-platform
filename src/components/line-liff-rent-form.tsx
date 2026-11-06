@@ -9,6 +9,7 @@ import {
 } from "@/components/viewing-schedule-picker";
 import { EQUIPMENT_ITEMS, FURNITURE_ITEMS } from "@/lib/furniture-appliance-value";
 import { loadLiffClient } from "@/lib/line-liff-client";
+import { readClientMessagingUid } from "@/lib/line-liff-id";
 import {
   EXTRA_OPTIONS,
   MATCH_LIST_LIMIT,
@@ -724,11 +725,7 @@ export function LineLiffRentForm({
 
   useEffect(() => {
     if (profileBootRef.current) return;
-    const uid =
-      lineUserId?.trim() ||
-      new URLSearchParams(window.location.search).get("uid")?.trim() ||
-      window.sessionStorage.getItem("line_messaging_uid")?.trim() ||
-      "";
+    const uid = readClientMessagingUid(lineUserId) || "";
     if (!uid) return;
     profileBootRef.current = true;
     void fetch(`/api/line/guest-profile?lineUserId=${encodeURIComponent(uid)}`)
@@ -781,11 +778,7 @@ export function LineLiffRentForm({
   }, [lineUserId]);
 
   useEffect(() => {
-    const uid =
-      lineUserId?.trim() ||
-      new URLSearchParams(window.location.search).get("uid")?.trim() ||
-      window.sessionStorage.getItem("line_messaging_uid")?.trim() ||
-      "";
+    const uid = readClientMessagingUid(lineUserId) || "";
     if (!uid) return;
     let cancelled = false;
     void fetch(`/api/line/open-viewing?lineUserId=${encodeURIComponent(uid)}`)
@@ -959,12 +952,7 @@ export function LineLiffRentForm({
     min: number;
     max: number;
   }) {
-    const uid =
-      lineUserId?.trim() ||
-      (typeof window !== "undefined"
-        ? new URLSearchParams(window.location.search).get("uid")?.trim() ||
-          window.sessionStorage.getItem("line_messaging_uid")?.trim()
-        : null);
+    const uid = readClientMessagingUid(lineUserId);
     if (!uid) {
       setWatchSaved(false);
       return;
@@ -1181,12 +1169,7 @@ export function LineLiffRentForm({
       let composeOpened = false;
       let resolvedUserId = lineUserId;
       try {
-        const fromUrl = new URLSearchParams(window.location.search).get("uid")?.trim();
-        const fromStore = window.sessionStorage.getItem("line_messaging_uid")?.trim();
-        resolvedUserId = fromUrl || resolvedUserId || fromStore || null;
-        if (resolvedUserId) {
-          window.sessionStorage.setItem("line_messaging_uid", resolvedUserId);
-        }
+        resolvedUserId = readClientMessagingUid(resolvedUserId);
       } catch {
         /* ignore */
       }

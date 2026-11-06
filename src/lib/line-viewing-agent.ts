@@ -414,6 +414,8 @@ export async function handleAgentProposeText(input: {
   text: string;
 }): Promise<boolean> {
   if (!isViewingAgentUserId(input.agentLineUserId)) return false;
+  // 圖文選單「開始找房」也會進到業務帳號，不能被當成改約時間
+  if (input.text.includes("開始找房")) return false;
   const caseRecord = await findAgentProposingCase(input.agentLineUserId);
   if (!caseRecord) return false;
 

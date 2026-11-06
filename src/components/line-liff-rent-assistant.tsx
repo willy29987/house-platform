@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { LineLiffRentForm, type LiffDirectListingEntry } from "@/components/line-liff-rent-form";
 import { loadLiffClient } from "@/lib/line-liff-client";
+import { readClientMessagingUid } from "@/lib/line-liff-id";
 import type { RentalMatchListing } from "@/lib/line-rental-assistant";
 
 export function LineLiffRentAssistant({
@@ -27,18 +28,8 @@ export function LineLiffRentAssistant({
 
   useEffect(() => {
     setHydrated(true);
-    try {
-      // 必須用 Messaging API 的 userId（webhook / uid query），不可被 LIFF Login profile 覆蓋
-      const fromUrl = new URLSearchParams(window.location.search).get("uid")?.trim();
-      const fromStore = window.sessionStorage.getItem("line_messaging_uid")?.trim();
-      const uid = fromUrl || fallbackLineUserId || fromStore;
-      if (uid) {
-        window.sessionStorage.setItem("line_messaging_uid", uid);
-        setLineUserId(uid);
-      }
-    } catch {
-      /* ignore */
-    }
+    const uid = readClientMessagingUid(fallbackLineUserId);
+    if (uid) setLineUserId(uid);
   }, [fallbackLineUserId]);
 
   useEffect(() => {

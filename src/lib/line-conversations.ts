@@ -122,6 +122,28 @@ function toIsoFromLineTimestamp(timestamp?: number): string {
   return new Date().toISOString();
 }
 
+/** 找房表單先 sendMessages、再寫案件時，用剛進對話的原文對回 Messaging userId。 */
+export async function findRecentGuestUserIdByExactText(
+  text: string,
+  withinMs = 5 * 60_000,
+): Promise<string | null> {
+  const needle = text.trim();
+  if (!needle) return null;
+  const conversations = await readLineConversations();
+  const now = Date.now();
+  let best: { lineUserId: string; at: number } | null = null;
+  for (const row of conversations) {
+    for (const message of row.messages) {
+      if (message.from !== "guest" || message.text !== needle) continue;
+      const at = new Date(message.createdAt).getTime();
+      const age = now - at;
+      if (!Number.isFinite(age) || age < 0 || age > withinMs) continue;
+      if (!best || at > best.at) best = { lineUserId: row.lineUserId, at };
+    }
+  }
+  return best?.lineUserId ?? null;
+}
+
 export async function readLineConversations(): Promise<LineConversation[]> {
   const store = normalizeStore(
     await readAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.lineConversations),
