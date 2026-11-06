@@ -113,7 +113,7 @@ function previewForIncomingMessage(message: NonNullable<LineEvent["message"]>): 
   mediaType?: LineConversationMediaType;
   stickerId?: string;
   packageId?: string;
-} | null {
+} {
   const type = message.type;
   if (type === "text") {
     const text = message.text?.trim() ?? "";
