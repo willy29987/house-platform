@@ -7,6 +7,7 @@ import {
 import { matchesOwnerCaseStatusFilter, resolveOwnerCaseEffectiveStatus } from "@/lib/owner-tracking-case-status";
 import {
   canViewOwnerTrackingCase,
+  isCompanySharedOwnerStatus,
   matchesOwnerTrackingAssigneeFilter,
   type OwnerCasePreview,
   type OwnerFollowUpPreview,
@@ -96,8 +97,21 @@ export function buildOwnerTrackingListRows(
       };
     })
     .filter(({ case: c, last }) => {
-      if (visibility && !canViewOwnerTrackingCase(c, visibility)) return false;
-      if (!matchesOwnerTrackingAssigneeFilter(c.assignee, filters.assigneeFilter)) return false;
+      const effective = resolveOwnerCaseEffectiveStatus(store, c, last);
+      const companyShared =
+        contactFilter === "ALL" && isCompanySharedOwnerStatus(effective);
+      if (
+        visibility &&
+        !canViewOwnerTrackingCase(c, {
+          ...visibility,
+          effectiveStatus: companyShared ? effective : undefined,
+        })
+      ) {
+        return false;
+      }
+      if (!companyShared && !matchesOwnerTrackingAssigneeFilter(c.assignee, filters.assigneeFilter)) {
+        return false;
+      }
       if (!matchesOwnerCaseStatusFilter(store, c, filters.statusFilter, last)) return false;
       if (filters.propertyTypeFilter !== "ALL" && c.propertyType !== filters.propertyTypeFilter) {
         return false;

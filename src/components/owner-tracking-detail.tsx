@@ -14,6 +14,7 @@ import {
   persistOwnerTrackingStoreLocal,
   newId,
   OWNER_TRACKING_STATUS_OPTIONS,
+  canEditOwnerTrackingCase,
   canViewOwnerTrackingCase,
   deleteOwnerFollowUp,
   patchOwnerCaseNextContact,
@@ -284,7 +285,9 @@ export function OwnerTrackingDetail({
     );
   }
 
-  if (!canViewOwnerTrackingCase(ownerCase, { currentUsername, isSuperAdmin })) {
+  const displayStatus = resolveOwnerCaseEffectiveStatus(store, ownerCase);
+  const canEdit = canEditOwnerTrackingCase(ownerCase, { currentUsername, isSuperAdmin });
+  if (!canViewOwnerTrackingCase(ownerCase, { currentUsername, isSuperAdmin, effectiveStatus: displayStatus })) {
     return (
       <div className="rounded-xl border border-amber-200 bg-amber-50 p-8 text-center">
         <p className="font-medium text-amber-950">此案件由其他業務負責，您無法查看。</p>
@@ -298,10 +301,8 @@ export function OwnerTrackingDetail({
   const releaseYmd = normalizeNextContactDate(ownerCase.expectedReleaseDate);
   const upcomingRelease = isOwnerCaseUpcomingRelease(store, ownerCase);
   const releaseDays = releaseYmd ? getDaysUntilRelease(releaseYmd) : null;
-  const displayStatus = resolveOwnerCaseEffectiveStatus(store, ownerCase);
-
   return (
-    <div className="space-y-6 pb-32 lg:pb-8">
+    <div className={`space-y-6 ${canEdit ? "pb-32 lg:pb-8" : ""}`}>
       {upcomingRelease ? (
         <div className="rounded-xl border-2 border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
           <p className="font-semibold">⏰ 即將可再開發</p>
@@ -328,7 +329,7 @@ export function OwnerTrackingDetail({
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-700">
-              負責 {formatAdminStaffLabel(ownerCase.assignee, staffLabels)}
+              建立人 {formatAdminStaffLabel(ownerCase.assignee, staffLabels)}
             </span>
             <span
               className={`rounded-full px-3 py-1 text-xs font-medium ${statusBadgeClass(displayStatus)}`}
@@ -343,18 +344,24 @@ export function OwnerTrackingDetail({
         <h3 className="mt-5 border-t border-zinc-100 pt-4 text-base font-bold text-zinc-900">案件詳細資訊</h3>
         <CaseInfoGrid item={ownerCase} />
         <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-zinc-100 pt-4">
+          {canEdit ? (
           <Link
             href={editHref}
             className="inline-flex items-center rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-800 hover:bg-zinc-50"
           >
             修改案件
           </Link>
+          ) : (
+            <span className="text-sm text-zinc-500">這是其他業務建立的案件，只能查看。</span>
+          )}
           <Link
             href={`/admin/listings/new?type=rent&fromOwnerCase=${encodeURIComponent(caseId)}`}
             className="inline-flex items-center rounded-lg bg-[#0b2545] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1e3a8a]"
           >
             帶入租賃上架
           </Link>
+          {canEdit ? (
+          <>
           <button
             type="button"
             className={`inline-flex items-center rounded-lg border px-4 py-2 text-sm font-semibold transition ${
@@ -391,6 +398,8 @@ export function OwnerTrackingDetail({
               ? "總覽地址下會顯示「已上591」小標（再點可取消）"
               : "獨立上591、無本站物件時可手動標記"}
           </span>
+          </>
+          ) : null}
         </div>
       </div>
 
@@ -398,7 +407,7 @@ export function OwnerTrackingDetail({
         <h3 className="mb-4 text-lg font-bold text-zinc-900">追蹤紀錄</h3>
         {timeline.length === 0 ? (
           <p className="rounded-lg border border-dashed border-zinc-200 bg-white px-4 py-8 text-center text-sm text-zinc-500">
-            尚無紀錄，請在下方送出第一次追蹤
+            {canEdit ? "尚無紀錄，請在下方送出第一次追蹤" : "尚無紀錄"}
           </p>
         ) : (
           <ol className="relative space-y-0 border-l-2 border-zinc-200 pl-5">
@@ -429,6 +438,7 @@ export function OwnerTrackingDetail({
                       <p className="mt-2 text-sm leading-relaxed text-zinc-800">{item.note}</p>
                     ) : null}
                   </div>
+                  {canEdit ? (
                   <button
                     type="button"
                     onClick={() => handleDeleteFollowUp(item.id)}
@@ -453,6 +463,7 @@ export function OwnerTrackingDetail({
                       <path d="M14 11v6" />
                     </svg>
                   </button>
+                  ) : null}
                 </div>
               </li>
             ))}
@@ -460,6 +471,7 @@ export function OwnerTrackingDetail({
         )}
       </section>
 
+      {canEdit ? (
       <form
         onSubmit={handleSubmit}
         className="fixed inset-x-0 bottom-0 z-20 border-t border-zinc-200 bg-white/95 p-3 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] backdrop-blur sm:static sm:rounded-xl sm:border sm:p-5 sm:shadow-sm"
@@ -510,6 +522,7 @@ export function OwnerTrackingDetail({
           </button>
         </div>
       </form>
+      ) : null}
 
       <button
         type="button"

@@ -15,6 +15,7 @@ import {
   OWNER_TRACKING_STATUS_OPTIONS,
   patchOwnerCaseMarked591Posted,
   statusBadgeClass,
+  canEditOwnerTrackingCase,
   deleteOwnerCase,
   emptyOwnerTrackingStore,
   type OwnerCasePreview,
@@ -89,11 +90,7 @@ const COMPACT_FILTER_LABEL = "block min-w-0";
 const COMPACT_FILTER_SELECT =
   "w-full min-w-0 rounded-lg border border-zinc-300 px-2 py-2 text-sm sm:w-[7.125rem]";
 
-/** 表頭與資料列共用：上次備註減半，寬度補給地址／社區；電訪／操作加寬以免直書 */
-const LIST_ROW_GRID =
-  "sm:grid sm:grid-cols-[minmax(0,3.55fr)_minmax(6rem,0.9fr)_8rem_6.25rem_6.75rem_5.75rem_minmax(0,1fr)_5.75rem_3.5rem_5.5rem] sm:items-stretch sm:gap-x-0";
-
-/** 最高管理員：加負責人欄，方便對照各業務的下次聯繫日 */
+/** 含建立人欄，一般業務也能看出是誰建立的 */
 const LIST_ROW_GRID_SUPER =
   "sm:grid sm:grid-cols-[minmax(0,3.35fr)_minmax(6rem,0.9fr)_8rem_6.25rem_6.75rem_4.25rem_5.75rem_minmax(0,1fr)_5.75rem_3.5rem_5.5rem] sm:items-stretch sm:gap-x-0";
 
@@ -103,8 +100,8 @@ const LIST_CELL =
 
 const LIST_HEAD_CELL = `${LIST_CELL} justify-center text-center`;
 
-function ownerTrackingListRowGrid(isSuperAdmin: boolean) {
-  return isSuperAdmin ? LIST_ROW_GRID_SUPER : LIST_ROW_GRID;
+function ownerTrackingListRowGrid() {
+  return LIST_ROW_GRID_SUPER;
 }
 
 /** 列表建立／上次追蹤：只顯示月／日 */
@@ -850,16 +847,16 @@ function OwnerTrackingListInner({
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white shadow-sm">
-        <div className={isSuperAdmin ? "min-w-[76rem]" : "min-w-[72rem]"}>
+        <div className="min-w-[76rem]">
         <div
-          className={`hidden border-b border-zinc-100 bg-zinc-50 px-4 py-2.5 text-sm font-semibold text-zinc-500 ${ownerTrackingListRowGrid(isSuperAdmin)}`}
+          className={`hidden border-b border-zinc-100 bg-zinc-50 px-4 py-2.5 text-sm font-semibold text-zinc-500 ${ownerTrackingListRowGrid()}`}
         >
           <span className={`${LIST_HEAD_CELL} truncate`}>地址</span>
           <span className={`${LIST_HEAD_CELL} truncate`}>社區</span>
           <span className={`${LIST_HEAD_CELL} truncate`}>屋主</span>
           <span className={`${LIST_HEAD_CELL} truncate`}>網址</span>
           <span className={`${LIST_HEAD_CELL} truncate`}>目前狀態</span>
-          {isSuperAdmin ? <span className={`${LIST_HEAD_CELL} truncate`}>負責人</span> : null}
+          <span className={`${LIST_HEAD_CELL} truncate`}>建立人</span>
           <span className={`${LIST_HEAD_CELL} truncate`}>下次聯繫</span>
           <span className={`${LIST_HEAD_CELL} truncate`}>上次備註</span>
           <span className={`${LIST_HEAD_CELL} flex-col leading-snug tabular-nums`}>
@@ -898,6 +895,7 @@ function OwnerTrackingListInner({
                 effectiveStatus={effectiveStatus}
                 contactCount={contactCount}
                 isSuperAdmin={isSuperAdmin}
+                canEdit={canEditOwnerTrackingCase(c, { currentUsername, isSuperAdmin })}
                 listQuery={listQuery}
                 checkEntry={checkStore.byCaseId[c.id]}
                 checking591={checking591Ids.has(c.id)}
@@ -1152,9 +1150,16 @@ function Marked591PostedBadge({
   onToggle,
 }: {
   marked: boolean;
-  onToggle: () => void;
+  onToggle?: () => void;
 }) {
   if (!marked) return null;
+  if (!onToggle) {
+    return (
+      <span className="inline-block shrink-0 whitespace-nowrap rounded-full bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-violet-900 sm:text-[11px]">
+        已上591
+      </span>
+    );
+  }
   return (
     <button
       type="button"
@@ -1219,6 +1224,7 @@ const CaseRow = memo(function CaseRow({
   effectiveStatus,
   contactCount,
   isSuperAdmin,
+  canEdit,
   listQuery,
   checkEntry,
   checking591,
@@ -1232,6 +1238,7 @@ const CaseRow = memo(function CaseRow({
   effectiveStatus: string;
   contactCount: number;
   isSuperAdmin: boolean;
+  canEdit: boolean;
   listQuery: string;
   checkEntry: Listing591CheckEntry | undefined;
   checking591: boolean;
@@ -1261,7 +1268,7 @@ const CaseRow = memo(function CaseRow({
         className="absolute inset-0 z-0"
         aria-label={`查看案件：${item.address || item.ownerName}`}
       />
-      <div className={`pointer-events-none relative z-10 px-4 py-3 text-base ${ownerTrackingListRowGrid(isSuperAdmin)}`}>
+      <div className={`pointer-events-none relative z-10 px-4 py-3 text-base ${ownerTrackingListRowGrid()}`}>
         <div className={`${LIST_CELL} min-w-0 overflow-hidden`}>
           <div className="flex min-h-[2.5rem] w-full min-w-0 flex-col justify-center gap-0.5 overflow-hidden">
             <p
@@ -1274,7 +1281,11 @@ const CaseRow = memo(function CaseRow({
               <SiteListingBadge linkedListingId={item.linkedListingId} />
               <Marked591PostedBadge
                 marked={Boolean(item.marked591Posted)}
-                onToggle={() => onToggleMarked591Posted(item.id, !item.marked591Posted)}
+                onToggle={
+                  canEdit
+                    ? () => onToggleMarked591Posted(item.id, !item.marked591Posted)
+                    : undefined
+                }
               />
             </div>
           </div>
@@ -1314,7 +1325,7 @@ const CaseRow = memo(function CaseRow({
         </div>
 
         <div className={`${LIST_CELL} justify-center overflow-hidden text-center`}>
-          {last ? (
+          {last || effectiveStatus !== "持續聯繫" ? (
             <span
               className={`inline-block max-w-full truncate rounded-full px-2 py-0.5 text-xs font-medium leading-tight sm:text-sm ${statusBadgeClass(effectiveStatus)}`}
             >
@@ -1325,14 +1336,13 @@ const CaseRow = memo(function CaseRow({
           )}
         </div>
 
-        {isSuperAdmin ? (
-          <p
-            className={`${LIST_CELL} justify-center text-center truncate text-sm font-medium text-zinc-700`}
-            title={item.assignee?.trim() || undefined}
-          >
-            {formatAdminStaffLabel(item.assignee, staffLabels)}
-          </p>
-        ) : null}
+        <p
+          className={`${LIST_CELL} justify-center text-center truncate text-sm font-medium text-zinc-700`}
+          title={item.assignee?.trim() || undefined}
+        >
+          <span className="mr-1 text-xs font-normal text-zinc-400 sm:hidden">建立人</span>
+          {formatAdminStaffLabel(item.assignee, staffLabels)}
+        </p>
 
         <div className={`${LIST_CELL} justify-center overflow-hidden text-center`}>
           <div className="flex min-w-0 flex-col items-center justify-center gap-0.5 overflow-hidden">
@@ -1373,13 +1383,17 @@ const CaseRow = memo(function CaseRow({
         </p>
 
         <div className={`${LIST_CELL} pointer-events-auto relative z-20 flex justify-center gap-2 whitespace-nowrap`}>
-          <Link
-            href={editHref}
-            className="whitespace-nowrap text-sm font-semibold text-[#1e3a8a] hover:underline"
-            onClick={(e) => e.stopPropagation()}
-          >
-            修改
-          </Link>
+          {canEdit ? (
+            <Link
+              href={editHref}
+              className="whitespace-nowrap text-sm font-semibold text-[#1e3a8a] hover:underline"
+              onClick={(e) => e.stopPropagation()}
+            >
+              修改
+            </Link>
+          ) : (
+            <span className="text-sm text-zinc-400">查看</span>
+          )}
           {isSuperAdmin ? (
             <button
               type="button"

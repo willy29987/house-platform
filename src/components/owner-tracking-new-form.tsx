@@ -6,7 +6,7 @@ import { startTransition, useEffect, useState } from "react";
 import { markRouteNavigating } from "@/components/route-nav-progress";
 import {
   appendOwnerCase,
-  canViewOwnerTrackingCase,
+  canEditOwnerTrackingCase,
   OWNER_TRACKING_STATUS_OPTIONS,
   loadOwnerTrackingStore,
   loadOwnerTrackingStoreLocal,
@@ -183,7 +183,7 @@ export function OwnerTrackingNewForm({
       setHydrated(true);
       return;
     }
-    if (!canViewOwnerTrackingCase(found, { currentUsername, isSuperAdmin })) {
+    if (!canEditOwnerTrackingCase(found, { currentUsername, isSuperAdmin })) {
       setError("此案件由其他業務負責，您無法編輯");
       setHydrated(true);
       return;
@@ -372,7 +372,7 @@ export function OwnerTrackingNewForm({
     const store = loadOwnerTrackingStore();
     if (isEdit && caseId) {
       const existing = store.cases.find((c) => c.id === caseId);
-      if (!existing || !canViewOwnerTrackingCase(existing, { currentUsername, isSuperAdmin })) {
+      if (!existing || !canEditOwnerTrackingCase(existing, { currentUsername, isSuperAdmin })) {
         setError("此案件由其他業務負責，您無法編輯");
         setSubmitting(false);
         return;

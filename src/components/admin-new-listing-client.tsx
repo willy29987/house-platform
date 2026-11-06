@@ -11,6 +11,7 @@ import {
   persistOwnerTrackingStoreFromCloud,
 } from "@/lib/owner-tracking-preview";
 import { hydrateOwnerTrackingStoreOnce } from "@/lib/admin-cloud-sync-client";
+import { resolveOwnerCaseEffectiveStatus } from "@/lib/owner-tracking-case-status";
 
 type Props = {
   listingType: "RENT" | "SALE";
@@ -47,7 +48,14 @@ export function AdminNewListingClient({
 
       if (fromOwnerCaseId?.trim()) {
       const ownerCase = store.cases.find((c) => c.id === fromOwnerCaseId.trim());
-      if (ownerCase && !canViewOwnerTrackingCase(ownerCase, { currentUsername, isSuperAdmin })) {
+      if (
+        ownerCase &&
+        !canViewOwnerTrackingCase(ownerCase, {
+          currentUsername,
+          isSuperAdmin,
+          effectiveStatus: resolveOwnerCaseEffectiveStatus(store, ownerCase),
+        })
+      ) {
         found = false;
       } else if (ownerCase) {
         data = ownerCaseToListingDraft(ownerCase, listingType);

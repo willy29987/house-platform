@@ -468,8 +468,14 @@ export function matchesOwnerTrackingAssigneeFilter(assignee: string, assigneeFil
   return a === assigneeFilter.trim();
 }
 
-/** 業務可看自己的案件；未分配（—）為共用池；最高管理員看全部 */
-export function canViewOwnerTrackingCase(
+/** 全公司業務都可查看的狀態：可帶看、可上591 */
+export function isCompanySharedOwnerStatus(status: string): boolean {
+  const normalized = normalizeFollowUpStatus(status);
+  return normalized === "只可帶看" || normalized === "可上591";
+}
+
+/** 可修改：自己的案件、未分配，或最高管理員 */
+export function canEditOwnerTrackingCase(
   ownerCase: Pick<OwnerCasePreview, "assignee">,
   opts: { currentUsername: string; isSuperAdmin: boolean },
 ): boolean {
@@ -477,6 +483,18 @@ export function canViewOwnerTrackingCase(
   const a = ownerCase.assignee.trim();
   if (!a || a === "—") return true;
   return a === opts.currentUsername.trim();
+}
+
+/**
+ * 可查看：可修改的案件，以及全公司的「只可帶看／可上591」。
+ * effectiveStatus 要傳目前狀態，別人才看得到那兩類。
+ */
+export function canViewOwnerTrackingCase(
+  ownerCase: Pick<OwnerCasePreview, "assignee">,
+  opts: { currentUsername: string; isSuperAdmin: boolean; effectiveStatus?: string },
+): boolean {
+  if (canEditOwnerTrackingCase(ownerCase, opts)) return true;
+  return Boolean(opts.effectiveStatus && isCompanySharedOwnerStatus(opts.effectiveStatus));
 }
 
 export function lastFollowUp(
