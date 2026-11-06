@@ -11,20 +11,20 @@ export function LineLiffRentAssistant({
   liffId,
   listingBaseUrl,
   fallbackLineUserId = null,
-  lineBasicId = "@878thkii",
+  initialDisplayName = null,
   directListing = null,
 }: {
   listings: RentalMatchListing[];
-  lineBasicId?: string;
   liffId: string;
   listingBaseUrl: string;
   fallbackLineUserId?: string | null;
+  initialDisplayName?: string | null;
   /** 已有找房條件、又從推播點進物件時，直接開物件頁 */
   directListing?: LiffDirectListingEntry | null;
 }) {
   const [hydrated, setHydrated] = useState(false);
   const [lineUserId, setLineUserId] = useState<string | null>(fallbackLineUserId);
-  const [displayName, setDisplayName] = useState<string | null>(null);
+  const [displayName, setDisplayName] = useState<string | null>(initialDisplayName);
 
   useEffect(() => {
     setHydrated(true);
@@ -87,7 +87,6 @@ export function LineLiffRentAssistant({
       lineUserId={lineUserId}
       displayName={displayName}
       listingBaseUrl={listingBaseUrl}
-      lineBasicId={lineBasicId}
       directListing={directListing}
       onSubmitted={async () => {
         // 表單內已 closeWindow；此處僅備援

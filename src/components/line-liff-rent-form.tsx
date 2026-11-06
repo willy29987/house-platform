@@ -126,56 +126,50 @@ function ListingPickRow({
   hideToggle?: boolean;
 }) {
   const photo = listingPhotos(item)[0];
+  const selectLabel = selected ? "取消想看" : "想看這間";
   return (
     <div
-      className={`flex overflow-hidden rounded-2xl border bg-white ${
-        selected ? "border-[#06c755]" : "border-zinc-200"
+      className={`flex items-stretch gap-3 px-2 py-3.5 ${
+        !hideToggle && selected ? "bg-[#e8f8ef]" : "bg-white"
       }`}
     >
       <button
         type="button"
         onClick={onOpen}
-        className="flex min-w-0 flex-1 items-center gap-3 p-3 text-left"
+        aria-label={`查看${item.title}的照片與資訊`}
+        className="h-40 w-44 shrink-0 overflow-hidden rounded-xl bg-zinc-100"
       >
-        <span className="h-32 w-36 shrink-0 overflow-hidden rounded-2xl bg-zinc-100">
-          {photo ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={photo} alt="" className="h-full w-full object-cover" />
-          ) : null}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="line-clamp-2 text-base font-bold leading-snug text-zinc-900">
-            {item.title}
-          </span>
-          <span className="mt-1.5 block text-sm leading-snug text-zinc-600">
-            {item.city}
-            {item.district}
-            {guestFacingAddress(item.address)
-              ? ` ${guestFacingAddress(item.address)}`
-              : ""}
-          </span>
-          <span className="mt-1 block text-sm text-zinc-500">
-            {layoutLabel(item)} · {item.areaPing} 坪
-          </span>
-          <span className="mt-1.5 block text-lg font-semibold tabular-nums text-red-600">
-            {formatRent(item.price)}
-          </span>
-        </span>
+        {photo ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={photo} alt="" className="h-full w-full object-cover" />
+        ) : null}
       </button>
-      {hideToggle ? null : (
       <button
         type="button"
-        aria-label={selected ? "取消想看" : "想看這間"}
-        onClick={onToggle}
-        className={`flex w-16 shrink-0 flex-col items-center justify-center border-l text-sm font-bold ${
-          selected
-            ? "border-[#06c755]/40 bg-[#06c755] text-white"
-            : "border-zinc-200 bg-zinc-50 text-zinc-700"
-        }`}
+        onClick={hideToggle ? onOpen : onToggle}
+        aria-label={hideToggle ? `查看${item.title}` : selectLabel}
+        className="flex min-w-0 flex-1 flex-col justify-center text-left"
       >
-        {selected ? "已選" : "想看"}
+        <span className="line-clamp-2 text-base font-bold leading-snug text-zinc-900">
+          {item.title}
+        </span>
+        <span className="mt-1.5 block text-sm leading-snug text-zinc-600">
+          {item.city}
+          {item.district}
+          {guestFacingAddress(item.address) ? ` ${guestFacingAddress(item.address)}` : ""}
+        </span>
+        <span className="mt-1 block text-sm text-zinc-500">
+          {layoutLabel(item)} · {item.areaPing} 坪
+        </span>
+        <span className="mt-1.5 flex items-baseline justify-between gap-2">
+          <span className="text-lg font-semibold tabular-nums text-red-600">
+            {formatRent(item.price)}
+          </span>
+          {!hideToggle && selected ? (
+            <span className="shrink-0 text-xs font-bold text-[#067a36]">已選</span>
+          ) : null}
+        </span>
       </button>
-      )}
     </div>
   );
 }
@@ -644,20 +638,12 @@ function buildGuestChatMessage(input: {
   ].join("\n");
 }
 
-function buildOaComposeUrl(lineBasicId: string, text: string) {
-  const id = lineBasicId.startsWith("@") ? lineBasicId : `@${lineBasicId}`;
-  // URL 過長會失敗；留安全長度給客人一鍵傳訊（不算群發額度）
-  const body = text.length > 900 ? `${text.slice(0, 880)}\n…（完整資料已送出系統）` : text;
-  return `https://line.me/R/oaMessage/${encodeURIComponent(id)}/?text=${encodeURIComponent(body)}`;
-}
-
 export function LineLiffRentForm({
   listings,
   liffId,
   lineUserId,
   displayName,
   listingBaseUrl,
-  lineBasicId = "@878thkii",
   directListing = null,
   onSubmitted,
 }: {
@@ -666,7 +652,6 @@ export function LineLiffRentForm({
   lineUserId: string | null;
   displayName: string | null;
   listingBaseUrl: string;
-  lineBasicId?: string;
   directListing?: LiffDirectListingEntry | null;
   onSubmitted?: (caseId: string) => void;
 }) {
@@ -1166,10 +1151,7 @@ export function LineLiffRentForm({
     setSubmitting(true);
     setError("");
     try {
-      // 不走 Bot push（避免扣群發額度）：只用意圖「客人傳訊」
       let clientSent = false;
-      let clientSendError = "";
-      let composeOpened = false;
       let resolvedUserId = lineUserId;
       try {
         resolvedUserId = readClientMessagingUid(resolvedUserId);
@@ -1181,7 +1163,8 @@ export function LineLiffRentForm({
         chatText.length > 4900 ? `${chatText.slice(0, 4890)}…` : chatText;
 
       let liff: Awaited<ReturnType<typeof loadLiffClient>> = null;
-      if (liffId) {
+      const inLiffBrowser = /Line\/\d+\.\d+\.\d+ LIFF/.test(window.navigator.userAgent);
+      if (liffId && inLiffBrowser) {
         try {
           liff = await loadLiffClient();
           if (liff) {
@@ -1195,19 +1178,17 @@ export function LineLiffRentForm({
                 await liff.sendMessages([{ type: "text", text: outboundText }]);
                 clientSent = true;
               } catch (sendError) {
-                clientSendError =
-                  sendError instanceof Error ? sendError.message : "sendMessages failed";
                 console.warn("[liff-rent-form] sendMessages failed", sendError);
               }
-            } else {
-              clientSendError = "not_in_line_client";
             }
           }
         } catch (bootError) {
-          clientSendError =
-            bootError instanceof Error ? bootError.message : "liff boot failed";
           console.warn("[liff-rent-form] liff boot failed", bootError);
         }
+      }
+
+      if (!clientSent && !resolvedUserId) {
+        throw new Error("找不到你的 LINE 帳號。請回到聊天室點「開始找房」，再送出一次。");
       }
 
       const response = await fetch("/api/line/rental-cases", {
@@ -1233,8 +1214,8 @@ export function LineLiffRentForm({
           requestedWhen: when,
           summaryText: outboundText,
           mergeIntoCaseId: options?.mergeIntoCaseId,
-          // 永遠略過對客人的 push，避免吃群發額度
           skipGuestPush: true,
+          clientDelivered: clientSent,
         }),
       });
       const data = (await response.json().catch(() => null)) as {
@@ -1244,31 +1225,6 @@ export function LineLiffRentForm({
       } | null;
       if (!response.ok || !data) {
         throw new Error(data?.error || "送出失敗");
-      }
-
-      // sendMessages 失敗（常見：LIFF 未開 chat_message.write）→ 開官方帳號傳訊頁，仍由客人送出、不扣額度
-      if (!clientSent) {
-        const composeUrl = buildOaComposeUrl(
-          lineBasicId,
-          data.confirmText || outboundText,
-        );
-        try {
-          if (liff?.isInClient() && typeof liff.openWindow === "function") {
-            liff.openWindow({ url: composeUrl, external: false });
-          } else {
-            window.location.href = composeUrl;
-          }
-          composeOpened = true;
-        } catch (composeError) {
-          console.warn("[liff-rent-form] oa compose failed", composeError);
-          throw new Error(
-            `無法自動傳回對話${clientSendError ? `（${clientSendError}）` : ""}。請到 LINE Developers 為此 LIFF 勾選 chat_message.write。`,
-          );
-        }
-      }
-
-      if (!clientSent && !composeOpened) {
-        throw new Error("無法傳到 LINE 對話");
       }
 
       setDone({ when, titles: picked.map((item) => item.title) });
@@ -1302,9 +1258,7 @@ export function LineLiffRentForm({
             ))}
           </ul>
         </div>
-        <p className="text-sm text-zinc-600">
-          請回到 LINE 對話；若跳出傳訊畫面，點傳送即可（不扣群發額度）。
-        </p>
+        <p className="text-sm text-zinc-600">資料已傳進 LINE 對話，請回到聊天室即可看到。</p>
       </div>
     );
   }
@@ -1372,7 +1326,7 @@ export function LineLiffRentForm({
                 : step === "listings"
                   ? skipCriteria
                     ? "這間是推給你的物件，看完可直接約時間"
-                    : "點物件看照片與資訊，右側點「想看」"
+                    : "點照片看資訊，點其他地方選想看"
                   : showSavedProfile
                     ? "已有個人資料，只要選看屋時間"
                     : "填基本資料與看屋時間後送出"}
@@ -1589,7 +1543,7 @@ export function LineLiffRentForm({
               className="rounded-none border-x-0 px-2 py-3"
             >
               <p className="px-1 text-sm text-zinc-500">
-                點物件卡片查看照片與資訊；右側「想看」可複選。
+                點照片查看照片與資訊；點文字可複選想看。
                 {matchedRelaxed.length ? `（已放寬：${matchedRelaxed.join("、")}）` : ""}
               </p>
               {matched.length === 0 ? (
@@ -1611,7 +1565,7 @@ export function LineLiffRentForm({
                   )}
                 </div>
               ) : (
-                <div className="space-y-2">
+                <div className="divide-y divide-zinc-300">
                   {matched.map((item) => (
                     <ListingPickRow
                       key={item.id}
@@ -1634,7 +1588,7 @@ export function LineLiffRentForm({
                   符合你條件的相近物件，可一併勾選想看。
                   {similarNotes[0] ? `（${similarNotes[0]}）` : ""}
                 </p>
-                <div className="space-y-2">
+                <div className="divide-y divide-zinc-300">
                   {similar.map((item) => (
                     <ListingPickRow
                       key={item.id}
@@ -1794,7 +1748,7 @@ export function LineLiffRentForm({
                 <p className="text-sm text-zinc-800">
                   已約時間：<span className="font-semibold">{openViewing.requestedWhen}</span>
                 </p>
-                <div className="space-y-2">
+                <div className="divide-y divide-zinc-300">
                   {openViewing.picked.map((item) => {
                     const full = listings.find((listing) => listing.id === item.id);
                     if (!full) {

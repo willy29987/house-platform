@@ -363,6 +363,29 @@ export async function appendLineConversationBotMessages(input: {
   }
 }
 
+/** 把已寫入的預約原文清掉 text: 前綴，並換成客人的 LINE 名稱。 */
+export async function rewriteLineConversationMessages(
+  edits: Array<{ lineUserId: string; messageId: string; text: string }>,
+): Promise<void> {
+  const useful = edits.filter((row) => row.lineUserId.trim() && row.messageId && row.text.trim());
+  if (useful.length === 0) return;
+
+  const store = normalizeStore(
+    await readAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.lineConversations),
+  );
+  let changed = false;
+  for (const edit of useful) {
+    const current = store.conversations.find((row) => row.lineUserId === edit.lineUserId.trim());
+    const message = current?.messages.find((row) => row.id === edit.messageId);
+    if (!current || !message) continue;
+    const text = edit.text.trim();
+    if (message.text === text) continue;
+    message.text = text;
+    changed = true;
+  }
+  if (changed) await writeAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.lineConversations, store);
+}
+
 /** 補上已查到的客人頭像／暱稱（一次寫入） */
 export async function patchLineConversationProfiles(
   patches: Array<{ lineUserId: string; displayName?: string; pictureUrl?: string }>,

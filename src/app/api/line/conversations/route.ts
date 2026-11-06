@@ -5,6 +5,7 @@ import { listOpenGuestSessions } from "@/lib/line-guest-sessions";
 import { listGuestProfileUserIds } from "@/lib/line-guest-profile";
 import { listActiveGuestWatches } from "@/lib/line-guest-watch";
 import { buildPublicBaseUrl, pushLineMessages, type LineMessage } from "@/lib/line-messaging";
+import { syncRecentGuestBookings } from "@/lib/line-booking-sync";
 import { readLineRentalCases } from "@/lib/line-rental-cases";
 
 export const dynamic = "force-dynamic";
@@ -31,6 +32,10 @@ export async function GET() {
   if (!admin) {
     return NextResponse.json({ error: "未登入" }, { status: 401, headers: NO_STORE });
   }
+
+  await syncRecentGuestBookings().catch((error) => {
+    console.warn("[line/conversations] sync bookings failed", error);
+  });
 
   const [conversations, cases, sessions, watches, profileUserIds] = await Promise.all([
     readLineConversations(),

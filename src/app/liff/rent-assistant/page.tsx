@@ -1,4 +1,5 @@
 import { LineLiffRentAssistant } from "@/components/line-liff-rent-assistant";
+import { getLineUserProfile } from "@/lib/line-messaging";
 import { getGuestWatchByUserId, watchRecordToCriteria } from "@/lib/line-guest-watch";
 import { findLatestOpenViewing } from "@/lib/line-rental-cases";
 import { LINE_LIFF_RENT_ASSISTANT_ID, messagingUidFromSearch } from "@/lib/line-liff-id";
@@ -58,12 +59,7 @@ export default async function LiffRentAssistantPage({
   const listingBaseUrl =
     process.env.NEXT_PUBLIC_LISTING_BASE_URL?.replace(/\/$/, "") ||
     "https://house-platform.vercel.app";
-  const lineBasicId =
-    (
-      process.env.NEXT_PUBLIC_LINE_OA_ADD_FRIEND_URL ||
-      process.env.NEXT_PUBLIC_LINE_OA_URL ||
-      ""
-    ).match(/@[\w.-]+/)?.[0] ?? "@878thkii";
+  const lineProfile = fallbackLineUserId ? await getLineUserProfile(fallbackLineUserId) : null;
 
   return (
     <LineLiffRentAssistant
@@ -71,7 +67,7 @@ export default async function LiffRentAssistantPage({
       liffId={liffId}
       listingBaseUrl={listingBaseUrl}
       fallbackLineUserId={fallbackLineUserId}
-      lineBasicId={lineBasicId}
+      initialDisplayName={lineProfile?.displayName ?? null}
       directListing={directListing}
     />
   );

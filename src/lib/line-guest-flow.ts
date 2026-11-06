@@ -24,7 +24,8 @@ import {
   type LineMessage,
   type LineMessageAction,
 } from "@/lib/line-messaging";
-import { appendLineRentalCase, attachRecentCaseToLineUser } from "@/lib/line-rental-cases";
+import { syncGuestBookingMessage } from "@/lib/line-booking-sync";
+import { appendLineRentalCase } from "@/lib/line-rental-cases";
 import { VIEWING_SUBMIT_ACK_TEXT } from "@/lib/line-viewing-guest-copy";
 import { notifyAgentsOfNewViewing } from "@/lib/line-viewing-agent";
 
@@ -384,8 +385,12 @@ export async function handleGuestText(input: {
       session.step = "done";
       await saveGuestSession(session);
     }
-    await attachRecentCaseToLineUser(input.lineUserId, text).catch((error) => {
-      console.warn("[line-guest-flow] attach booking case failed", error);
+    await syncGuestBookingMessage({
+      lineUserId: input.lineUserId,
+      displayName: input.displayName,
+      text,
+    }).catch((error) => {
+      console.warn("[line-guest-flow] sync booking case failed", error);
     });
     return true;
   }

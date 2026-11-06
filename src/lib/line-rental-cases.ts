@@ -207,20 +207,54 @@ export async function appendLineRentalCase(
   return created;
 }
 
-/** 圖文選單直接開 LIFF 時沒有 uid；等客人訊息進 webhook 後把案件掛回正確的人。 */
+export async function patchLineRentalCaseBooking(
+  id: string,
+  patch: Partial<
+    Pick<
+      LineRentalCase,
+      | "lineUserId"
+      | "displayName"
+      | "summaryText"
+      | "phone"
+      | "occupation"
+      | "nationality"
+      | "peopleCount"
+      | "petNote"
+      | "moveInDate"
+      | "criteriaText"
+      | "picked"
+      | "requestedWhen"
+    >
+  >,
+): Promise<LineRentalCase | null> {
+  const caseId = id.trim();
+  if (!caseId) return null;
+  const store = normalizeLineRentalCasesStore(
+    await readAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.lineRentalCases),
+  );
+  const index = store.cases.findIndex((item) => item.id === caseId);
+  if (index < 0) return null;
+  const next: LineRentalCase = { ...store.cases[index], ...patch };
+  store.cases[index] = next;
+  await writeAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.lineRentalCases, store);
+  return next;
+}
+
+/** 圖文選單直接開表單時沒有 uid；等客人訊息進 webhook 後把案件掛回正確的人。 */
 export async function attachRecentCaseToLineUser(
   lineUserId: string,
   summaryText: string,
 ): Promise<LineRentalCase | null> {
   const id = lineUserId.trim();
-  const text = summaryText.trim();
+  const text = summaryText.trim().replace(/^(?:text\s*[:=：]\s*)+/i, "");
   if (!id || !text.includes("【找房預約】")) return null;
   const store = normalizeLineRentalCasesStore(
     await readAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.lineRentalCases),
   );
   const now = Date.now();
   const index = store.cases.findIndex((item) => {
-    if (item.summaryText.trim() !== text || item.lineUserId === id) return false;
+    const stored = item.summaryText.trim().replace(/^(?:text\s*[:=：]\s*)+/i, "");
+    if (stored !== text || item.lineUserId === id) return false;
     const age = now - new Date(item.createdAt).getTime();
     return Number.isFinite(age) && age >= 0 && age < 5 * 60_000;
   });

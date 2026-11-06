@@ -8,6 +8,7 @@ import { listGuestProfileUserIds } from "@/lib/line-guest-profile";
 import { listActiveGuestWatches } from "@/lib/line-guest-watch";
 import { getLineAccountLink } from "@/lib/line-official-account";
 import { loadRentalMatchListings } from "@/lib/line-rental-assistant";
+import { syncRecentGuestBookings } from "@/lib/line-booking-sync";
 import { readLineRentalCases } from "@/lib/line-rental-cases";
 
 export const dynamic = "force-dynamic";
@@ -54,6 +55,10 @@ async function attachMissingGuestAvatars<T extends { lineUserId: string; picture
 export default async function LineAssistantPreviewPage() {
   const current = await getCurrentAdmin();
   if (!current) redirect("/admin/login");
+
+  await syncRecentGuestBookings().catch((error) => {
+    console.warn("[line-assistant] sync bookings failed", error);
+  });
 
   const [cards, lineAccount, rawConversations, cases, sessions, watches, profileUserIds] =
     await Promise.all([

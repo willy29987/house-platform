@@ -14,7 +14,8 @@ import {
   type LineRentalCase,
   type LineRentalCasePicked,
 } from "@/lib/line-rental-cases";
-import { pushLineMessages } from "@/lib/line-messaging";
+import { applyLineDisplayName } from "@/lib/line-booking-text";
+import { getLineUserProfile, pushLineMessages } from "@/lib/line-messaging";
 import { VIEWING_SUBMIT_ACK_TEXT } from "@/lib/line-viewing-guest-copy";
 import { upsertGuestProfile } from "@/lib/line-guest-profile";
 import { getViewingAgentUserIds, notifyAgentsOfNewViewing } from "@/lib/line-viewing-agent";
@@ -38,6 +39,8 @@ type PostBody = {
   mergeIntoCaseId?: string;
   /** 客戶端已用 liff.sendMessages 送過時略過重複 push */
   skipGuestPush?: boolean;
+  /** 客人的 LINE 已經有這則預約原文 */
+  clientDelivered?: boolean;
 };
 
 export async function GET() {
@@ -68,18 +71,27 @@ export async function POST(request: Request) {
   const status = hasAgents ? "awaiting_agent" : "pending_confirm";
   const clientSummary =
     typeof body.summaryText === "string" ? body.summaryText.trim() : "";
-  const summaryText =
-    clientSummary ||
-    (hasAgents
-      ? `已記下想看時間（${requestedWhen}），已送業務確認。`
-      : `已記下想看時間（${requestedWhen}），待同事確認。`);
   const skipGuestPush = body.skipGuestPush === true;
+  const clientDelivered = body.clientDelivered === true;
   const fromBody = typeof body.lineUserId === "string" ? body.lineUserId.trim() || null : null;
   const fromChat =
     clientSummary.includes("【找房預約】")
       ? await findRecentGuestUserIdByExactText(clientSummary)
       : null;
   const lineUserId = fromChat || fromBody;
+  let displayName =
+    (typeof body.displayName === "string" && body.displayName.trim()) || "LINE 客人";
+  if (lineUserId) {
+    const profile = await getLineUserProfile(lineUserId);
+    if (profile?.displayName) displayName = profile.displayName;
+  }
+  const summaryText = applyLineDisplayName(
+    clientSummary ||
+      (hasAgents
+        ? `已記下想看時間（${requestedWhen}），已送業務確認。`
+        : `已記下想看時間（${requestedWhen}），待同事確認。`),
+    displayName,
+  );
   const incomingPicked: LineRentalCasePicked[] = picked.map((item) => ({
     id: String(item.id),
     title: String(item.title),
@@ -116,7 +128,7 @@ export async function POST(request: Request) {
           kind: "viewing",
           status,
           lineUserId,
-          displayName: (typeof body.displayName === "string" && body.displayName.trim()) || "LINE 客人",
+          displayName,
           phone,
           occupation: typeof body.occupation === "string" ? body.occupation.trim() : "",
           nationality: typeof body.nationality === "string" ? body.nationality.trim() : "",
@@ -166,7 +178,7 @@ export async function POST(request: Request) {
           "想看的物件（含原先已約）：",
           ...listingLines,
         ].join("\n")
-      : clientSummary ||
+      : summaryText ||
         [
           "【找房預約】已收到你的資料：",
           "",
@@ -202,6 +214,14 @@ export async function POST(request: Request) {
         });
       } catch (error) {
         console.warn("[line/rental-cases] append booking to conversation failed", error);
+      }
+
+      if (!clientDelivered) {
+        await pushLineMessages(
+          created.lineUserId,
+          [{ type: "text", text: confirmText }],
+          { force: true, logAs: false },
+        );
       }
 
       const ack = await pushLineMessages(
