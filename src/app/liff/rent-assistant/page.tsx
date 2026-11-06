@@ -41,7 +41,7 @@ export default async function LiffRentAssistantPage({
     : null;
   const priorListingIds = openViewing?.picked.map((item) => item.id) ?? [];
 
-  const cards = await loadRentalMatchListings(60, [...pushedListingIds, ...priorListingIds]);
+  const cards = await loadRentalMatchListings(null, [...pushedListingIds, ...priorListingIds]);
   let directListing: LiffDirectListingEntry | null = null;
   if (fallbackLineUserId && pushedListingIds.length) {
     const watch = await getGuestWatchByUserId(fallbackLineUserId);

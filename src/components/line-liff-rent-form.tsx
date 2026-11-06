@@ -12,7 +12,6 @@ import { loadLiffClient } from "@/lib/line-liff-client";
 import { readClientMessagingUid } from "@/lib/line-liff-id";
 import {
   EXTRA_OPTIONS,
-  MATCH_LIST_LIMIT,
   RENT_PRICE_OPTIONS,
   ROOM_TYPE_OPTIONS,
   criteriaSummary,
@@ -138,24 +137,27 @@ function ListingPickRow({
         onClick={onOpen}
         className="flex min-w-0 flex-1 items-center gap-3 p-3 text-left"
       >
-        <span className="h-20 w-24 shrink-0 overflow-hidden rounded-xl bg-zinc-100">
+        <span className="h-32 w-36 shrink-0 overflow-hidden rounded-2xl bg-zinc-100">
           {photo ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={photo} alt="" className="h-full w-full object-cover" />
           ) : null}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="line-clamp-2 text-sm font-bold leading-snug text-zinc-900">
+          <span className="line-clamp-2 text-base font-bold leading-snug text-zinc-900">
             {item.title}
           </span>
-          <span className="mt-1 block text-xs text-zinc-500">
+          <span className="mt-1.5 block text-sm leading-snug text-zinc-600">
             {item.city}
             {item.district}
+            {guestFacingAddress(item.address)
+              ? ` ${guestFacingAddress(item.address)}`
+              : ""}
           </span>
-          <span className="mt-0.5 block text-xs text-zinc-500">
+          <span className="mt-1 block text-sm text-zinc-500">
             {layoutLabel(item)} · {item.areaPing} 坪
           </span>
-          <span className="mt-1 block text-sm font-semibold tabular-nums text-red-600">
+          <span className="mt-1.5 block text-lg font-semibold tabular-nums text-red-600">
             {formatRent(item.price)}
           </span>
         </span>
@@ -165,7 +167,7 @@ function ListingPickRow({
         type="button"
         aria-label={selected ? "取消想看" : "想看這間"}
         onClick={onToggle}
-        className={`flex w-[4.5rem] shrink-0 flex-col items-center justify-center border-l text-xs font-bold ${
+        className={`flex w-16 shrink-0 flex-col items-center justify-center border-l text-sm font-bold ${
           selected
             ? "border-[#06c755]/40 bg-[#06c755] text-white"
             : "border-zinc-200 bg-zinc-50 text-zinc-700"
@@ -237,10 +239,18 @@ function DetailInfoBlock({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Section({
+  title,
+  children,
+  className = "",
+}: {
+  title: string;
+  children: ReactNode;
+  className?: string;
+}) {
   return (
-    <section className="space-y-3 rounded-2xl border border-zinc-200 bg-white p-4">
-      <h2 className="text-sm font-bold text-zinc-900">{title}</h2>
+    <section className={`space-y-3 rounded-2xl border border-zinc-200 bg-white p-4 ${className}`}>
+      <h2 className="text-base font-bold text-zinc-900">{title}</h2>
       {children}
     </section>
   );
@@ -1019,28 +1029,12 @@ export function LineLiffRentForm({
     }
 
     const result = matchRentals(listings, criteria);
-    const items = applyBudgetFilter(result.items, minRaw, maxRaw, min, max).slice(
-      0,
-      MATCH_LIST_LIMIT,
-    );
-    const similarResult = similarRentals(
-      listings,
-      criteria,
-      items.map((item) => item.id),
-      8,
-    );
-    const similarItems = applyBudgetFilter(
-      similarResult.items,
-      minRaw,
-      maxRaw,
-      min,
-      max,
-    ).slice(0, 8);
+    const items = applyBudgetFilter(result.items, minRaw, maxRaw, min, max);
 
     setMatched(items);
     setMatchedRelaxed(result.relaxed);
-    setSimilar(similarItems);
-    setSimilarNotes(similarResult.notes);
+    setSimilar([]);
+    setSimilarNotes([]);
     setPickedIds([]);
     setDetailId(null);
     setError("");
@@ -1354,7 +1348,11 @@ export function LineLiffRentForm({
   }
 
   return (
-    <div className="relative z-0 mx-auto flex min-h-dvh w-full max-w-md flex-col bg-zinc-100">
+    <div
+      className={`relative z-0 mx-auto flex min-h-dvh w-full flex-col bg-zinc-100 ${
+        step === "listings" ? "" : "max-w-md"
+      }`}
+    >
       <header className="shrink-0 border-b border-zinc-200 bg-white px-4 py-3">
         <div className="flex items-center gap-2">
           {step !== "criteria" && !(skipCriteria && step === "listings") ? (
@@ -1384,7 +1382,11 @@ export function LineLiffRentForm({
         <StepDots step={step} hideCriteria={skipCriteria} />
       </header>
 
-      <div className="flex-1 space-y-3 px-3 py-3 pb-4">
+      <div
+        className={`flex-1 space-y-3 py-3 pb-4 ${
+          step === "listings" ? "px-0" : "px-3"
+        }`}
+      >
         {step === "criteria" ? (
           <Section title="找房條件">
             <div>
@@ -1582,8 +1584,11 @@ export function LineLiffRentForm({
 
         {step === "listings" ? (
           <>
-            <Section title={`配對物件（${matched.length}）`}>
-              <p className="text-xs text-zinc-500">
+            <Section
+              title={`配對物件（${matched.length}）`}
+              className="rounded-none border-x-0 px-2 py-3"
+            >
+              <p className="px-1 text-sm text-zinc-500">
                 點物件卡片查看照片與資訊；右側「想看」可複選。
                 {matchedRelaxed.length ? `（已放寬：${matchedRelaxed.join("、")}）` : ""}
               </p>
@@ -1620,8 +1625,11 @@ export function LineLiffRentForm({
               )}
             </Section>
 
-            {similar.length > 0 ? (
-              <Section title={`類似物件（${similar.length}）`}>
+            {skipCriteria && similar.length > 0 ? (
+              <Section
+                title={`類似物件（${similar.length}）`}
+                className="rounded-none border-x-0 px-2 py-3"
+              >
                 <p className="text-xs text-zinc-500">
                   符合你條件的相近物件，可一併勾選想看。
                   {similarNotes[0] ? `（${similarNotes[0]}）` : ""}
@@ -1867,7 +1875,7 @@ export function LineLiffRentForm({
       </div>
 
       <footer className="shrink-0 border-t border-zinc-200 bg-white px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-        <div className="mx-auto max-w-md">
+        <div className={step === "listings" ? "w-full" : "mx-auto max-w-md"}>
           {error ? <p className="mb-2 text-center text-sm text-red-600">{error}</p> : null}
           <button
             type="button"
