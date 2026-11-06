@@ -25,6 +25,7 @@ import {
   type LineMessageAction,
 } from "@/lib/line-messaging";
 import { syncGuestBookingMessage } from "@/lib/line-booking-sync";
+import { ensureGuestFindHomeMenu } from "@/lib/line-guest-rich-menu";
 import { appendLineRentalCase } from "@/lib/line-rental-cases";
 import { VIEWING_SUBMIT_ACK_TEXT } from "@/lib/line-viewing-guest-copy";
 import { notifyAgentsOfNewViewing } from "@/lib/line-viewing-agent";
@@ -355,6 +356,9 @@ export async function startGuestFlow(input: {
   lineUserId: string;
   displayName?: string;
 }) {
+  void ensureGuestFindHomeMenu(input.lineUserId).catch((error) => {
+    console.warn("[line-guest-flow] rich menu link failed", error);
+  });
   await replyGuest(input.replyToken, input.lineUserId, openFullLiffFormMessages(input.lineUserId));
 }
 
@@ -366,6 +370,9 @@ export async function handleGuestText(input: {
 }): Promise<boolean> {
   const text = input.text.trim();
   if (!text) return false;
+  void ensureGuestFindHomeMenu(input.lineUserId).catch((error) => {
+    console.warn("[line-guest-flow] rich menu link failed", error);
+  });
 
   // 找房改為一頁式 LIFF；不再用聊天室追問人數／職業等
   if (/^開始找房$/.test(text) || text.includes("開始找房")) {

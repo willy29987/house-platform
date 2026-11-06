@@ -1191,7 +1191,7 @@ export function LineLiffRentForm({
       }
 
       if (!clientSent && !resolvedUserId) {
-        throw new Error("找不到你的 LINE 帳號。請回到聊天室點「開始找房」，再送出一次。");
+        throw new Error("這次沒有對到你的 LINE 帳號。請關掉頁面，重新點圖文選單「開始找房」。");
       }
 
       const response = await fetch("/api/line/rental-cases", {

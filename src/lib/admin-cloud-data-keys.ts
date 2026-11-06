@@ -10,6 +10,7 @@ export const ADMIN_CLOUD_DATA_KEYS = {
   lineGuestPushQueue: "line_guest_push_queue",
   lineRuntimeSecrets: "line_runtime_secrets",
   lineConversations: "line_conversations",
+  lineGuestRichMenus: "line_guest_rich_menus",
   adminWebPushVapid: "admin_web_push_vapid",
   adminWebPushSubscriptions: "admin_web_push_subscriptions",
 } as const;
