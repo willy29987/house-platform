@@ -223,6 +223,7 @@ export function AdminListingForm({
   const [uploading, setUploading] = useState(false);
   const [uploadingVideo, setUploadingVideo] = useState(false);
   const [importing591, setImporting591] = useState(false);
+  const [importedFrom591, setImportedFrom591] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);
   const draggingImage = useRef<number | null>(null);
   const [draggingImageIndex, setDraggingImageIndex] = useState<number | null>(null);
@@ -322,6 +323,7 @@ export function AdminListingForm({
         return;
       }
       const draft = json.draft;
+      setImportedFrom591(true);
       const keepType = Boolean(lockedListingType);
       const importedPropertyType = isBuildingType(draft.propertyType) ? draft.propertyType : null;
       const importedCondition = (HOUSE_CONDITION_OPTIONS as readonly string[]).includes(draft.houseCondition ?? "")
@@ -649,6 +651,9 @@ export function AdminListingForm({
       isPublished: fromOwnerCaseId?.trim() ? true : formData.isPublished,
       ...(mode === "create" && fromOwnerCaseId?.trim()
         ? { fromOwnerCaseId: fromOwnerCaseId.trim() }
+        : {}),
+      ...(mode === "create" && importedFrom591 && !fromOwnerCaseId?.trim() && formData.isPublished
+        ? { importedFrom591: true }
         : {}),
     };
 

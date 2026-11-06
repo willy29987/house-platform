@@ -1,0 +1,206 @@
+/** 新增廣告用 591 帶入並上架後，把同一筆詳細資料寫進屋主追蹤的「只可帶看」。 */
+
+import { ADMIN_CLOUD_DATA_KEYS } from "@/lib/admin-cloud-data-keys";
+import { readAdminCloudPayload, writeAdminCloudPayload } from "@/lib/admin-cloud-data-server";
+import { LAYOUT_OPEN_LABEL, layoutUiToStored } from "@/lib/owner-tracking-form-ui";
+import { extract591ListingId } from "@/lib/listing-591-id";
+import type { ListingInput } from "@/lib/listing-validation";
+import {
+  appendOwnerCase,
+  normalizeOwnerTrackingStore,
+  ownerCaseToInput,
+  patchOwnerCaseLinkedListing,
+  patchOwnerCaseMarked591Posted,
+  updateOwnerCase,
+  type OwnerCaseInput,
+  type OwnerTrackingStore,
+} from "@/lib/owner-tracking-preview";
+
+const VIEWABLE_STATUS = "只可帶看" as const;
+
+function text(value: string | number | null | undefined): string {
+  if (value == null) return "";
+  return String(value).trim();
+}
+
+function yesNo(value: boolean | null | undefined): string {
+  if (value === true) return "可";
+  if (value === false) return "不可";
+  return "";
+}
+
+function rentText(data: ListingInput): string {
+  if (data.listingType === "SALE" && data.price >= 10000 && data.price % 10000 === 0) {
+    return `${data.price / 10000}萬`;
+  }
+  return String(data.price);
+}
+
+function managementFeeText(value: number | null | undefined): string {
+  if (value === 0) return "無";
+  if (value == null) return "含在租金裡";
+  return String(value);
+}
+
+function parkingPriceText(data: ListingInput): string {
+  if (!text(data.parkingType)) return "";
+  const amount = data.listingType === "SALE" ? data.parkingPrice : data.parkingRent;
+  if (amount == null || amount <= 0) return "含在租金內";
+  if (data.listingType === "SALE" && amount >= 10000 && amount % 10000 === 0) return `${amount / 10000}萬`;
+  return String(amount);
+}
+
+function layoutText(data: ListingInput): string {
+  return layoutUiToStored({
+    rooms: data.rooms > 0 ? String(data.rooms) : "",
+    living: data.livingRooms != null && data.livingRooms > 0 ? String(data.livingRooms) : "",
+    bath: data.bathrooms > 0 ? String(data.bathrooms) : "",
+    balcony: data.balconies != null && data.balconies > 0 ? String(data.balconies) : "",
+    openLayout: (data.features ?? []).some((feature) => feature.includes(LAYOUT_OPEN_LABEL)),
+  });
+}
+
+function viewingText(value: string | null | undefined): string {
+  if (value === "KEY") return "有鑰匙，隨時可帶看";
+  if (value === "OWNER_APPOINTMENT") return "需約屋主時間";
+  return text(value);
+}
+
+function areaBits(data: ListingInput): string {
+  const parts = [
+    data.areaMain != null ? `主建物 ${data.areaMain} 坪` : "",
+    data.areaAncillary != null ? `附屬 ${data.areaAncillary} 坪` : "",
+    data.areaCommon != null ? `公設 ${data.areaCommon} 坪` : "",
+    data.areaLand != null ? `土地 ${data.areaLand} 坪` : "",
+    data.areaParkingSpace != null ? `車位 ${data.areaParkingSpace} 坪` : "",
+  ].filter(Boolean);
+  return parts.join("、");
+}
+
+function extraNote(data: ListingInput): string {
+  const features = (data.features ?? []).filter((feature) => !feature.includes(LAYOUT_OPEN_LABEL));
+  const lines = [
+    text(data.title) ? `標題：${text(data.title)}` : "",
+    data.floor != null || data.totalFloors != null
+      ? `樓層：${data.floor != null ? `${data.floor}F` : "—"}${data.totalFloors != null ? ` / 共 ${data.totalFloors}F` : ""}`
+      : "",
+    text(data.mrtLine) || text(data.mrtStation)
+      ? `捷運：${[text(data.mrtLine), text(data.mrtStation)].filter(Boolean).join(" ")}`
+      : "",
+    viewingText(data.viewingMethod) ? `帶看方式：${viewingText(data.viewingMethod)}` : "",
+    text(data.securityDeposit) ? `押金：${text(data.securityDeposit)}` : "",
+    text(data.availableFrom) ? `可遷入：${text(data.availableFrom)}` : "",
+    text(data.roomNumber) ? `房號：${text(data.roomNumber)}` : "",
+    text(data.householdsPerFloor) ? `每層戶數：${text(data.householdsPerFloor)}` : "",
+    (data.furnitureItems ?? []).length ? `家具：${data.furnitureItems!.join("、")}` : "",
+    (data.equipmentItems ?? []).length ? `設備：${data.equipmentItems!.join("、")}` : "",
+    features.length ? `特色：${features.join("、")}` : "",
+    areaBits(data) ? `坪數明細：${areaBits(data)}` : "",
+    text(data.shortTermRent) ? `短租：${text(data.shortTermRent)}` : "",
+    text(data.registrationUse) ? `登記用途：${text(data.registrationUse)}` : "",
+    data.buildingAge != null ? `屋齡：${data.buildingAge}` : "",
+    text(data.orientation) ? `座向：${text(data.orientation)}` : "",
+    text(data.decorLevel) ? `裝潢：${text(data.decorLevel)}` : "",
+    text(data.usageZoning) ? `分區：${text(data.usageZoning)}` : "",
+    text(data.legalUsage) ? `法定用途：${text(data.legalUsage)}` : "",
+    data.hasElevator === true ? "電梯：有" : data.hasElevator === false ? "電梯：無" : "",
+    text(data.videoUrl) ? `影片：${text(data.videoUrl)}` : "",
+  ].filter(Boolean);
+  return lines.join("\n");
+}
+
+export function listingInputToOwnerCase(data: ListingInput): OwnerCaseInput {
+  const subsidy =
+    data.rentSubsidy === true ? "可申請" : data.rentSubsidy === false ? "不可申請" : "";
+  return {
+    address: data.address,
+    city: data.city,
+    district: data.district,
+    floor: data.floor != null ? String(data.floor) : "",
+    totalFloors: data.totalFloors != null ? String(data.totalFloors) : "",
+    propertyType: data.propertyType,
+    houseCondition: data.houseCondition ?? "",
+    community: text(data.community),
+    ownerName: data.contactName,
+    phone: data.contactPhone,
+    listingUrl: text(data.source591Url) || text(data.source591Id),
+    rent: rentText(data),
+    layout: layoutText(data),
+    areaPing: String(data.areaPing),
+    managementFee: managementFeeText(data.managementFee),
+    otherFees: text(data.otherFees),
+    parking: text(data.parkingType),
+    parkingNumber: text(data.parkingSpaceInfo),
+    parkingPrice: parkingPriceText(data),
+    pets: yesNo(data.petsAllowed),
+    rentSubsidy: subsidy,
+    taxFiling: yesNo(data.taxDeductible),
+    householdRegistration: yesNo(data.canRegisterAddress),
+    serviceFee: text(data.serviceFee),
+    specialMatters: text(data.specialMatters),
+    caseNote: extraNote(data),
+    nextContactDate: "",
+    expectedReleaseDate: "",
+  };
+}
+
+function same591(left: string, right: string): boolean {
+  const a = extract591ListingId(left);
+  const b = extract591ListingId(right);
+  if (a && b) return a === b;
+  return Boolean(left.trim()) && left.trim() === right.trim();
+}
+
+function fillEmptyFields(current: OwnerCaseInput, incoming: OwnerCaseInput): OwnerCaseInput {
+  const next = { ...current };
+  (Object.keys(incoming) as (keyof OwnerCaseInput)[]).forEach((key) => {
+    if (!text(current[key]) && text(incoming[key])) next[key] = incoming[key];
+  });
+  const extra = incoming.caseNote
+    .split("\n")
+    .filter((line) => line.trim() && !current.caseNote.includes(line.trim()));
+  if (extra.length) {
+    next.caseNote = [current.caseNote.trim(), ...extra].filter(Boolean).join("\n");
+  }
+  return next;
+}
+
+export async function addPublishedListingToViewableOwnerCase(input: {
+  listingId: string;
+  data: ListingInput;
+  assignee: string;
+}): Promise<string | null> {
+  const listingId = input.listingId.trim();
+  if (!listingId) return null;
+
+  const incoming = listingInputToOwnerCase(input.data);
+  const raw = await readAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.ownerTracking);
+  const store = normalizeOwnerTrackingStore(
+    (raw as OwnerTrackingStore | null) ?? { cases: [], followUps: [] },
+  );
+  const source = incoming.listingUrl;
+  const existing = source
+    ? store.cases.find((row) => same591(row.listingUrl, source) || row.linkedListingId === listingId)
+    : store.cases.find((row) => row.linkedListingId === listingId);
+
+  let next = store;
+  let caseId = existing?.id ?? "";
+  if (!existing) {
+    const created = appendOwnerCase(store, incoming, input.assignee, VIEWABLE_STATUS);
+    caseId = created.caseId;
+    next = {
+      ...created.store,
+      followUps: created.store.followUps.map((row) =>
+        row.caseId === caseId ? { ...row, note: "從新增廣告的 591 帶入上架，加入可帶看" } : row,
+      ),
+    };
+  } else {
+    const filled = updateOwnerCase(store, existing.id, fillEmptyFields(ownerCaseToInput(existing), incoming));
+    next = filled ?? store;
+  }
+
+  next = patchOwnerCaseLinkedListing(next, caseId, listingId);
+  next = patchOwnerCaseMarked591Posted(next, caseId, true);
+  await writeAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.ownerTracking, next);
+  return caseId;
+}

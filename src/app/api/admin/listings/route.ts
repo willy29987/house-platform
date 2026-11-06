@@ -4,6 +4,7 @@ import { normalizeItemList } from "@/lib/furniture-appliance-value";
 import { toListingDescription } from "@/lib/listing-internal-meta";
 import { prisma } from "@/lib/prisma";
 import { resolve591IdFromUrlOrId } from "@/lib/listing-591-id";
+import { addPublishedListingToViewableOwnerCase } from "@/lib/listing-to-owner-tracking";
 import { listingInputSchema } from "@/lib/listing-validation";
 
 export async function POST(request: Request) {
@@ -20,6 +21,10 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
+  const importedFrom591 =
+    Boolean(body) &&
+    typeof body === "object" &&
+    (body as { importedFrom591?: unknown }).importedFrom591 === true;
   const parsed = listingInputSchema.safeParse(body);
   if (!parsed.success) {
     const fieldErrors = parsed.error.flatten().fieldErrors;
@@ -119,7 +124,20 @@ export async function POST(request: Request) {
       select: { id: true },
     });
 
-    return NextResponse.json({ ok: true, id: listing.id });
+    let ownerCaseId: string | null = null;
+    if (isPublished && importedFrom591 && !fromOwnerCase) {
+      try {
+        ownerCaseId = await addPublishedListingToViewableOwnerCase({
+          listingId: listing.id,
+          data,
+          assignee: current.username,
+        });
+      } catch (error) {
+        console.error("[api/admin/listings POST] owner tracking sync failed", error);
+      }
+    }
+
+    return NextResponse.json({ ok: true, id: listing.id, ownerCaseId });
   } catch (error) {
     console.error("[api/admin/listings POST]", error);
     const message = error instanceof Error ? error.message : "建立房源時發生未知錯誤";
