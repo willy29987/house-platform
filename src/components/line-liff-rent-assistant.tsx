@@ -37,6 +37,9 @@ export function LineLiffRentAssistant({
     if (!liffId) return;
 
     async function boot() {
+      // 開發中的 LIFF 頻道會把一般客人導到 400 認證頁。只有已經在 LIFF 瀏覽器裡才初始化。
+      const inLiffBrowser = /Line\/\d+\.\d+\.\d+ LIFF/.test(window.navigator.userAgent);
+      if (!inLiffBrowser) return;
       const liff = await loadLiffClient();
       if (!liff || cancelled) return;
       try {
