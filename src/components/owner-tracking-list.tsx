@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   backfillOwnerCaseLinkedListingsFrom591,
@@ -130,41 +130,68 @@ function OwnerTrackingListInner({
   staffLabels = {},
   initialStore,
 }: Props) {
-  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const listQuery = searchParams.toString();
-
   const urlState = useMemo(
     () => parseOwnerTrackingListSearch(searchParams, { isSuperAdmin, currentUsername }),
     [searchParams, isSuperAdmin, currentUsername],
   );
+  /**
+   * 篩選放在本機狀態。router.replace 會讓這頁重跑伺服器並重抓整包案件，
+   * 點一次下拉就要等網路。這裡立刻換清單，網址只用 history 更新。
+   */
+  const [filters, setFilters] = useState(urlState);
+  const filtersRef = useRef(filters);
+  filtersRef.current = filters;
+  const writtenQueryRef = useRef(searchParams.toString());
   const { keyword, statusFilter, propertyTypeFilter, assigneeFilter, listing591Filter, contactFilter, page } =
-    urlState;
+    filters;
 
-  /** 搜尋：本地即時篩選；URL 延遲更新，避免每鍵 router.replace 造成卡頓 */
+  /** 搜尋：本地即時篩選；網址稍後跟上，同樣不走整頁導航 */
   const searchComposingRef = useRef(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const keywordInputRef = useRef(keyword);
   const [keywordInput, setKeywordInput] = useState(keyword);
   keywordInputRef.current = keywordInput;
 
+  const listQuery = useMemo(
+    () => buildOwnerTrackingListQuery({ ...filters, keyword: keywordInput.trim() }),
+    [filters, keywordInput],
+  );
+
   const patchListUrl = useCallback(
     (patch: Partial<OwnerTrackingListUrlState>) => {
+      const current = filtersRef.current;
       const pendingKeyword =
-        !("keyword" in patch) && keywordInput.trim() !== urlState.keyword.trim()
+        !("keyword" in patch) && keywordInput.trim() !== current.keyword.trim()
           ? keywordInput.trim()
           : undefined;
       const next = {
-        ...urlState,
+        ...current,
         ...patch,
         ...(pendingKeyword !== undefined ? { keyword: pendingKeyword } : {}),
       };
+      filtersRef.current = next;
+      setFilters(next);
       const qs = buildOwnerTrackingListQuery(next);
-      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+      writtenQueryRef.current = qs;
+      const url = qs ? `${pathname}?${qs}` : pathname;
+      // 帶著 Next 自己的 history state（含 __NA）時，被包過的 replaceState 不會重抓這頁。
+      const historyState = window.history.state;
+      window.history.replaceState(historyState, "", url);
     },
-    [urlState, pathname, router, keywordInput],
+    [pathname, keywordInput],
   );
+
+  useEffect(() => {
+    const qs = searchParams.toString();
+    if (qs === writtenQueryRef.current) return;
+    writtenQueryRef.current = qs;
+    const next = parseOwnerTrackingListSearch(searchParams, { isSuperAdmin, currentUsername });
+    filtersRef.current = next;
+    setFilters(next);
+    setKeywordInput(next.keyword);
+  }, [searchParams, isSuperAdmin, currentUsername]);
 
   const commitSearchToUrl = useCallback(
     (value: string) => {
