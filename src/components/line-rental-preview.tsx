@@ -172,8 +172,24 @@ function inferMediaType(line: ChatLine): LineConversationMediaType | undefined {
   return undefined;
 }
 
-function stickerImageUrl(stickerId: string) {
-  return `https://stickershop.line-scdn.net/stickershop/v1/sticker/${encodeURIComponent(stickerId)}/android/sticker.png`;
+function stickerImageUrl(stickerId: string, animated = false) {
+  const file = animated ? "sticker_animation.png" : "sticker.png";
+  return `https://stickershop.line-scdn.net/stickershop/v1/sticker/${encodeURIComponent(stickerId)}/android/${file}`;
+}
+
+function StickerImage({ stickerId }: { stickerId: string }) {
+  const [variant, setVariant] = useState<"still" | "animated" | "text">("still");
+  if (variant === "text") return <span className="text-zinc-600">［貼圖］</span>;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={stickerImageUrl(stickerId, variant === "animated")}
+      alt="貼圖"
+      className="h-28 w-28 object-contain"
+      loading="lazy"
+      onError={() => setVariant(variant === "still" ? "animated" : "text")}
+    />
+  );
 }
 
 function lineContentUrl(messageId: string) {
@@ -185,15 +201,7 @@ function LineMessageBody({ line }: { line: ChatLine }) {
   const mediaType = inferMediaType(line);
 
   if (mediaType === "sticker" && line.stickerId) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={stickerImageUrl(line.stickerId)}
-        alt="貼圖"
-        className="h-28 w-28 object-contain"
-        loading="lazy"
-      />
-    );
+    return <StickerImage stickerId={line.stickerId} />;
   }
 
   if (mediaType === "image" && line.messageId) {
@@ -237,6 +245,19 @@ function LineMessageBody({ line }: { line: ChatLine }) {
 
   if (mediaType === "audio" && line.messageId && /^\d+$/.test(line.messageId)) {
     return <audio src={lineContentUrl(line.messageId)} controls className="w-full max-w-[16rem]" />;
+  }
+
+  if (mediaType === "file" && line.messageId && /^\d+$/.test(line.messageId)) {
+    return (
+      <a
+        href={lineContentUrl(line.messageId)}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="break-all text-[#5179ad] underline"
+      >
+        {line.text || "［檔案］"}
+      </a>
+    );
   }
 
   if (mediaType === "sticker") {

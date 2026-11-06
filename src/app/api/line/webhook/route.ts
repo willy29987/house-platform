@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { handle591LinkInquiry, handleImageInquiry } from "@/lib/line-591-inquiry";
 import {
   appendLineConversationMessage,
+  patchLineConversationProfiles,
   recordLineFriendFollow,
   recordLineFriendUnfollow,
   type LineConversationMediaType,
@@ -43,6 +44,7 @@ type LineEvent = {
   type?: string;
   timestamp?: number;
   replyToken?: string;
+  webhookEventId?: string;
   source?: { userId?: string; type?: string };
   message?: {
     type?: string;
@@ -115,7 +117,7 @@ function previewForIncomingMessage(message: NonNullable<LineEvent["message"]>): 
   const type = message.type;
   if (type === "text") {
     const text = message.text?.trim() ?? "";
-    return text ? { text } : null;
+    return { text: text || "［空白訊息］" };
   }
   if (type === "image") return { text: "［圖片］", mediaType: "image" };
   if (type === "video") return { text: "［影片］", mediaType: "video" };
@@ -145,19 +147,22 @@ function previewForIncomingMessage(message: NonNullable<LineEvent["message"]>): 
       packageId: message.packageId?.trim() || undefined,
     };
   }
-  return type ? { text: `［${type}］` } : null;
+  return { text: type ? `［${type}］` : "［訊息］" };
 }
 
-async function storeGuestMessage(input: {
-  lineUserId: string;
-  text: string;
-  displayName?: string;
-  pictureUrl?: string;
-  messageId?: string;
-  mediaType?: LineConversationMediaType;
-  stickerId?: string;
-  packageId?: string;
-}) {
+async function storeGuestMessage(
+  input: {
+    lineUserId: string;
+    text: string;
+    displayName?: string;
+    pictureUrl?: string;
+    messageId?: string;
+    mediaType?: LineConversationMediaType;
+    stickerId?: string;
+    packageId?: string;
+  },
+  state: { failed: boolean },
+) {
   try {
     const saved = await appendLineConversationMessage({
       lineUserId: input.lineUserId,
@@ -181,6 +186,7 @@ async function storeGuestMessage(input: {
       });
     }
   } catch (error) {
+    state.failed = true;
     console.error("[line/webhook] append guest message failed", error);
   }
 }
@@ -197,7 +203,7 @@ async function resolveGuestProfile(userId: string | null): Promise<{
   };
 }
 
-async function handleEvent(event: LineEvent) {
+async function handleEvent(event: LineEvent, state: { failed: boolean }) {
   const userId = event.source?.userId ?? null;
   rememberLineUserId(userId, event.type);
 
@@ -226,30 +232,31 @@ async function handleEvent(event: LineEvent) {
         });
       }
     } catch (error) {
+      state.failed = true;
       console.error("[line/webhook] follow/unfollow store failed", error);
     }
     return;
   }
 
-  const guestProfile = await resolveGuestProfile(userId);
-  const displayName = guestProfile.displayName;
-  const pictureUrl = guestProfile.pictureUrl;
-
   if (event.type === "postback") {
-    if (!event.replyToken) return;
     const data = event.postback?.data?.trim() ?? "";
-    if (!data || !userId) return;
-
-    const postbackLabel = guessPostbackDisplayText(data);
-    if (postbackLabel) {
-      await storeGuestMessage({
-        lineUserId: userId,
-        text: postbackLabel,
-        displayName,
-        pictureUrl,
-        messageId: `postback:${event.replyToken}:${data}`,
-      });
+    if (userId && data) {
+      await storeGuestMessage(
+        {
+          lineUserId: userId,
+          text: guessPostbackDisplayText(data) || `［按鈕］${data}`,
+          messageId:
+            event.webhookEventId ||
+            `postback:${event.replyToken || String(event.timestamp || Date.now())}:${data}`,
+        },
+        state,
+      );
+      if (state.failed) return;
     }
+    if (!event.replyToken || !data || !userId) return;
+
+    const guestProfile = await resolveGuestProfile(userId);
+    const displayName = guestProfile.displayName;
 
     if (data.startsWith("guest:")) {
       await handleGuestPostback({
@@ -284,20 +291,34 @@ async function handleEvent(event: LineEvent) {
   if (event.type !== "message") return;
 
   const message = event.message;
-  if (!message) return;
+  if (!message || !userId) return;
   const preview = previewForIncomingMessage(message);
 
-  // 先寫入客服對話（不因業務帳號／缺 replyToken 而跳過）
-  if (userId && preview) {
-    await storeGuestMessage({
+  // 先寫入，再查暱稱。寫入失敗就停，讓 LINE 重送這則。
+  await storeGuestMessage(
+    {
       lineUserId: userId,
       text: preview.text,
-      displayName,
-      pictureUrl,
-      messageId: message.id,
+      messageId: message.id || event.webhookEventId,
       mediaType: preview.mediaType,
       stickerId: preview.stickerId,
       packageId: preview.packageId,
+    },
+    state,
+  );
+  if (state.failed) return;
+
+  const guestProfile = await resolveGuestProfile(userId);
+  const displayName = guestProfile.displayName;
+  if (displayName !== "LINE 客人" || guestProfile.pictureUrl) {
+    await patchLineConversationProfiles([
+      {
+        lineUserId: userId,
+        displayName: displayName !== "LINE 客人" ? displayName : undefined,
+        pictureUrl: guestProfile.pictureUrl,
+      },
+    ]).catch((error) => {
+      console.warn("[line/webhook] profile patch failed", error);
     });
   }
 
@@ -367,15 +388,18 @@ export async function POST(request: Request) {
   }
 
   const events = Array.isArray(body.events) ? body.events : [];
-  await Promise.all(
-    events.map(async (event) => {
-      try {
-        await handleEvent(event);
-      } catch (error) {
-        console.error("[line/webhook] event error", error);
-      }
-    }),
-  );
+  const state = { failed: false };
+  for (const event of events) {
+    try {
+      await handleEvent(event, state);
+    } catch (error) {
+      console.error("[line/webhook] event error", error);
+    }
+  }
+
+  if (state.failed) {
+    return NextResponse.json({ error: "store failed" }, { status: 500 });
+  }
 
   return NextResponse.json({ ok: true });
 }

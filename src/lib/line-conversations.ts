@@ -1,8 +1,10 @@
 /** 真實 LINE 對話紀錄（以 webhook／實際送出內容為準） */
 
+import type { Prisma } from "@prisma/client";
 import { ADMIN_CLOUD_DATA_KEYS } from "@/lib/admin-cloud-data-keys";
-import { readAdminCloudPayload, writeAdminCloudPayload } from "@/lib/admin-cloud-data-server";
+import { readAdminCloudPayload } from "@/lib/admin-cloud-data-server";
 import type { LineMessage } from "@/lib/line-messaging";
+import { prisma } from "@/lib/prisma";
 
 export type LineConversationFrom = "guest" | "bot" | "staff";
 
@@ -40,6 +42,8 @@ export type LineConversation = {
 
 type Store = {
   conversations: LineConversation[];
+  /** 每次成功寫入加一，用來避免同時寫入時後者蓋掉前者 */
+  revision: number;
 };
 
 const MEDIA_TYPES = new Set<LineConversationMediaType>([
@@ -77,12 +81,128 @@ function normalizeMessage(raw: unknown): LineConversationMessage | null {
   };
 }
 
+function messageMergeKey(message: LineConversationMessage): string {
+  return message.messageId ? `mid:${message.messageId}` : `id:${message.id}`;
+}
+
+function mergeMessages(
+  left: LineConversationMessage[],
+  right: LineConversationMessage[],
+): LineConversationMessage[] {
+  const byKey = new Map<string, LineConversationMessage>();
+  for (const message of [...left, ...right]) {
+    const key = messageMergeKey(message);
+    const prev = byKey.get(key);
+    if (!prev) {
+      byKey.set(key, message);
+      continue;
+    }
+    byKey.set(key, {
+      ...prev,
+      ...message,
+      text: message.text || prev.text,
+      createdAt: prev.createdAt <= message.createdAt ? prev.createdAt : message.createdAt,
+      mediaType: message.mediaType ?? prev.mediaType,
+      stickerId: message.stickerId ?? prev.stickerId,
+      packageId: message.packageId ?? prev.packageId,
+      messageId: message.messageId ?? prev.messageId,
+    });
+  }
+
+  const realText = new Set(
+    [...byKey.values()]
+      .filter((message) => message.messageId && !message.messageId.startsWith("case:"))
+      .map((message) => `${message.from}\n${message.text}`),
+  );
+  const messages = [...byKey.values()].filter(
+    (message) =>
+      !(message.messageId?.startsWith("case:") && realText.has(`${message.from}\n${message.text}`)),
+  );
+  messages.sort(
+    (a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
+  );
+  return messages;
+}
+
+function mergeConversation(left: LineConversation, right: LineConversation): LineConversation {
+  const newer = left.updatedAt >= right.updatedAt ? left : right;
+  const older = newer === left ? right : left;
+  const messages = mergeMessages(left.messages, right.messages);
+  const lastAt = messages[messages.length - 1]?.createdAt;
+  const updatedAt = [newer.updatedAt, older.updatedAt, lastAt]
+    .filter((value): value is string => Boolean(value))
+    .sort()
+    .at(-1)!;
+  return {
+    lineUserId: newer.lineUserId,
+    displayName: newer.displayName || older.displayName,
+    pictureUrl: newer.pictureUrl ?? older.pictureUrl,
+    followedAt: newer.followedAt ?? older.followedAt,
+    unfollowedAt: newer.updatedAt >= older.updatedAt ? newer.unfollowedAt : older.unfollowedAt,
+    updatedAt,
+    messages,
+  };
+}
+
+function mergeStores(existing: Store, incoming: Store): Store {
+  const byUser = new Map<string, LineConversation>();
+  for (const row of existing.conversations) byUser.set(row.lineUserId, row);
+  for (const row of incoming.conversations) {
+    const prev = byUser.get(row.lineUserId);
+    byUser.set(row.lineUserId, prev ? mergeConversation(prev, row) : row);
+  }
+  return { conversations: [...byUser.values()], revision: existing.revision };
+}
+
+/**
+ * 整包覆寫會在兩則訊息同時進來時把其中一則蓋掉。
+ * 寫入前再讀最新內容做聯集，並用 revision 對上才覆寫；沒對上就重試。
+ */
+async function persistLineConversationStore(incoming: Store): Promise<void> {
+  const key = ADMIN_CLOUD_DATA_KEYS.lineConversations;
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    if (attempt > 0) {
+      await new Promise((resolve) => setTimeout(resolve, 40 * attempt));
+    }
+    const row = await prisma.adminCloudData.findUnique({ where: { key } });
+    const existing = normalizeStore(row?.payload);
+    const merged = mergeStores(existing, incoming);
+    const payload = {
+      ...merged,
+      revision: existing.revision + 1,
+    } as unknown as Prisma.InputJsonValue;
+    if (!row) {
+      try {
+        await prisma.adminCloudData.create({ data: { key, payload } });
+        return;
+      } catch {
+        continue;
+      }
+    }
+    const updated = await prisma.$executeRaw`
+      UPDATE "AdminCloudData"
+      SET payload = CAST(${JSON.stringify(payload)} AS jsonb),
+          "updatedAt" = NOW()
+      WHERE key = ${key}
+        AND COALESCE(CAST(payload->>'revision' AS integer), 0) = ${existing.revision}
+    `;
+    if (Number(updated) === 1) return;
+  }
+  throw new Error("LINE 對話寫入衝突，請稍後再試");
+}
+
 function normalizeStore(payload: unknown): Store {
-  if (!payload || typeof payload !== "object") return { conversations: [] };
+  if (!payload || typeof payload !== "object") return { conversations: [], revision: 0 };
+  const revisionRaw = (payload as { revision?: unknown }).revision;
+  const revision =
+    typeof revisionRaw === "number" && Number.isInteger(revisionRaw) && revisionRaw >= 0
+      ? revisionRaw
+      : 0;
   const rows = Array.isArray((payload as Store).conversations)
     ? (payload as Store).conversations
     : [];
   return {
+    revision,
     conversations: rows
       .filter((row) => row && typeof row.lineUserId === "string")
       .map((row) => ({
@@ -185,7 +305,7 @@ export async function recordLineFriendFollow(input: {
       messages: [],
     };
     store.conversations.unshift(created);
-    await writeAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.lineConversations, store);
+    await persistLineConversationStore(store);
     return created;
   }
 
@@ -197,7 +317,7 @@ export async function recordLineFriendFollow(input: {
   if (typeof input.pictureUrl === "string") current.pictureUrl = input.pictureUrl;
   store.conversations.splice(index, 1);
   store.conversations.unshift(current);
-  await writeAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.lineConversations, store);
+  await persistLineConversationStore(store);
   return current;
 }
 
@@ -231,7 +351,7 @@ export async function recordLineFriendUnfollow(input: {
     store.conversations.unshift(current);
   }
 
-  await writeAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.lineConversations, store);
+  await persistLineConversationStore(store);
 }
 
 export async function appendLineConversationMessage(input: {
@@ -255,20 +375,8 @@ export async function appendLineConversationMessage(input: {
   const index = store.conversations.findIndex((row) => row.lineUserId === lineUserId);
   const existing = index >= 0 ? store.conversations[index] : null;
 
-  // 避免同一則 webhook message 重複寫入
+  // 只略過 LINE 重送的同一則。內容一樣但編號不同的新訊息仍要留下。
   if (input.messageId && existing?.messages.some((m) => m.messageId === input.messageId)) {
-    return null;
-  }
-
-  // LIFF sendMessages 與案件備援可能幾乎同時寫入同一段預約摘要
-  if (
-    input.from === "guest" &&
-    existing?.messages.some((m) => {
-      if (m.from !== "guest" || m.text !== text) return false;
-      const age = Date.now() - new Date(m.createdAt).getTime();
-      return Number.isFinite(age) && age >= 0 && age < 10 * 60_000;
-    })
-  ) {
     return null;
   }
 
@@ -309,7 +417,7 @@ export async function appendLineConversationMessage(input: {
     store.conversations.unshift(current);
   }
 
-  await writeAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.lineConversations, store);
+  await persistLineConversationStore(store);
   return message;
 }
 
@@ -383,7 +491,7 @@ export async function rewriteLineConversationMessages(
     message.text = text;
     changed = true;
   }
-  if (changed) await writeAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.lineConversations, store);
+  if (changed) await persistLineConversationStore(store);
 }
 
 /** 補上已查到的客人頭像／暱稱（一次寫入） */
@@ -410,6 +518,6 @@ export async function patchLineConversationProfiles(
     }
   }
   if (changed) {
-    await writeAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.lineConversations, store);
+    await persistLineConversationStore(store);
   }
 }

@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { ListingCardFavorite } from "@/components/listing-card-favorite";
 import { maskAddress, type ListingCard as ListingCardType } from "@/lib/listings";
@@ -69,19 +70,21 @@ export function ListingCardItem({ listing, className = "" }: Props) {
       href={`/listings/${listing.id}`}
       className={`group flex flex-col overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-zinc-200 transition hover:-translate-y-0.5 hover:shadow-lg hover:ring-zinc-300 ${className}`}
     >
-      {/* 封面圖：依原圖比例顯示，不裁上下 */}
-      <div className="relative w-full bg-zinc-100">
-        <img
+      {/* 封面圖：固定較矮的橫幅，每張卡片同一高度 */}
+      <div className="relative aspect-[16/9] w-full overflow-hidden bg-zinc-100">
+        <Image
           src={getCoverImage(listing)}
           alt={listing.title}
-          className="block h-auto w-full"
+          fill
+          className="object-cover object-center"
+          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
         />
         <ListingCardFavorite listingId={listing.id} />
       </div>
 
       {/* 內容：不 stretch，避免輪播等高時底部留白 */}
-      <div className="flex flex-col px-3.5 pb-2 pt-2.5">
-        <h3 className="line-clamp-1 text-[17px] font-bold leading-tight text-zinc-900">
+      <div className="flex flex-col px-3.5 pb-3 pt-3">
+        <h3 className="line-clamp-1 text-lg font-bold leading-snug text-zinc-900 sm:text-xl">
           {listing.title}
         </h3>
 
@@ -91,9 +94,9 @@ export function ListingCardItem({ listing, className = "" }: Props) {
             <div className="min-w-0 flex-1">
               {mrtStation ? (
                 <span
-                  className={`inline-flex max-w-full items-center gap-1 rounded-md px-2 py-0.5 text-[12px] font-semibold text-white ${mrtBadgeClass}`}
+                  className={`inline-flex max-w-full items-center gap-1 rounded-md px-2 py-0.5 text-sm font-semibold text-white ${mrtBadgeClass}`}
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="currentColor" className="shrink-0">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor" className="shrink-0">
                     <path d="M12 2C8 2 4 2.5 4 6v9.5a3.5 3.5 0 003.5 3.5L6 21h2l1.5-2h5L16 21h2l-1.5-2a3.5 3.5 0 003.5-3.5V6c0-3.5-4-4-8-4zm-4.5 15a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm3.5-6H6V6h5.5v5zm1 0V6H18v5h-5.5zm3.5 6a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" />
                   </svg>
                   <span className="truncate">
@@ -104,7 +107,7 @@ export function ListingCardItem({ listing, className = "" }: Props) {
               ) : null}
             </div>
             {hasParking ? (
-              <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700">
+              <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-emerald-50 px-2 py-0.5 text-sm font-bold text-emerald-700">
                 🚗 有車位
               </span>
             ) : null}
@@ -112,13 +115,13 @@ export function ListingCardItem({ listing, className = "" }: Props) {
         ) : null}
 
         {/* 地址 */}
-        <p className="mt-1 line-clamp-1 text-[13.5px] text-zinc-600">
+        <p className="mt-1.5 line-clamp-1 text-[15px] text-zinc-600 sm:text-base">
           <span className="mr-1 text-zinc-400">📍</span>
           {listing.city}{listing.district} {maskAddress(listing.address)}
         </p>
 
         {/* 坪數 / 格局 */}
-        <p className="mt-0.5 text-[14px] text-zinc-800">
+        <p className="mt-1 text-[15px] text-zinc-800 sm:text-base">
           <span className="mr-1 text-zinc-400">🏠</span>
           <span className="font-semibold">{listing.areaPing}坪</span>
           <span className="mx-1.5 text-zinc-300">·</span>
@@ -127,7 +130,7 @@ export function ListingCardItem({ listing, className = "" }: Props) {
 
         {/* 社區／車位與價格同一列（省一列高度） */}
         <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1 border-t border-zinc-100 pt-1.5 pb-0">
-          <span className="min-w-0 flex-1 line-clamp-1 text-[13px] font-semibold text-zinc-700">
+          <span className="min-w-0 flex-1 line-clamp-1 text-[15px] font-semibold text-zinc-700 sm:text-base">
             🏢 {listing.community || propertyTypeLabel(listing.propertyType)}
           </span>
           <div
@@ -136,10 +139,10 @@ export function ListingCardItem({ listing, className = "" }: Props) {
             }`}
           >
             {price.prefix ? (
-              <span className="text-[10px] font-bold sm:text-[11px]">{price.prefix}</span>
+              <span className="text-xs font-bold sm:text-sm">{price.prefix}</span>
             ) : null}
-            <span className="text-base font-extrabold leading-none tracking-tight sm:text-lg">{price.main}</span>
-            <span className="text-[11px] font-bold sm:text-xs">{price.unit}</span>
+            <span className="text-xl font-extrabold leading-none tracking-tight sm:text-2xl">{price.main}</span>
+            <span className="text-sm font-bold sm:text-base">{price.unit}</span>
           </div>
         </div>
       </div>
