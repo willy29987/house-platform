@@ -703,7 +703,7 @@ export function AdminListingTable({
                     />
                     <DetailRow label="電梯" value={triText(l.hasElevator)} />
                     <DetailRow label="屋齡" value={l.buildingAge != null ? `${l.buildingAge}年` : "—"} />
-                    <DetailRow label="管理費" value={l.managementFee ? `NT$ ${l.managementFee.toLocaleString("zh-TW")}` : "—"} />
+                    <DetailRow label="管理費" value={l.managementFee ? `NT$ ${l.managementFee.toLocaleString("zh-TW")}` : l.managementFee === 0 ? "無" : "—"} />
                     <DetailRow label="房屋類型" value={l.legalUsage ?? l.usageZoning ?? "—"} />
                     <DetailRow label="使照登記" value={l.registrationUse} fullWidth />
                     {l.listingType === "RENT" ? (
@@ -734,7 +734,7 @@ export function AdminListingTable({
                     />
                     <DetailRow label="電梯" value={triText(l.hasElevator)} />
                     <DetailRow label="屋齡" value={l.buildingAge != null ? `${l.buildingAge}年` : "—"} />
-                    <DetailRow label="管理費" value={l.managementFee ? `NT$ ${l.managementFee.toLocaleString("zh-TW")}` : "—"} />
+                    <DetailRow label="管理費" value={l.managementFee ? `NT$ ${l.managementFee.toLocaleString("zh-TW")}` : l.managementFee === 0 ? "無" : "—"} />
                     <DetailRow label="房屋類型" value={l.legalUsage ?? l.usageZoning ?? "—"} />
                     <DetailRow label="使照登記" value={l.registrationUse} />
                     {l.listingType === "RENT" ? (

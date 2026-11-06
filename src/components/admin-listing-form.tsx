@@ -1,15 +1,15 @@
 "use client";
 
 import Image from "next/image";
-import { FormEvent, ReactNode, startTransition, useMemo, useRef, useState } from "react";
+import { FormEvent, PointerEvent, ReactNode, startTransition, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { markRouteNavigating } from "@/components/route-nav-progress";
-import { AdminListing591RentDraftPanel } from "@/components/admin-listing-591-rent-draft-panel";
+import { SplitChoiceField } from "@/components/split-choice-field";
 import { EQUIPMENT_ITEMS, FURNITURE_ITEMS } from "@/lib/furniture-appliance-value";
-import { build591RentDraftFields } from "@/lib/listing-591-rent-draft";
 import {
   inferParkingPrice,
   LAYOUT_OPEN_LABEL,
+  type ManagementFeeUi,
   type ParkingPriceUi,
 } from "@/lib/owner-tracking-form-ui";
 import { TAIWAN_REGIONS } from "@/lib/taiwan-regions";
@@ -186,6 +186,13 @@ function inferChoice(value: string, choices: readonly string[]): ChoiceUi {
   return { select: CHOICE_OTHER, other: t };
 }
 
+function listingManagementFeeToUi(stored: string): ManagementFeeUi {
+  const amount = stored.trim();
+  if (amount === "0") return { mode: "none", amount: "" };
+  if (!amount) return { mode: "included", amount: "" };
+  return { mode: "separate", amount };
+}
+
 function choiceToValue(ui: ChoiceUi): string | null {
   if (!ui.select) return null;
   if (ui.select === CHOICE_OTHER) return ui.other.trim() || null;
@@ -198,7 +205,6 @@ export function AdminListingForm({
   initialData,
   lockedListingType,
   fromOwnerCaseId,
-  listingId,
 }: AdminListingFormProps) {
   const [formData, setFormData] = useState(initialData);
   const [status, setStatus] = useState("");
@@ -206,8 +212,10 @@ export function AdminListingForm({
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadingVideo, setUploadingVideo] = useState(false);
-  const [rent591DraftOpen, setRent591DraftOpen] = useState(false);
   const [importing591, setImporting591] = useState(false);
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const draggingImage = useRef<number | null>(null);
+  const [draggingImageIndex, setDraggingImageIndex] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
@@ -223,6 +231,9 @@ export function AdminListingForm({
           ? "含在租金內"
           : "",
     ),
+  );
+  const [managementFeeUi, setManagementFeeUi] = useState<ManagementFeeUi>(() =>
+    listingManagementFeeToUi(initialData.managementFee),
   );
   const [layoutOpenLayout, setLayoutOpenLayout] = useState(
     () =>
@@ -314,7 +325,7 @@ export function AdminListingForm({
         city: draft.city || prev.city,
         district: draft.city ? draft.district : prev.district,
         address: draft.address || prev.address,
-        community: draft.community || prev.community,
+        community: draft.community ?? "",
         propertyType: importedPropertyType ?? prev.propertyType,
         areaPing: draft.areaPing || prev.areaPing,
         rooms: skipLayout ? "" : draft.rooms || prev.rooms,
@@ -323,7 +334,7 @@ export function AdminListingForm({
         balconies: skipLayout ? "" : draft.balconies || prev.balconies,
         floor: draft.floor || prev.floor,
         totalFloors: draft.totalFloors || prev.totalFloors,
-        managementFee: draft.managementFeeSet ? draft.managementFee : draft.managementFee || prev.managementFee,
+        managementFee: draft.managementFeeSet ? draft.managementFee : prev.managementFee,
         otherFees: draft.otherFees || prev.otherFees,
         securityDeposit: draft.securityDeposit || prev.securityDeposit,
         availableFrom: draft.availableFrom || prev.availableFrom,
@@ -341,6 +352,12 @@ export function AdminListingForm({
         contactName: draft.contactName || prev.contactName,
         contactPhone: draft.contactPhone || prev.contactPhone,
       }));
+      if (draft.managementFeeSet) {
+        const amount = (draft.managementFee || "").trim();
+        setManagementFeeUi(
+          !amount || amount === "0" ? { mode: "included", amount: "" } : { mode: "separate", amount },
+        );
+      }
       if (draft.parkingKnown) {
         setParkingUi(inferParking(draft.parkingType || ""));
         setParkingPriceUi(
@@ -451,6 +468,49 @@ export function AdminListingForm({
     setFormData((prev) => ({ ...prev, coverImage: url }));
   }
 
+  function reorderImages(from: number, to: number) {
+    setFormData((prev) => {
+      if (from === to || from < 0 || to < 0 || from >= prev.images.length || to >= prev.images.length) return prev;
+      const images = [...prev.images];
+      const [moved] = images.splice(from, 1);
+      if (!moved) return prev;
+      images.splice(to, 0, moved);
+      return { ...prev, images };
+    });
+  }
+
+  function onGalleryPointerDown(event: PointerEvent<HTMLDivElement>) {
+    if (event.button !== 0) return;
+    const target = event.target as HTMLElement;
+    if (target.closest("button")) return;
+    event.preventDefault();
+    window.getSelection()?.removeAllRanges();
+    const tile = target.closest("[data-image-index]");
+    if (!tile) return;
+    const index = Number((tile as HTMLElement).dataset.imageIndex);
+    if (!Number.isFinite(index)) return;
+    draggingImage.current = index;
+    setDraggingImageIndex(index);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function onGalleryPointerMove(event: PointerEvent<HTMLDivElement>) {
+    if (draggingImage.current != null) window.getSelection()?.removeAllRanges();
+    const from = draggingImage.current;
+    if (from == null) return;
+    const hit = document.elementFromPoint(event.clientX, event.clientY)?.closest("[data-image-index]");
+    const to = hit ? Number((hit as HTMLElement).dataset.imageIndex) : Number.NaN;
+    if (!Number.isFinite(to) || to === from) return;
+    reorderImages(from, to);
+    draggingImage.current = to;
+    setDraggingImageIndex(to);
+  }
+
+  function onGalleryPointerUp() {
+    draggingImage.current = null;
+    setDraggingImageIndex(null);
+  }
+
   function setFeatureAt(index: number, value: string) {
     setFormData((prev) => {
       const arr = [...prev.features];
@@ -463,6 +523,15 @@ export function AdminListingForm({
     event.preventDefault();
     setLoading(true);
     setStatus("");
+
+    if (managementFeeUi.mode === "separate") {
+      const amount = Number(managementFeeUi.amount.replace(/[^\d.]/g, ""));
+      if (!managementFeeUi.amount.trim() || !Number.isFinite(amount)) {
+        setStatus("請填寫另計的管理費金額");
+        setLoading(false);
+        return;
+      }
+    }
 
     let cleanFeatures = formData.features.map((f) => f.trim()).filter(Boolean);
     cleanFeatures = cleanFeatures.filter((f) => !f.includes(LAYOUT_OPEN_LABEL));
@@ -498,7 +567,12 @@ export function AdminListingForm({
           : null,
       parkingType: parkingTypeValue,
       parkingIncluded: isSale ? triState(formData.parkingIncluded) : null,
-      managementFee: formData.managementFee ? Number(formData.managementFee) : null,
+      managementFee:
+        managementFeeUi.mode === "none"
+          ? 0
+          : managementFeeUi.mode === "separate"
+            ? Number(managementFeeUi.amount.replace(/[^\d.]/g, ""))
+            : null,
       petsAllowed: isRent ? triState(formData.petsAllowed) : null,
       taxDeductible: isRent ? triState(formData.taxDeductible) : null,
       rentSubsidy: isRent ? triState(formData.rentSubsidy) : null,
@@ -618,115 +692,12 @@ export function AdminListingForm({
     ? "inline-block rounded-full bg-blue-600 px-2.5 py-0.5 text-xs font-medium text-white"
     : "inline-block rounded-full bg-emerald-600 px-2.5 py-0.5 text-xs font-medium text-white";
 
-  const rent591DraftFields = useMemo(() => {
-    if (!isRent) return [];
-    const securityDeposit =
-      depositUi.kind === "two"
-        ? "2個月"
-        : depositUi.kind === "other" && depositUi.other.trim()
-          ? depositUi.other.trim()
-          : formData.securityDeposit.trim();
-    const availableFrom =
-      availableUi.mode === "immediate"
-        ? "隨時可遷入"
-        : availableUi.mode === "date" && availableUi.date.trim()
-          ? availableUi.date.trim()
-          : formData.availableFrom.trim();
-    const parkingRentResolved =
-      hasParking && parkingPriceUi.mode === "separate" && parkingPriceUi.amount.trim()
-        ? parkingPriceUi.amount.trim()
-        : formData.parkingRent.trim();
-    const siteListingUrl =
-      listingId?.trim() && typeof window !== "undefined"
-        ? `${window.location.origin}/listings/${listingId.trim()}`
-        : listingId?.trim()
-          ? `/listings/${listingId.trim()}`
-          : undefined;
-
-    return build591RentDraftFields({
-      title: formData.title,
-      city: formData.city,
-      district: formData.district,
-      address: formData.address,
-      community: formData.community,
-      propertyType: formData.propertyType,
-      price: formData.price,
-      managementFee: formData.managementFee,
-      otherFees: formData.otherFees,
-      securityDeposit,
-      availableFrom,
-      shortTermRent: choiceToValue(shortTermUi) ?? "",
-      serviceFee: choiceToValue(serviceFeeUi) ?? "",
-      areaPing: formData.areaPing,
-      areaMain: formData.areaMain,
-      areaAncillary: formData.areaAncillary,
-      rooms: formData.rooms,
-      livingRooms: formData.livingRooms,
-      bathrooms: formData.bathrooms,
-      balconies: formData.balconies,
-      layoutOpen: layoutOpenLayout,
-      floor: formData.floor,
-      totalFloors: formData.totalFloors,
-      roomNumber: formData.roomNumber,
-      parkingType: parkingTypeValue,
-      parkingRent: parkingRentResolved,
-      parkingSpaceInfo: formData.parkingSpaceInfo,
-      areaParkingSpace: formData.areaParkingSpace,
-      petsAllowed: formData.petsAllowed,
-      rentSubsidy: formData.rentSubsidy,
-      taxDeductible: formData.taxDeductible,
-      canRegisterAddress: formData.canRegisterAddress,
-      viewingMethod: formData.viewingMethod,
-      mrtLine: formData.mrtLine,
-      mrtStation: formData.mrtStation,
-      features: formData.features,
-      specialMatters: formData.specialMatters,
-      furnitureItems: formData.furnitureItems,
-      equipmentItems: formData.equipmentItems,
-      contactName: formData.contactName,
-      contactPhone: formData.contactPhone,
-      coverImage: formData.coverImage,
-      images: formData.images,
-      videoUrl: formData.videoUrl,
-      source591Url: formData.source591Url,
-      siteListingUrl,
-    });
-  }, [
-    isRent,
-    formData,
-    depositUi,
-    availableUi,
-    hasParking,
-    parkingPriceUi,
-    parkingTypeValue,
-    layoutOpenLayout,
-    shortTermUi,
-    serviceFeeUi,
-    listingId,
-  ]);
-
   return (
     <form onSubmit={onSubmit} className="space-y-6">
       {/* 類型提示 */}
       <div className="flex flex-wrap items-center gap-2">
         <span className={typeBadgeCls}>{isRent ? "租賃" : "買賣"}</span>
-        {isRent ? (
-          <button
-            type="button"
-            onClick={() => setRent591DraftOpen(true)}
-            className="rounded-lg border border-violet-300 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-900 hover:bg-violet-100"
-          >
-            591 租賃刊登草稿
-          </button>
-        ) : null}
       </div>
-      {isRent ? (
-        <AdminListing591RentDraftPanel
-          open={rent591DraftOpen}
-          onClose={() => setRent591DraftOpen(false)}
-          fields={rent591DraftFields}
-        />
-      ) : null}
 
       {/* 基本資訊 */}
       <section>
@@ -846,22 +817,22 @@ export function AdminListingForm({
                 />
               </label>
               <div className="hidden min-w-[1.25rem] flex-1 sm:block" aria-hidden />
-              <label className="block w-[calc(50%-0.375rem)] min-w-0 sm:w-[3.25rem] sm:shrink-0">
+              <label className="block w-[calc(50%-0.375rem)] min-w-0 sm:w-[4.75rem] sm:shrink-0">
                 <span className={labelCompact}>樓層</span>
                 <input
                   type="number"
                   value={formData.floor}
                   onChange={(e) => setFormData((p) => ({ ...p, floor: e.target.value }))}
-                  className={`${fieldCompact} h-[42px] px-1.5 py-0 text-center`}
+                  className={`${fieldCompact} h-[42px] px-2 py-0 text-center [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
                 />
               </label>
-              <label className="block w-[calc(50%-0.375rem)] min-w-0 sm:w-[3.25rem] sm:shrink-0">
+              <label className="block w-[calc(50%-0.375rem)] min-w-0 sm:w-[4.75rem] sm:shrink-0">
                 <span className={labelCompact}>總樓層</span>
                 <input
                   type="number"
                   value={formData.totalFloors}
                   onChange={(e) => setFormData((p) => ({ ...p, totalFloors: e.target.value }))}
-                  className={`${fieldCompact} h-[42px] px-1.5 py-0 text-center`}
+                  className={`${fieldCompact} h-[42px] px-2 py-0 text-center [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
                 />
               </label>
             </div>
@@ -988,10 +959,26 @@ export function AdminListingForm({
             ) : null}
           </div>
           <div>
-            <label className={labelCls}>管理費 / 月</label>
-            <input type="number" min="0" placeholder="單位：元" value={formData.managementFee}
-              onChange={(e) => setFormData((p) => ({ ...p, managementFee: e.target.value }))}
-              className={`w-full ${field}`} />
+            <label className={labelCls}>管理費</label>
+            <SplitChoiceField
+              value={managementFeeUi.mode}
+              compact={managementFeeUi.mode === "separate"}
+              amount={managementFeeUi.amount}
+              amountLabel="管理費金額"
+              options={[
+                { value: "none", label: "無" },
+                { value: "included", label: "含在租金裡" },
+                { value: "separate", label: "另計" },
+              ]}
+              onChange={(value) => {
+                const mode = value as ManagementFeeUi["mode"];
+                setManagementFeeUi((prev) => ({
+                  mode,
+                  amount: mode === "separate" ? prev.amount : "",
+                }));
+              }}
+              onAmountChange={(amount) => setManagementFeeUi((prev) => ({ ...prev, amount }))}
+            />
           </div>
           {isRent ? (
             <div>
@@ -1066,42 +1053,27 @@ export function AdminListingForm({
             {isRent ? (
               <div>
                 <label className={labelCompact}>車位價格</label>
-                <div
-                  className={`mt-1 flex h-[42px] items-stretch overflow-hidden rounded-lg border border-zinc-300 ${
-                    parkingExtraDisabled ? "bg-zinc-100" : "bg-white"
-                  }`}
-                >
-                  <select
+                <div className="mt-1">
+                  <SplitChoiceField
                     value={parkingPriceUi.mode}
                     disabled={parkingExtraDisabled}
-                    onChange={(e) => {
-                      const mode = e.target.value as ParkingPriceUi["mode"];
+                    compact={parkingPriceUi.mode === "separate" && hasParking}
+                    amount={parkingPriceUi.amount}
+                    amountLabel="車位價格金額"
+                    amountPlaceholder="金額（元）"
+                    options={[
+                      { value: "included", label: "含在租金內" },
+                      { value: "separate", label: "另計" },
+                    ]}
+                    onChange={(value) => {
+                      const mode = value as ParkingPriceUi["mode"];
                       setParkingPriceUi((prev) => ({
                         mode,
                         amount: mode === "included" ? "" : prev.amount,
                       }));
                     }}
-                    className={`h-full shrink-0 border-0 bg-transparent py-2 pl-3 pr-7 text-sm disabled:text-zinc-400 ${
-                      parkingPriceUi.mode === "separate" && hasParking ? "max-w-[5.25rem]" : "min-w-0 flex-1"
-                    }`}
-                  >
-                    <option value="included">含在租金內</option>
-                    <option value="separate">另計</option>
-                  </select>
-                  {parkingPriceUi.mode === "separate" && hasParking ? (
-                    <>
-                      <div className="w-px shrink-0 self-stretch bg-zinc-200" aria-hidden />
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={parkingPriceUi.amount}
-                        onChange={(e) => setParkingPriceUi((prev) => ({ ...prev, amount: e.target.value }))}
-                        className="min-w-0 flex-1 border-0 bg-transparent px-2 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-0"
-                        placeholder="金額（元）"
-                        aria-label="車位價格金額"
-                      />
-                    </>
-                  ) : null}
+                    onAmountChange={(amount) => setParkingPriceUi((prev) => ({ ...prev, amount }))}
+                  />
                 </div>
               </div>
             ) : (
@@ -1430,7 +1402,50 @@ export function AdminListingForm({
             {mediaStatus}
           </p>
         ) : null}
-        <div className="grid grid-cols-2 gap-3 sm:gap-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+          {/* 圖片區 */}
+          <div className="min-w-0 rounded-xl border border-zinc-200 p-3 sm:p-4">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="text-xs font-medium text-zinc-800 sm:text-sm">物件圖片</p>
+              {formData.images.length > 3 ? (
+                <button
+                  type="button"
+                  onClick={() => setGalleryOpen(true)}
+                  className="shrink-0 text-xs font-semibold text-[#1e3a8a] hover:underline"
+                >
+                  查看全部
+                </button>
+              ) : null}
+            </div>
+            {formData.images.length > 0 ? (
+              <div className="mb-3 grid grid-cols-4 gap-1.5">
+                  {(formData.images.length > 4 ? formData.images.slice(0, 4) : formData.images).map((url) => (
+                    <div key={url} className="group relative aspect-square min-w-0 overflow-hidden rounded-lg border border-zinc-200">
+                      <Image src={url} alt="物件圖片" fill className="object-cover" sizes="80px" />
+                      <div className="absolute inset-0 hidden flex-col items-center justify-center gap-1 bg-black/50 group-hover:flex">
+                        <button type="button" onClick={() => setCover(url)}
+                          className="rounded bg-white px-1.5 py-0.5 text-[10px] font-medium text-zinc-800">
+                          {formData.coverImage === url ? "✓ 封面" : "設為封面"}
+                        </button>
+                        <button type="button" onClick={() => removeImage(url)}
+                          className="rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-medium text-white">刪除</button>
+                      </div>
+                      {formData.coverImage === url ? (
+                        <span className="absolute left-1 top-1 rounded bg-zinc-900 px-1 py-0.5 text-[10px] text-white">封面</span>
+                      ) : null}
+                    </div>
+                  ))}
+              </div>
+            ) : null}
+            <input ref={fileInputRef} type="file" accept="image/*,.heic,.heif" multiple className="hidden"
+              onChange={(e) => { if (e.target.files) uploadFiles(e.target.files, "image"); }} />
+            <button type="button" disabled={uploading} onClick={() => fileInputRef.current?.click()}
+              className="w-full rounded-lg border border-dashed border-zinc-400 bg-zinc-50 px-2 py-2.5 text-xs text-zinc-600 hover:bg-zinc-100 disabled:opacity-60 sm:px-4 sm:py-3 sm:text-sm">
+              {uploading ? "上傳中..." : "＋ 選擇圖片"}
+            </button>
+            <p className="mt-1 text-[10px] text-zinc-400 sm:text-xs">JPG、PNG、WEBP、HEIC</p>
+          </div>
+
           {/* 影片區 */}
           <div className="min-w-0 rounded-xl border border-zinc-200 p-3 sm:p-4">
             <p className="mb-2 text-xs font-medium text-zinc-800 sm:text-sm">物件影片</p>
@@ -1457,39 +1472,68 @@ export function AdminListingForm({
                 className={`w-full ${field} text-xs sm:text-sm`} />
             </div>
           </div>
-
-          {/* 圖片區 */}
-          <div className="min-w-0 rounded-xl border border-zinc-200 p-3 sm:p-4">
-            <p className="mb-2 text-xs font-medium text-zinc-800 sm:text-sm">物件圖片</p>
-            {formData.images.length > 0 ? (
-              <div className="mb-3 flex flex-wrap gap-1.5 sm:gap-2">
-                {formData.images.map((url) => (
-                  <div key={url} className="group relative h-16 w-20 overflow-hidden rounded-lg border border-zinc-200 sm:h-20 sm:w-28">
-                    <Image src={url} alt="物件圖片" fill className="object-cover" sizes="112px" />
-                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
-                      <button type="button" onClick={() => setCover(url)}
-                        className="rounded bg-white px-2 py-0.5 text-xs font-medium text-zinc-800">
+        </div>
+        {galleryOpen ? (
+          <div
+            className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-3 sm:items-center"
+            role="dialog"
+            aria-modal="true"
+            aria-label="全部圖片"
+            onClick={() => setGalleryOpen(false)}
+          >
+            <div
+              className="flex max-h-[85vh] w-full max-w-3xl flex-col rounded-2xl bg-white p-4 shadow-xl"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <h4 className="text-base font-bold text-zinc-900">全部圖片</h4>
+                  <p className="text-xs text-zinc-500">按住圖片拖曳，可調整展示順序</p>
+                </div>
+                <button type="button" onClick={() => setGalleryOpen(false)} className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm text-zinc-700">
+                  關閉
+                </button>
+              </div>
+              <div
+                className="grid min-h-0 flex-1 select-none grid-cols-2 gap-2 overflow-y-auto sm:grid-cols-4"
+                onPointerDown={onGalleryPointerDown}
+                onPointerMove={onGalleryPointerMove}
+                onPointerUp={onGalleryPointerUp}
+                onPointerCancel={onGalleryPointerUp}
+                onMouseDown={(event) => {
+                  if ((event.target as HTMLElement).closest("button")) return;
+                  event.preventDefault();
+                }}
+                onDragStart={(event) => event.preventDefault()}
+              >
+                {formData.images.map((url, index) => (
+                  <div
+                    key={url}
+                    data-image-index={index}
+                    draggable={false}
+                    onDragStart={(event) => event.preventDefault()}
+                    className={`relative aspect-[4/3] cursor-grab select-none overflow-hidden rounded-lg border border-zinc-200 outline-none active:cursor-grabbing ${
+                      draggingImageIndex === index ? "pointer-events-none opacity-60" : ""
+                    }`}
+                  >
+                    <Image src={url} alt={`物件圖片 ${index + 1}`} fill className="pointer-events-none select-none object-cover" sizes="240px" draggable={false} />
+                    <div className="absolute inset-x-0 bottom-0 flex justify-center gap-1 bg-black/55 p-1">
+                      <button type="button" onClick={() => setCover(url)} className="rounded bg-white px-1.5 py-0.5 text-[10px] font-medium text-zinc-800">
                         {formData.coverImage === url ? "✓ 封面" : "設為封面"}
                       </button>
-                      <button type="button" onClick={() => removeImage(url)}
-                        className="rounded bg-red-600 px-2 py-0.5 text-xs font-medium text-white">刪除</button>
+                      <button type="button" onClick={() => removeImage(url)} className="rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                        刪除
+                      </button>
                     </div>
                     {formData.coverImage === url ? (
-                      <span className="absolute left-1 top-1 rounded bg-zinc-900 px-1 py-0.5 text-[10px] text-white">封面</span>
+                      <span className="pointer-events-none absolute left-1 top-1 rounded bg-zinc-900 px-1 py-0.5 text-[10px] text-white">封面</span>
                     ) : null}
                   </div>
                 ))}
               </div>
-            ) : null}
-            <input ref={fileInputRef} type="file" accept="image/*,.heic,.heif" multiple className="hidden"
-              onChange={(e) => { if (e.target.files) uploadFiles(e.target.files, "image"); }} />
-            <button type="button" disabled={uploading} onClick={() => fileInputRef.current?.click()}
-              className="w-full rounded-lg border border-dashed border-zinc-400 bg-zinc-50 px-2 py-2.5 text-xs text-zinc-600 hover:bg-zinc-100 disabled:opacity-60 sm:px-4 sm:py-3 sm:text-sm">
-              {uploading ? "上傳中..." : "＋ 選擇圖片"}
-            </button>
-            <p className="mt-1 text-[10px] text-zinc-400 sm:text-xs">JPG、PNG、WEBP、HEIC</p>
+            </div>
           </div>
-        </div>
+        ) : null}
       </section>
 
       {/* 起租日 / 押金 / 家具家電（橫排） */}

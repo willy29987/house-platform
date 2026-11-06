@@ -52,7 +52,8 @@ export default async function AdminEditListingPage({ params }: AdminEditListingP
     parkingRent: listing.parkingRent ? String(listing.parkingRent) : "",
     parkingType: listing.parkingType ?? "",
     parkingIncluded: boolToTri(listing.parkingIncluded),
-    managementFee: listing.managementFee ? String(listing.managementFee) : "",
+    managementFee:
+      listing.managementFee === 0 || listing.managementFee ? String(listing.managementFee) : "",
     petsAllowed: boolToTri(listing.petsAllowed),
     taxDeductible: boolToTri(listing.taxDeductible),
     rentSubsidy: boolToTri(listing.rentSubsidy),

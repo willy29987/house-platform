@@ -1,4 +1,3 @@
-import Image from "next/image";
 import Link from "next/link";
 import { ListingCardFavorite } from "@/components/listing-card-favorite";
 import { maskAddress, type ListingCard as ListingCardType } from "@/lib/listings";
@@ -70,17 +69,12 @@ export function ListingCardItem({ listing, className = "" }: Props) {
       href={`/listings/${listing.id}`}
       className={`group flex flex-col overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-zinc-200 transition hover:-translate-y-0.5 hover:shadow-lg hover:ring-zinc-300 ${className}`}
     >
-      {/* 封面圖 */}
-      <div
-        className="relative w-full overflow-hidden bg-zinc-100"
-        style={{ aspectRatio: "8 / 3" }}
-      >
-        <Image
+      {/* 封面圖：依原圖比例顯示，不裁上下 */}
+      <div className="relative w-full bg-zinc-100">
+        <img
           src={getCoverImage(listing)}
           alt={listing.title}
-          fill
-          className="object-cover transition-transform duration-500 group-hover:scale-[1.03]"
-          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+          className="block h-auto w-full"
         />
         <ListingCardFavorite listingId={listing.id} />
       </div>

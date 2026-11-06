@@ -54,7 +54,8 @@ export function ownerCaseToListingDraft(
     floor: ownerCase.floor.trim() ? ownerCase.floor.trim() : "",
     totalFloors: ownerCase.totalFloors.trim() ? ownerCase.totalFloors.trim() : "",
     areaPing: digitsOnly(ownerCase.areaPing),
-    managementFee: mgmt.mode === "separate" ? digitsOnly(mgmt.amount) : "",
+    managementFee:
+      mgmt.mode === "none" ? "0" : mgmt.mode === "separate" ? digitsOnly(mgmt.amount) : "",
     otherFees: ownerCase.otherFees.trim(),
     petsAllowed: pets === "yes" ? "yes" : pets === "no" ? "no" : "",
     rentSubsidy: subsidy === "eligible" ? "yes" : subsidy === "ineligible" ? "no" : "",

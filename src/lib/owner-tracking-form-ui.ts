@@ -81,10 +81,11 @@ export function rentSubsidyToStored(ui: RentSubsidyUi): string {
   return "";
 }
 
-export type ManagementFeeUi = { mode: "included" | "separate"; amount: string };
+export type ManagementFeeUi = { mode: "none" | "included" | "separate"; amount: string };
 
 export function inferManagementFee(stored: string): ManagementFeeUi {
   const t = stored.trim();
+  if (t === "無" || t === "免" || t === "免管理費") return { mode: "none", amount: "" };
   if (!t || t === "含在租金裡" || t.includes("含在租金")) {
     return { mode: "included", amount: "" };
   }
@@ -92,6 +93,7 @@ export function inferManagementFee(stored: string): ManagementFeeUi {
 }
 
 export function managementFeeToStored(ui: ManagementFeeUi): string {
+  if (ui.mode === "none") return "無";
   if (ui.mode === "included") return "含在租金裡";
   return ui.amount.trim();
 }

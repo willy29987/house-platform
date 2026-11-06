@@ -548,11 +548,13 @@ function CaseInfoGrid({ item }: { item: OwnerCasePreview }) {
     {
       label: "管理費",
       value:
-        item.managementFee.trim() === "含在租金裡"
-          ? "含在租金裡"
-          : item.managementFee.trim()
-            ? `另計：${item.managementFee.trim()}`
-            : "",
+        item.managementFee.trim() === "無"
+          ? "無"
+          : item.managementFee.trim() === "含在租金裡"
+            ? "含在租金裡"
+            : item.managementFee.trim()
+              ? `另計：${item.managementFee.trim()}`
+              : "",
     },
     { label: "其他費用", value: item.otherFees },
     { label: "車位", value: parkingText === "無" && item.parking.trim() ? item.parking : parkingText },

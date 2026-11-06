@@ -55,6 +55,7 @@ import { PROPERTY_TYPE_OPTIONS, propertyTypeLabel } from "@/lib/property-type-la
 import { TAIWAN_REGIONS } from "@/lib/taiwan-regions";
 import { hydrateOwnerTrackingStoreOnce } from "@/lib/admin-cloud-sync-client";
 import { OwnerTrackingNextContactField } from "@/components/owner-tracking-next-contact-field";
+import { SplitChoiceField } from "@/components/split-choice-field";
 import { normalizeNextContactDate } from "@/lib/owner-tracking-next-contact";
 
 type Props = {
@@ -143,6 +144,8 @@ export function OwnerTrackingNewForm({
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [initialStatus, setInitialStatus] = useState<OwnerTrackingStatus>("持續聯繫");
+  const [importing591, setImporting591] = useState(false);
+  const [importStatus, setImportStatus] = useState("");
 
   const field = "w-full rounded-lg border border-zinc-300 px-3 py-2.5 text-sm";
   /** 避免 inputMode=tel/url/numeric 導致中文輸入法在欄位間切換 */
@@ -195,6 +198,101 @@ export function OwnerTrackingNewForm({
 
   function setField<K extends keyof OwnerCaseInput>(key: K, value: OwnerCaseInput[K]) {
     setForm((p) => ({ ...p, [key]: value }));
+  }
+
+  async function importFrom591Url() {
+    const url = form.listingUrl.trim();
+    if (!url) {
+      setImportStatus("請先貼上 591 連結");
+      return;
+    }
+    setImporting591(true);
+    setImportStatus("");
+    try {
+      const response = await fetch("/api/admin/listings/import-591", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      const json = (await response.json()) as {
+        ok?: boolean;
+        message?: string;
+        draft?: {
+          source591Url: string;
+          price: string;
+          city: string;
+          district: string;
+          address: string;
+          community: string;
+          propertyType: string;
+          areaPing: string;
+          rooms: string;
+          livingRooms: string;
+          bathrooms: string;
+          balconies: string;
+          floor: string;
+          totalFloors: string;
+          managementFee: string;
+          managementFeeSet?: boolean;
+          petsAllowed: "" | "yes" | "no";
+          parkingType?: string;
+          parkingKnown?: boolean;
+          parkingPriceMode?: "" | "included" | "separate";
+          parkingRent?: string;
+        };
+      };
+      if (!response.ok || !json.ok || !json.draft) {
+        setImportStatus(json.message || "帶入失敗");
+        return;
+      }
+      const draft = json.draft;
+      const knownType = (PROPERTY_TYPE_OPTIONS as readonly string[]).includes(draft.propertyType);
+      const skipLayout = draft.propertyType === "STUDIO" || draft.propertyType === "SUITE";
+      setPropertyTypeCustom(false);
+      setForm((prev) => ({
+        ...prev,
+        listingUrl: draft.source591Url || prev.listingUrl,
+        city: draft.city || prev.city,
+        district: draft.city ? draft.district : prev.district,
+        address: draft.address || prev.address,
+        floor: draft.floor,
+        totalFloors: draft.totalFloors,
+        propertyType: knownType ? draft.propertyType : prev.propertyType,
+        community: draft.community ?? "",
+        rent: draft.price || prev.rent,
+        areaPing: draft.areaPing || prev.areaPing,
+      }));
+      setLayoutUi(
+        skipLayout
+          ? emptyLayoutUi()
+          : {
+              rooms: draft.rooms,
+              living: draft.livingRooms,
+              bath: draft.bathrooms,
+              balcony: draft.balconies,
+              openLayout: false,
+            },
+      );
+      if (draft.managementFeeSet) {
+        const amount = draft.managementFee.trim();
+        setManagementFeeUi(!amount || amount === "0" ? { mode: "included", amount: "" } : { mode: "separate", amount });
+      }
+      if (draft.parkingKnown) {
+        setParkingUi(inferParkingFromStored(draft.parkingType || ""));
+        setParkingPriceUi(
+          draft.parkingPriceMode === "separate"
+            ? { mode: "separate", amount: draft.parkingRent || "" }
+            : { mode: "included", amount: "" },
+        );
+      }
+      if (draft.petsAllowed === "yes" || draft.petsAllowed === "no") setPetsUi(draft.petsAllowed);
+      setImportStatus("帶入成功，請再核對後儲存。");
+    } catch {
+      setImportStatus("帶入失敗，請稍後再試");
+    } finally {
+      setImporting591(false);
+    }
   }
 
   function buildPayload(): OwnerCaseInput {
@@ -303,6 +401,33 @@ export function OwnerTrackingNewForm({
       className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-6"
     >
       <div className="grid grid-cols-1 gap-x-5 gap-y-4 sm:grid-cols-2">
+        {!isEdit ? (
+          <div className="sm:col-span-2">
+            <span className="mb-1 block text-xs font-medium text-zinc-600">591 連結</span>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <input
+                type="text"
+                {...imeText}
+                value={form.listingUrl}
+                onChange={(e) => setField("listingUrl", e.target.value)}
+                placeholder="貼上 591 連結後按帶入"
+                className={`${field} min-w-0 flex-1`}
+              />
+              <button
+                type="button"
+                disabled={importing591}
+                onClick={() => void importFrom591Url()}
+                className="shrink-0 rounded-lg bg-[#0b2545] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#1e3a8a] disabled:opacity-60"
+              >
+                {importing591 ? "帶入中…" : "從 591 帶入"}
+              </button>
+            </div>
+            <p className="mt-1 text-xs text-zinc-500">會帶入地址、類別、租金、樓層、管理費、車位。沒有社區名稱時，社區會留白。獨立套房和分租套房不帶格局。</p>
+            {importStatus ? (
+              <p className={`mt-1 text-xs ${importStatus.includes("成功") ? "text-emerald-700" : "text-red-600"}`}>{importStatus}</p>
+            ) : null}
+          </div>
+        ) : null}
         <div className="sm:col-span-2 space-y-4">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:gap-3">
             <label className="block w-full min-w-0 sm:w-[5.75rem] sm:shrink-0">
@@ -488,37 +613,25 @@ export function OwnerTrackingNewForm({
             <input type="text" value={form.rent} onChange={(e) => setField("rent", e.target.value)} className={field} />
           </FormField>
           <FormField label="管理費">
-            <div className="flex h-[42px] items-stretch overflow-hidden rounded-lg border border-zinc-300 bg-white">
-              <select
-                value={managementFeeUi.mode}
-                onChange={(e) => {
-                  const mode = e.target.value as ManagementFeeUi["mode"];
-                  setManagementFeeUi((prev) => ({
-                    mode,
-                    amount: mode === "included" ? "" : prev.amount,
-                  }));
-                }}
-                className={`h-full shrink-0 border-0 bg-transparent py-2 pl-3 pr-7 text-sm ${
-                  managementFeeUi.mode === "separate" ? "max-w-[5.25rem]" : "min-w-0 flex-1"
-                }`}
-              >
-                <option value="included">含在租金裡</option>
-                <option value="separate">另計</option>
-              </select>
-              {managementFeeUi.mode === "separate" ? (
-                <>
-                  <div className="w-px shrink-0 self-stretch bg-zinc-200" aria-hidden />
-                  <input
-                    type="text"
-                    {...imeText}
-                    value={managementFeeUi.amount}
-                    onChange={(e) => setManagementFeeUi((prev) => ({ ...prev, amount: e.target.value }))}
-                    className="min-w-0 flex-1 border-0 bg-transparent px-2 text-sm focus:outline-none focus:ring-0"
-                    aria-label="管理費金額"
-                  />
-                </>
-              ) : null}
-            </div>
+            <SplitChoiceField
+              value={managementFeeUi.mode}
+              compact={managementFeeUi.mode === "separate"}
+              amount={managementFeeUi.amount}
+              amountLabel="管理費金額"
+              options={[
+                { value: "none", label: "無" },
+                { value: "included", label: "含在租金裡" },
+                { value: "separate", label: "另計" },
+              ]}
+              onChange={(value) => {
+                const mode = value as ManagementFeeUi["mode"];
+                setManagementFeeUi((prev) => ({
+                  mode,
+                  amount: mode === "separate" ? prev.amount : "",
+                }));
+              }}
+              onAmountChange={(amount) => setManagementFeeUi((prev) => ({ ...prev, amount }))}
+            />
           </FormField>
           <FormField label="其他費用">
             <input
@@ -567,43 +680,26 @@ export function OwnerTrackingNewForm({
             ) : null}
           </FormField>
           <FormField label="車位價格">
-            <div
-              className={`flex h-[42px] items-stretch overflow-hidden rounded-lg border border-zinc-300 ${
-                parkingExtraDisabled ? "bg-zinc-100" : "bg-white"
-              }`}
-            >
-              <select
-                value={parkingPriceUi.mode}
-                disabled={parkingExtraDisabled}
-                onChange={(e) => {
-                  const mode = e.target.value as ParkingPriceUi["mode"];
-                  setParkingPriceUi((prev) => ({
-                    mode,
-                    amount: mode === "included" ? "" : prev.amount,
-                  }));
-                }}
-                className={`h-full shrink-0 border-0 bg-transparent py-2 pl-3 pr-7 text-sm disabled:text-zinc-400 ${
-                  parkingPriceUi.mode === "separate" && hasParking ? "max-w-[5.25rem]" : "min-w-0 flex-1"
-                }`}
-              >
-                <option value="included">含在租金內</option>
-                <option value="separate">另計</option>
-              </select>
-              {parkingPriceUi.mode === "separate" && hasParking ? (
-                <>
-                  <div className="w-px shrink-0 self-stretch bg-zinc-200" aria-hidden />
-                  <input
-                    type="text"
-                    {...imeText}
-                    value={parkingPriceUi.amount}
-                    onChange={(e) => setParkingPriceUi((prev) => ({ ...prev, amount: e.target.value }))}
-                    className="min-w-0 flex-1 border-0 bg-transparent px-2 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-0"
-                    placeholder="金額（元）"
-                    aria-label="車位價格金額"
-                  />
-                </>
-              ) : null}
-            </div>
+            <SplitChoiceField
+              value={parkingPriceUi.mode}
+              disabled={parkingExtraDisabled}
+              compact={parkingPriceUi.mode === "separate" && hasParking}
+              amount={parkingPriceUi.amount}
+              amountLabel="車位價格金額"
+              amountPlaceholder="金額（元）"
+              options={[
+                { value: "included", label: "含在租金內" },
+                { value: "separate", label: "另計" },
+              ]}
+              onChange={(value) => {
+                const mode = value as ParkingPriceUi["mode"];
+                setParkingPriceUi((prev) => ({
+                  mode,
+                  amount: mode === "included" ? "" : prev.amount,
+                }));
+              }}
+              onAmountChange={(amount) => setParkingPriceUi((prev) => ({ ...prev, amount }))}
+            />
           </FormField>
           <FormField label="車位編號">
             <input

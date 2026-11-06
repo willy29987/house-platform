@@ -341,7 +341,7 @@ export function AdminListingRecords({ records, staffLabels = {} }: Props) {
                 />
                 <DetailRow label="電梯" value={tri(r.hasElevator)} />
                 <DetailRow label="屋齡" value={r.buildingAge != null ? `${r.buildingAge}年` : "—"} />
-                <DetailRow label="管理費" value={r.managementFee ? `NT$ ${r.managementFee.toLocaleString("zh-TW")}` : "—"} />
+                <DetailRow label="管理費" value={r.managementFee ? `NT$ ${r.managementFee.toLocaleString("zh-TW")}` : r.managementFee === 0 ? "無" : "—"} />
                 <DetailRow label="房屋類型" value={r.legalUsage ?? r.usageZoning ?? "—"} />
                 <DetailRow label="使照登記" value={r.registrationUse} />
                 {r.listingType === "RENT" ? (
