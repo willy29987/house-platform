@@ -5,6 +5,7 @@ import { parseListingInternalMeta, toListingDescription } from "@/lib/listing-in
 import { prisma } from "@/lib/prisma";
 import { resolve591IdFromUrlOrId } from "@/lib/listing-591-id";
 import { listingInputSchema } from "@/lib/listing-validation";
+import { notifyMatchingGuestsOfRental } from "@/lib/line-guest-watch-notify";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -43,7 +44,10 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     );
   }
 
-  const exists = await prisma.listing.findUnique({ where: { id }, select: { id: true, description: true } });
+  const exists = await prisma.listing.findUnique({
+    where: { id },
+    select: { id: true, description: true, isPublished: true },
+  });
   if (!exists) {
     return NextResponse.json({ ok: false, message: "找不到房源。" }, { status: 404 });
   }
@@ -126,6 +130,15 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
         isPublished: data.isPublished ?? true,
       },
     });
+
+    const nowPublished = data.isPublished ?? true;
+    if (!exists.isPublished && nowPublished && data.listingType === "RENT") {
+      try {
+        await notifyMatchingGuestsOfRental(id);
+      } catch (error) {
+        console.error("[api/admin/listings PATCH] watch notify failed", error);
+      }
+    }
 
     return NextResponse.json({ ok: true });
   } catch (error) {

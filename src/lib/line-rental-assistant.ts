@@ -172,6 +172,32 @@ export async function loadRentalMatchListings(
   }
 }
 
+/** 單筆已上架出租物件，供新案推播配對 */
+export async function loadPublishedRentalMatchListing(id: string): Promise<RentalMatchListing | null> {
+  const listingId = id.trim();
+  if (!listingId || !process.env.DATABASE_URL) return null;
+  try {
+    const row = await prisma.listing.findFirst({
+      where: { id: listingId, listingType: ListingType.RENT, isPublished: true },
+    });
+    if (!row) return null;
+    const meta = parseListingInternalMeta(row.description);
+    return toRentalMatchListing({
+      ...row,
+      furnitureItems: normalizeItemList(meta.furnitureItems),
+      equipmentItems: normalizeItemList(meta.equipmentItems),
+      securityDeposit: meta.securityDeposit ?? null,
+      availableFrom: meta.availableFrom ?? null,
+      shortTermRent: meta.shortTermRent ?? null,
+      serviceFee: meta.serviceFee ?? null,
+      houseCondition: meta.houseCondition ?? null,
+    });
+  } catch (error) {
+    console.error("[line-rental-assistant] loadPublishedRentalMatchListing", error);
+    return null;
+  }
+}
+
 export const ROOM_TYPE_OPTIONS = [
   { id: "studio", label: "獨立套房" },
   { id: "1", label: "1 房" },

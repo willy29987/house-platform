@@ -5,6 +5,7 @@ import { toListingDescription } from "@/lib/listing-internal-meta";
 import { prisma } from "@/lib/prisma";
 import { resolve591IdFromUrlOrId } from "@/lib/listing-591-id";
 import { addPublishedListingToViewableOwnerCase } from "@/lib/listing-to-owner-tracking";
+import { notifyMatchingGuestsOfRental } from "@/lib/line-guest-watch-notify";
 import { listingInputSchema } from "@/lib/listing-validation";
 
 export async function POST(request: Request) {
@@ -134,6 +135,14 @@ export async function POST(request: Request) {
         });
       } catch (error) {
         console.error("[api/admin/listings POST] owner tracking sync failed", error);
+      }
+    }
+
+    if (isPublished && data.listingType === "RENT") {
+      try {
+        await notifyMatchingGuestsOfRental(listing.id);
+      } catch (error) {
+        console.error("[api/admin/listings POST] watch notify failed", error);
       }
     }
 

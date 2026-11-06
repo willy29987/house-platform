@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentAdmin, requireAdminSession } from "@/lib/admin-auth";
+import { notifyMatchingGuestsOfRental } from "@/lib/line-guest-watch-notify";
 import { parseListingInternalMeta, toListingDescription } from "@/lib/listing-internal-meta";
 import { prisma } from "@/lib/prisma";
 
@@ -37,7 +38,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
 
   const listing = await prisma.listing.findUnique({
     where: { id },
-    select: { id: true, description: true, listingType: true },
+    select: { id: true, description: true, listingType: true, isPublished: true },
   });
 
   if (!listing) {
@@ -54,6 +55,8 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
   }
 
   const meta = parseListingInternalMeta(listing.description);
+  const becamePublished =
+    parsed.data.isPublished && !listing.isPublished && listing.listingType === "RENT";
   await prisma.listing.update({
     where: { id },
     data: {
@@ -67,6 +70,14 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
       }),
     },
   });
+
+  if (becamePublished) {
+    try {
+      await notifyMatchingGuestsOfRental(id);
+    } catch (error) {
+      console.error("[api/admin/listings publish] watch notify failed", error);
+    }
+  }
 
   return NextResponse.json({ ok: true });
 }
