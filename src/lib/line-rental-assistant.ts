@@ -22,6 +22,7 @@ export type RentalMatchListing = {
   floor: number | null;
   totalFloors: number | null;
   propertyType: string;
+  hasElevator: boolean | null;
   community: string | null;
   managementFee: number | null;
   parkingType: string | null;
@@ -62,6 +63,7 @@ export function toRentalMatchListing(listing: {
   floor: number | null;
   totalFloors: number | null;
   propertyType?: string;
+  hasElevator?: boolean | null;
   community?: string | null;
   managementFee?: number | null;
   parkingType?: string | null;
@@ -100,6 +102,7 @@ export function toRentalMatchListing(listing: {
     floor: listing.floor,
     totalFloors: listing.totalFloors,
     propertyType: listing.propertyType ?? "",
+    hasElevator: listing.hasElevator ?? null,
     community: listing.community ?? null,
     managementFee: listing.managementFee ?? null,
     parkingType: listing.parkingType ?? null,
@@ -164,6 +167,14 @@ export async function loadRentalMatchListings(
     return [];
   }
 }
+
+export const ROOM_TYPE_OPTIONS = [
+  { id: "studio", label: "獨立套房" },
+  { id: "1", label: "1 房" },
+  { id: "2", label: "2 房" },
+  { id: "3", label: "3 房" },
+  { id: "4", label: "4 房以上" },
+] as const;
 
 export type RentalExtra = "subsidy" | "tax" | "household";
 
@@ -232,8 +243,11 @@ export function listingMatchesCriteria(listing: RentalMatchListing, criteria: Re
   if (criteria.cities.length && !criteria.cities.includes(listing.city)) return false;
   if (criteria.districts.length && !criteria.districts.includes(listing.district)) return false;
   if (criteria.rooms.length) {
+    const suite = listing.propertyType === "STUDIO" || listing.propertyType === "SUITE";
     const ok = criteria.rooms.some((value) => {
+      if (value === "studio") return listing.propertyType === "STUDIO";
       const rooms = Number.parseInt(value, 10);
+      if (!Number.isFinite(rooms) || suite) return false;
       return rooms === 4 ? listing.rooms >= 4 : listing.rooms === rooms;
     });
     if (!ok) return false;
@@ -355,16 +369,7 @@ function labelsOf(ids: string[], options: readonly { value?: string; id?: string
 }
 
 export function criteriaSummary(criteria: RentalMatchCriteria) {
-  const rooms = labelsOf(
-    criteria.rooms,
-    [
-      { id: "1", label: "1 房" },
-      { id: "2", label: "2 房" },
-      { id: "3", label: "3 房" },
-      { id: "4", label: "4 房以上" },
-    ],
-    "房數不限",
-  );
+  const rooms = labelsOf(criteria.rooms, ROOM_TYPE_OPTIONS, "房型不限");
   const baths = labelsOf(
     criteria.bathrooms,
     [

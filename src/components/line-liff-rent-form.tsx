@@ -14,6 +14,7 @@ import {
   EXTRA_OPTIONS,
   MATCH_LIST_LIMIT,
   RENT_PRICE_OPTIONS,
+  ROOM_TYPE_OPTIONS,
   criteriaSummary,
   emptyCriteria,
   formatDateYmd,
@@ -61,13 +62,6 @@ function CalendarIcon({ className }: { className?: string }) {
   );
 }
 
-const ROOM_OPTS = [
-  { id: "1", label: "1 房" },
-  { id: "2", label: "2 房" },
-  { id: "3", label: "3 房" },
-  { id: "4", label: "4 房以上" },
-];
-
 function toggleIn(list: string[], id: string) {
   return list.includes(id) ? list.filter((item) => item !== id) : [...list, id];
 }
@@ -82,6 +76,41 @@ function listingPhotos(item: RentalMatchListing) {
 
 function listingPageUrl(baseUrl: string, id: string) {
   return `${baseUrl.replace(/\/$/, "")}/listings/${id}`;
+}
+
+function layoutLabel(item: Pick<RentalMatchListing, "propertyType" | "rooms" | "livingRooms" | "bathrooms" | "balconies">) {
+  if (item.propertyType === "STUDIO") return "獨立套房";
+  if (item.propertyType === "SUITE") return "分租套房";
+  return [
+    `${item.rooms}房`,
+    item.livingRooms != null ? `${item.livingRooms}廳` : null,
+    `${item.bathrooms}衛`,
+    item.balconies != null ? `${item.balconies}陽台` : null,
+  ]
+    .filter(Boolean)
+    .join("");
+}
+
+function buildingTypeLabel(item: Pick<RentalMatchListing, "propertyType" | "hasElevator">) {
+  if (item.propertyType === "APARTMENT") return "公寓";
+  if (item.propertyType === "ELEVATOR_BUILDING") return "電梯";
+  if (item.propertyType === "STUDIO" || item.propertyType === "SUITE") {
+    if (item.hasElevator === true) return "電梯";
+    if (item.hasElevator === false) return "公寓";
+    return "—";
+  }
+  return propertyTypeLabel(item.propertyType);
+}
+
+/** 地址只公開到巷或弄，不顯示門牌號。 */
+function guestFacingAddress(address: string) {
+  const text = address.replace(/\s+/g, "").trim();
+  if (!text) return "";
+  const alley = text.match(/^(.*弄)/);
+  if (alley?.[1]) return alley[1];
+  const lane = text.match(/^(.*巷)/);
+  if (lane?.[1]) return lane[1];
+  return text.replace(/\d*號.*$/, "").trim();
 }
 
 function ListingPickRow({
@@ -121,7 +150,10 @@ function ListingPickRow({
           </span>
           <span className="mt-1 block text-xs text-zinc-500">
             {item.city}
-            {item.district} · {item.rooms} 房 · {item.areaPing} 坪
+            {item.district}
+          </span>
+          <span className="mt-0.5 block text-xs text-zinc-500">
+            {layoutLabel(item)} · {item.areaPing} 坪
           </span>
           <span className="mt-1 block text-sm font-semibold tabular-nums text-red-600">
             {formatRent(item.price)}
@@ -259,15 +291,6 @@ function ListingDetailSheet({
   const [photoIndex, setPhotoIndex] = useState(0);
   const scrollerRef = useRef<HTMLDivElement>(null);
 
-  const layoutText = [
-    `${listing.rooms}房`,
-    listing.livingRooms != null ? `${listing.livingRooms}廳` : null,
-    `${listing.bathrooms}衛`,
-    listing.balconies != null ? `${listing.balconies}陽台` : null,
-  ]
-    .filter(Boolean)
-    .join("");
-
   const floorText =
     listing.floor != null && listing.totalFloors != null
       ? `${listing.floor} / ${listing.totalFloors} F`
@@ -303,15 +326,7 @@ function ListingDetailSheet({
   const managementFeeText = listing.managementFee
     ? `${listing.managementFee.toLocaleString("zh-TW")} 元/月`
     : "免管理費";
-  const propertyTypeText = listing.propertyType
-    ? propertyTypeLabel(listing.propertyType)
-    : "—";
   const orientationText = listing.orientation?.trim() || "—";
-
-  const viewingMethodLabel: Record<string, string> = {
-    KEY: "有鑰匙，隨時可帶看",
-    OWNER_APPOINTMENT: "需約屋主時間",
-  };
 
   function rentConditionValue(value: boolean | null | undefined): string | null {
     if (value === true) return "可以";
@@ -324,20 +339,10 @@ function ListingDetailSheet({
       rentConditionValue(listing.petsAllowed)
         ? { label: "養寵物", value: rentConditionValue(listing.petsAllowed)! }
         : null,
-      rentConditionValue(listing.taxDeductible)
-        ? { label: "報稅", value: rentConditionValue(listing.taxDeductible)! }
-        : null,
-      rentConditionValue(listing.rentSubsidy)
-        ? { label: "租屋補助", value: rentConditionValue(listing.rentSubsidy)! }
-        : null,
+      listing.taxDeductible === true ? { label: "報稅", value: "可以" } : null,
+      listing.rentSubsidy === true ? { label: "租補", value: "可以" } : null,
       rentConditionValue(listing.canRegisterAddress)
         ? { label: "入戶籍", value: rentConditionValue(listing.canRegisterAddress)! }
-        : null,
-      listing.viewingMethod
-        ? {
-            label: "看屋方式",
-            value: viewingMethodLabel[listing.viewingMethod] ?? listing.viewingMethod,
-          }
         : null,
       listing.securityDeposit?.trim()
         ? { label: "押金", value: listing.securityDeposit.trim() }
@@ -416,19 +421,23 @@ function ListingDetailSheet({
                   type="button"
                   aria-label="上一張"
                   onClick={() => scrollToPhoto((photoIndex - 1 + photos.length) % photos.length)}
-                  className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/45 px-2.5 py-1.5 text-white"
+                  className="absolute left-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/80 bg-white/90 text-zinc-800 shadow-[0_10px_28px_rgba(24,24,27,0.18)] backdrop-blur-md"
                 >
-                  ‹
+                  <svg viewBox="0 0 20 20" className="h-5 w-5" fill="none" aria-hidden>
+                    <path d="M12.5 4.5 7 10l5.5 5.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
                 </button>
                 <button
                   type="button"
                   aria-label="下一張"
                   onClick={() => scrollToPhoto((photoIndex + 1) % photos.length)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/45 px-2.5 py-1.5 text-white"
+                  className="absolute right-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/80 bg-white/90 text-zinc-800 shadow-[0_10px_28px_rgba(24,24,27,0.18)] backdrop-blur-md"
                 >
-                  ›
+                  <svg viewBox="0 0 20 20" className="h-5 w-5" fill="none" aria-hidden>
+                    <path d="M7.5 4.5 13 10l-5.5 5.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
                 </button>
-                <p className="absolute bottom-2 right-2 rounded-full bg-black/55 px-2 py-0.5 text-[11px] text-white">
+                <p className="absolute bottom-3 right-3 rounded-full border border-white/70 bg-white/90 px-2.5 py-1 text-[11px] font-medium tracking-wide text-zinc-700 shadow-[0_8px_20px_rgba(24,24,27,0.12)] backdrop-blur-md">
                   {photoIndex + 1}/{photos.length}
                 </p>
               </>
@@ -457,14 +466,14 @@ function ListingDetailSheet({
               <div className="flex flex-col">
                 <div className="flex items-center justify-between gap-3 border-b border-zinc-100 py-2.5">
                   <span className="shrink-0 text-xs font-medium text-zinc-500">格局</span>
-                  <p className="min-w-0 text-right text-base font-bold text-zinc-900">{layoutText}</p>
+                  <p className="min-w-0 text-right text-base font-bold text-zinc-900">{layoutLabel(listing)}</p>
                 </div>
                 <DetailInfoRowPair
                   left={{ label: "權狀坪數", value: `${listing.areaPing} 坪` }}
                   right={{ label: "主＋附屬", value: buildingAreaTotalText }}
                 />
                 <DetailInfoRowPair
-                  left={{ label: "型態", value: propertyTypeText }}
+                  left={{ label: "型態", value: buildingTypeLabel(listing) }}
                   right={{ label: "樓層", value: floorText }}
                 />
                 <DetailInfoRowPair
@@ -533,7 +542,7 @@ function ListingDetailSheet({
                   <dd className="min-w-0 break-words font-medium text-zinc-900">
                     {listing.city}
                     {listing.district}
-                    {listing.address}
+                    {guestFacingAddress(listing.address)}
                   </dd>
                 </div>
                 {listing.community ? (
@@ -1425,9 +1434,9 @@ export function LineLiffRentForm({
               </div>
             </div>
             <div>
-              <p className="mb-2 text-xs font-medium text-zinc-500">房間數量</p>
+              <p className="mb-2 text-xs font-medium text-zinc-500">房型</p>
               <div className="flex flex-wrap gap-2">
-                {ROOM_OPTS.map((o) => (
+                {ROOM_TYPE_OPTIONS.map((o) => (
                   <Chip
                     key={o.id}
                     label={o.label}
