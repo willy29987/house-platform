@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCurrentAdmin } from "@/lib/admin-auth";
+import { requireSuperAdmin } from "@/lib/admin-auth";
 import { readLineConversations } from "@/lib/line-conversations";
 import { listOpenGuestSessions } from "@/lib/line-guest-sessions";
 import { listGuestProfileUserIds } from "@/lib/line-guest-profile";
@@ -28,10 +28,8 @@ function toAbsoluteHttpsUrl(raw: string): string | null {
 }
 
 export async function GET() {
-  const admin = await getCurrentAdmin();
-  if (!admin) {
-    return NextResponse.json({ error: "未登入" }, { status: 401, headers: NO_STORE });
-  }
+  const denied = await requireSuperAdmin();
+  if (denied) return denied;
 
   await syncRecentGuestBookings().catch((error) => {
     console.warn("[line/conversations] sync bookings failed", error);
@@ -53,10 +51,8 @@ export async function GET() {
 
 /** 客服從網頁回覆 → 推到 LINE，並寫入同一份對話紀錄 */
 export async function POST(request: Request) {
-  const admin = await getCurrentAdmin();
-  if (!admin) {
-    return NextResponse.json({ error: "未登入" }, { status: 401 });
-  }
+  const denied = await requireSuperAdmin();
+  if (denied) return denied;
 
   let body: {
     lineUserId?: string;

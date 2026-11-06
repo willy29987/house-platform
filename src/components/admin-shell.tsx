@@ -204,14 +204,14 @@ export function AdminShell({ current: currentProp = null, children }: AdminShell
             >
               屋主追蹤
             </Link>
-            <Link
-              href="/admin/line-assistant"
-              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-            >
-              租屋客服
-            </Link>
             {isSuperAdmin ? (
               <>
+                <Link
+                  href="/admin/line-assistant"
+                  className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+                >
+                  租屋客服
+                </Link>
                 <Link
                   href="/admin/listings/records"
                   className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
@@ -306,11 +306,11 @@ export function AdminShell({ current: currentProp = null, children }: AdminShell
                 <Link href="/admin/owner-tracking" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
                   屋主追蹤
                 </Link>
-                <Link href="/admin/line-assistant" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
-                  租屋客服
-                </Link>
                 {isSuperAdmin ? (
                   <>
+                    <Link href="/admin/line-assistant" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
+                      租屋客服
+                    </Link>
                     <Link
                       href="/admin/listings/records"
                       onClick={() => setMenuOpen(false)}

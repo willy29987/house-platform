@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCurrentAdmin } from "@/lib/admin-auth";
+import { requireSuperAdmin } from "@/lib/admin-auth";
 import {
   appendLineConversationMessage,
   findRecentGuestUserIdByExactText,
@@ -44,10 +44,8 @@ type PostBody = {
 };
 
 export async function GET() {
-  const admin = await getCurrentAdmin();
-  if (!admin) {
-    return NextResponse.json({ error: "未登入" }, { status: 401 });
-  }
+  const denied = await requireSuperAdmin();
+  if (denied) return denied;
   const cases = await readLineRentalCases();
   return NextResponse.json({ cases });
 }

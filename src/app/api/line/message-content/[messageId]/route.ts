@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCurrentAdmin } from "@/lib/admin-auth";
+import { requireSuperAdmin } from "@/lib/admin-auth";
 import { getLineChannelAccessToken } from "@/lib/line-messaging";
 
 export const dynamic = "force-dynamic";
@@ -10,10 +10,8 @@ type RouteContext = {
 };
 
 export async function GET(_request: Request, context: RouteContext) {
-  const admin = await getCurrentAdmin();
-  if (!admin) {
-    return NextResponse.json({ error: "未登入" }, { status: 401 });
-  }
+  const denied = await requireSuperAdmin();
+  if (denied) return denied;
 
   const { messageId: rawId } = await context.params;
   const messageId = rawId?.trim() ?? "";

@@ -1,4 +1,4 @@
-import { getCurrentAdmin } from "@/lib/admin-auth";
+import { requireSuperAdmin } from "@/lib/admin-auth";
 import { ADMIN_CLOUD_DATA_KEYS } from "@/lib/admin-cloud-data-keys";
 import { readLineConversations } from "@/lib/line-conversations";
 import { listOpenGuestSessions } from "@/lib/line-guest-sessions";
@@ -46,10 +46,8 @@ function sleep(ms: number, signal: AbortSignal) {
 }
 
 export async function GET(request: Request) {
-  const admin = await getCurrentAdmin();
-  if (!admin) {
-    return new Response("未登入", { status: 401 });
-  }
+  const denied = await requireSuperAdmin();
+  if (denied) return denied;
 
   const encoder = new TextEncoder();
   const { signal } = request;

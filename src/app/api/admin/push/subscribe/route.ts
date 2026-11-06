@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCurrentAdmin } from "@/lib/admin-auth";
+import { requireSuperAdmin } from "@/lib/admin-auth";
 import {
   removeAdminPushSubscription,
   upsertAdminPushSubscription,
@@ -13,10 +13,8 @@ type Body = {
 };
 
 export async function POST(request: Request) {
-  const admin = await getCurrentAdmin();
-  if (!admin) {
-    return NextResponse.json({ error: "未登入" }, { status: 401 });
-  }
+  const denied = await requireSuperAdmin();
+  if (denied) return denied;
 
   let body: Body;
   try {
@@ -42,10 +40,8 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const admin = await getCurrentAdmin();
-  if (!admin) {
-    return NextResponse.json({ error: "未登入" }, { status: 401 });
-  }
+  const denied = await requireSuperAdmin();
+  if (denied) return denied;
 
   let body: { endpoint?: string };
   try {

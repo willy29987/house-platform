@@ -54,7 +54,7 @@ async function attachMissingGuestAvatars<T extends { lineUserId: string; picture
 
 export default async function LineAssistantPreviewPage() {
   const current = await getCurrentAdmin();
-  if (!current) redirect("/admin/login");
+  if (!current || current.role !== "SUPER_ADMIN") redirect("/admin");
 
   await syncRecentGuestBookings().catch((error) => {
     console.warn("[line-assistant] sync bookings failed", error);
