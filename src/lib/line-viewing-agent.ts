@@ -172,7 +172,7 @@ export async function notifyAgentsOfNewViewing(caseRecord: LineRentalCase): Prom
   let notified = 0;
   await Promise.all(
     agentIds.map(async (agentId) => {
-      const result = await pushLineMessages(agentId, [message]);
+      const result = await pushLineMessages(agentId, [message], { force: true });
       if (result.sent) notified += 1;
     }),
   );
@@ -256,12 +256,16 @@ export async function handleViewingAgentPostback(input: {
     ]);
     if (claimed.case.lineUserId) {
       const listings = await confirmListingsForCase(claimed.case);
-      await pushLineMessages(claimed.case.lineUserId, [
-        {
-          type: "text",
-          text: buildViewingConfirmedGuestText(when, listings),
-        },
-      ]);
+      await pushLineMessages(
+        claimed.case.lineUserId,
+        [
+          {
+            type: "text",
+            text: buildViewingConfirmedGuestText(when, listings),
+          },
+        ],
+        { force: true },
+      );
     }
     return true;
   }
@@ -346,12 +350,16 @@ async function handleGuestAccept(input: {
   ]);
   const agentId = updated?.handledByAgentLineUserId;
   if (agentId) {
-    await pushLineMessages(agentId, [
-      {
-        type: "text",
-        text: `客人已接受改約「${when}」（${caseRecord.displayName}／${listingTitles(caseRecord)}）。`,
-      },
-    ]);
+    await pushLineMessages(
+      agentId,
+      [
+        {
+          type: "text",
+          text: `客人已接受改約「${when}」（${caseRecord.displayName}／${listingTitles(caseRecord)}）。`,
+        },
+      ],
+      { force: true },
+    );
   }
 }
 
@@ -385,12 +393,16 @@ export async function submitAgentProposedWhen(input: {
   if (!updated) return { ok: false, error: "更新失敗，請稍後再試" };
 
   if (updated.lineUserId) {
-    await pushLineMessages(updated.lineUserId, [buildGuestRescheduleConfirmMessage(updated)]);
+    await pushLineMessages(updated.lineUserId, [buildGuestRescheduleConfirmMessage(updated)], {
+      force: true,
+    });
   }
   if (agentId) {
-    await pushLineMessages(agentId, [
-      { type: "text", text: `已送出新時間「${proposedWhen}」給客人確認。` },
-    ]);
+    await pushLineMessages(
+      agentId,
+      [{ type: "text", text: `已送出新時間「${proposedWhen}」給客人確認。` }],
+      { force: true },
+    );
   }
   return { ok: true, case: updated };
 }

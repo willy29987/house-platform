@@ -9,7 +9,7 @@ import {
   recordLineFriendUnfollow,
   type LineConversationMediaType,
 } from "@/lib/line-conversations";
-import { handleGuestPostback, handleGuestText } from "@/lib/line-guest-flow";
+import { handleGuestPostback, handleGuestText, startGuestFlow } from "@/lib/line-guest-flow";
 import { notifyAdminsLineGuestMessage } from "@/lib/admin-web-push";
 import { getLineUserProfile, replyLineMessages } from "@/lib/line-messaging";
 import { readLineChannelSecretFromCloud } from "@/lib/line-runtime-secrets";
@@ -212,6 +212,13 @@ async function handleEvent(event: LineEvent) {
           pictureUrl: profile.pictureUrl,
           timestamp: event.timestamp,
         });
+        if (event.replyToken) {
+          await startGuestFlow({
+            replyToken: event.replyToken,
+            lineUserId: userId,
+            displayName: profile.displayName,
+          });
+        }
       } else {
         await recordLineFriendUnfollow({
           lineUserId: userId,

@@ -1,4 +1,4 @@
-/** LINE Messaging API 推播／回覆（僅在 live + token 就緒時真送）。 */
+/** LINE Messaging API 推播／回覆。預設對所有客人真送；只有明確關閉時才停。 */
 
 import { appendLineConversationBotMessages } from "@/lib/line-conversations";
 import { readLineChannelAccessTokenFromCloud } from "@/lib/line-runtime-secrets";
@@ -11,9 +11,15 @@ function lineTokenFromEnv() {
   );
 }
 
-function lineLive() {
+/** 未設定視為開放。只有 LINE_ASSISTANT_LIVE=false 才停止主動推播。 */
+export function isLineAssistantLive() {
   const raw = (process.env.LINE_ASSISTANT_LIVE ?? "").trim().toLowerCase();
-  return raw === "true" || raw === "1" || raw === "yes";
+  if (raw === "false" || raw === "0" || raw === "no" || raw === "off") return false;
+  return true;
+}
+
+function lineLive() {
+  return isLineAssistantLive();
 }
 
 async function resolveLineToken() {

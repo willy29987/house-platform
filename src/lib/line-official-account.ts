@@ -1,4 +1,6 @@
-/** 客服頁預覽用。只讀網站上的官方帳號，不開啟回覆、不送訊息。 */
+import { isLineAssistantLive } from "@/lib/line-messaging";
+
+/** 客服頁顯示用的官方帳號狀態。 */
 
 export type LineAccountLink = {
   basicId: string;
@@ -13,7 +15,7 @@ export async function getLineAccountLink(): Promise<LineAccountLink> {
   const addFriendUrl = process.env.NEXT_PUBLIC_LINE_OA_ADD_FRIEND_URL || process.env.NEXT_PUBLIC_LINE_OA_URL || "";
   const basicId = addFriendUrl.match(/@[\w.-]+/)?.[0] ?? "";
   const token = process.env.LINE_CHANNEL_ACCESS_TOKEN?.trim() ?? "";
-  const live = process.env.LINE_ASSISTANT_LIVE === "true";
+  const live = isLineAssistantLive();
   let displayName: string | null = null;
   let pictureUrl: string | null = null;
 
