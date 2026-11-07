@@ -4,7 +4,12 @@ import { getGuestWatchByUserId, watchRecordToCriteria } from "@/lib/line-guest-w
 import { LINE_LIFF_RENT_ASSISTANT_ID, messagingUidFromSearch } from "@/lib/line-liff-id";
 import { getLineUserProfile } from "@/lib/line-messaging";
 import { findLatestOpenViewing } from "@/lib/line-rental-cases";
-import { emptyCriteria, loadRentalMatchListings } from "@/lib/line-rental-assistant";
+import {
+  emptyCriteria,
+  loadPublishedRentalMatchListing,
+  loadRentalMatchListings,
+  widenCriteriaFromListing,
+} from "@/lib/line-rental-assistant";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +25,13 @@ function listingIdsFromParam(raw: string | string[] | undefined) {
   ];
 }
 
+function truthyParam(raw: string | string[] | undefined) {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (!value) return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes";
+}
+
 export default async function LiffRentAssistantPage({
   searchParams,
 }: {
@@ -27,6 +39,7 @@ export default async function LiffRentAssistantPage({
     liffId?: string;
     uid?: string;
     listingId?: string | string[];
+    similar?: string | string[];
     "liff.state"?: string;
   }>;
 }) {
@@ -37,6 +50,7 @@ export default async function LiffRentAssistantPage({
   if (params["liff.state"]) search.set("liff.state", params["liff.state"]);
   const fallbackLineUserId = messagingUidFromSearch(search.toString());
   const pushedListingIds = listingIdsFromParam(params.listingId);
+  const similarMode = truthyParam(params.similar);
   const openViewing = fallbackLineUserId
     ? await findLatestOpenViewing(fallbackLineUserId)
     : null;
@@ -44,8 +58,25 @@ export default async function LiffRentAssistantPage({
 
   const cards = await loadRentalMatchListings(null, [...pushedListingIds, ...priorListingIds]);
   let directListing: LiffDirectListingEntry | null = null;
-  // 591／推播帶 listingId 時直接開該物件；有舊條件就帶上，沒有也不擋。
-  if (pushedListingIds.length) {
+
+  if (pushedListingIds.length && similarMode) {
+    const seed =
+      (await loadPublishedRentalMatchListing(pushedListingIds[0]!)) ||
+      cards.find((item) => item.id === pushedListingIds[0]) ||
+      null;
+    if (seed) {
+      const widened = widenCriteriaFromListing(seed);
+      directListing = {
+        listingIds: pushedListingIds,
+        criteria: widened.criteria,
+        priceMin: widened.priceMin,
+        priceMax: widened.priceMax,
+        petNote: "",
+        mode: "similar",
+      };
+    }
+  } else if (pushedListingIds.length) {
+    // 591／推播／照片「選看屋時間」：直接開該物件；有舊條件就帶上。
     const watch = fallbackLineUserId
       ? await getGuestWatchByUserId(fallbackLineUserId)
       : null;
@@ -55,8 +86,10 @@ export default async function LiffRentAssistantPage({
       priceMin: watch?.priceMin ?? null,
       priceMax: watch?.priceMax ?? null,
       petNote: watch?.petNote ?? "",
+      mode: "book",
     };
   }
+
   const listingBaseUrl =
     process.env.NEXT_PUBLIC_LISTING_BASE_URL?.replace(/\/$/, "") ||
     "https://house-platform.vercel.app";

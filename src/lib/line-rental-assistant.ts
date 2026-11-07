@@ -259,6 +259,46 @@ export function emptyCriteria(): RentalMatchCriteria {
   };
 }
 
+function roomKeyFromListing(listing: Pick<RentalMatchListing, "rooms" | "houseCondition" | "propertyType">) {
+  const condition = listing.houseCondition || listing.propertyType;
+  if (condition === "STUDIO") return "studio";
+  // 分租套房沒有對應的條件鍵，只鎖縣市／行政區與預算
+  if (condition === "SUITE") return null;
+  if (listing.rooms >= 4) return "4";
+  if (listing.rooms >= 1 && listing.rooms <= 3) return String(listing.rooms);
+  return null;
+}
+
+/** 從單一物件抽出找房條件（尚未放寬）。 */
+export function criteriaFromListing(
+  listing: Pick<RentalMatchListing, "city" | "district" | "rooms" | "houseCondition" | "propertyType">,
+): RentalMatchCriteria {
+  const room = roomKeyFromListing(listing);
+  return {
+    ...emptyCriteria(),
+    cities: listing.city ? [listing.city] : [],
+    districts: listing.district ? [listing.district] : [],
+    rooms: room ? [room] : [],
+  };
+}
+
+/** 以該間為基準自動放寬：同縣市行政區／同房型，租金約 ±20%。 */
+export function widenCriteriaFromListing(
+  listing: Pick<
+    RentalMatchListing,
+    "city" | "district" | "price" | "rooms" | "houseCondition" | "propertyType"
+  >,
+): { criteria: RentalMatchCriteria; priceMin: number; priceMax: number } {
+  const price = Number.isFinite(listing.price) ? Math.max(0, listing.price) : 0;
+  const priceMin = Math.max(0, Math.round(price * 0.8));
+  const priceMax = Math.max(priceMin, Math.round(price * 1.2));
+  return {
+    criteria: criteriaFromListing(listing),
+    priceMin,
+    priceMax,
+  };
+}
+
 function hasParking(listing: RentalMatchListing) {
   return Boolean(listing.areaParkingSpace && listing.areaParkingSpace > 0);
 }

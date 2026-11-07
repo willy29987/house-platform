@@ -30,13 +30,14 @@ import { propertyTypeLabel } from "@/lib/property-type-label";
 
 type Step = "criteria" | "listings" | "profile";
 
-/** 已存條件的客人從推播點進：跳過條件頁，直接開物件 */
+/** 推播／591／照片對中後直開：book＝該間詳情；similar＝放寬條件後的配對列表 */
 export type LiffDirectListingEntry = {
   listingIds: string[];
   criteria: RentalMatchCriteria;
   priceMin: number | null;
   priceMax: number | null;
   petNote: string;
+  mode?: "book" | "similar";
 };
 
 const STEPS: { id: Step; label: string }[] = [
@@ -661,7 +662,8 @@ export function LineLiffRentForm({
   onSubmitted?: (caseId: string) => void;
 }) {
   const today = useMemo(() => taipeiTodayYmd(), []);
-  const skipCriteria = Boolean(directListing?.listingIds.length);
+  const directMode = directListing?.mode === "similar" ? "similar" : directListing ? "book" : null;
+  const skipCriteria = Boolean(directListing?.listingIds.length || directMode === "similar");
   const [step, setStep] = useState<Step>(skipCriteria ? "listings" : "criteria");
   const [criteria, setCriteria] = useState<RentalMatchCriteria>(
     directListing?.criteria ?? emptyCriteria(),
@@ -675,6 +677,21 @@ export function LineLiffRentForm({
   );
   const [matched, setMatched] = useState<RentalMatchListing[]>(() => {
     if (!directListing) return [];
+    if (directMode === "similar") {
+      const focusIds = directListing.listingIds;
+      const focusSet = new Set(focusIds);
+      const min = directListing.priceMin ?? 0;
+      const max = directListing.priceMax ?? Number.POSITIVE_INFINITY;
+      const result = matchRentals(listings, directListing.criteria);
+      const filtered = result.items.filter((item) => {
+        if (directListing.priceMin != null && item.price < min) return false;
+        if (directListing.priceMax != null && item.price > max) return false;
+        return true;
+      });
+      const focus = listings.filter((item) => focusSet.has(item.id));
+      const rest = filtered.filter((item) => !focusSet.has(item.id));
+      return [...focus, ...rest];
+    }
     const ids = new Set(directListing.listingIds);
     return listings.filter((item) => ids.has(item.id));
   });
@@ -683,7 +700,7 @@ export function LineLiffRentForm({
   const [similarNotes, setSimilarNotes] = useState<string[]>([]);
   const [watchSaved, setWatchSaved] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(
-    skipCriteria ? (directListing?.listingIds[0] ?? null) : null,
+    directMode === "book" ? (directListing?.listingIds[0] ?? null) : null,
   );
   const [priceCustomOn, setPriceCustomOn] = useState(
     Boolean(
@@ -706,7 +723,11 @@ export function LineLiffRentForm({
   const [phone, setPhone] = useState("");
   const [schedule, setSchedule] = useState<ViewingScheduleValue>(emptyViewingSchedule);
   const [pickedIds, setPickedIds] = useState<string[]>(
-    skipCriteria ? [...(directListing?.listingIds ?? [])].slice(0, MAX_WANTED_LISTINGS) : [],
+    directMode === "book"
+      ? [...(directListing?.listingIds ?? [])].slice(0, MAX_WANTED_LISTINGS)
+      : directMode === "similar"
+        ? [...(directListing?.listingIds ?? [])].slice(0, 1)
+        : [],
   );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -837,6 +858,11 @@ export function LineLiffRentForm({
 
   useEffect(() => {
     if (listingBootRef.current || !listings.length) return;
+    // similar 模式已用放寬條件初始化列表，不要被舊的直開 boot 覆寫
+    if (directMode === "similar") {
+      listingBootRef.current = true;
+      return;
+    }
     const params = new URLSearchParams(window.location.search);
     const ids = params
       .getAll("listingId")
@@ -863,7 +889,7 @@ export function LineLiffRentForm({
     setPickedIds(found.map((item) => item.id).slice(0, MAX_WANTED_LISTINGS));
     if (skipCriteria) setDetailId(found[0]?.id ?? null);
     setStep("listings");
-  }, [listings, skipCriteria]);
+  }, [listings, skipCriteria, directMode]);
 
   const cities = useMemo(
     () => [...new Set(listings.map((item) => item.city).filter(Boolean))].sort(),

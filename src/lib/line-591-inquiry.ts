@@ -1,11 +1,16 @@
 import { ListingType } from "@prisma/client";
 import { extract591ListingId, find591UrlInText } from "@/lib/listing-591-id";
+import {
+  fetchLineMessageImageBuffer,
+  matchPublishedRentalByImage,
+} from "@/lib/line-listing-image-match";
 import { appendLineRentalCase, type LineRentalCase } from "@/lib/line-rental-cases";
 import {
   buildLiffRentAssistantUrl,
   truncateLineTemplateText,
   type LineMessage,
 } from "@/lib/line-messaging";
+import type { RentalMatchListing } from "@/lib/line-rental-assistant";
 import { prisma } from "@/lib/prisma";
 
 export type Matched591Listing = {
@@ -48,11 +53,53 @@ export type InquiryAutoReply = {
 function liffUrlForGuest(input: {
   lineUserId?: string | null;
   listingId?: string;
+  similar?: boolean;
 }) {
   const query: Record<string, string> = {};
   if (input.lineUserId?.startsWith("U")) query.uid = input.lineUserId;
   if (input.listingId) query.listingId = input.listingId;
+  if (input.similar) query.similar = "1";
   return buildLiffRentAssistantUrl(Object.keys(query).length ? query : undefined);
+}
+
+function matchedListingActions(input: {
+  lineUserId?: string | null;
+  listingId: string;
+  title: string;
+  altPrefix?: string;
+}): LineMessage[] {
+  return [
+    {
+      type: "template",
+      altText: `${input.altPrefix ?? ""}${input.title}`.slice(0, 400) || "找到對應物件",
+      template: {
+        type: "buttons",
+        text: truncateLineTemplateText(
+          `「${input.title}」可安排看屋。可選時間，或看同區類似物件。`,
+          60,
+        ),
+        actions: [
+          {
+            type: "uri",
+            label: "選看屋時間",
+            uri: liffUrlForGuest({
+              lineUserId: input.lineUserId,
+              listingId: input.listingId,
+            }),
+          },
+          {
+            type: "uri",
+            label: "看類似物件",
+            uri: liffUrlForGuest({
+              lineUserId: input.lineUserId,
+              listingId: input.listingId,
+              similar: true,
+            }),
+          },
+        ],
+      },
+    },
+  ];
 }
 
 export async function handle591LinkInquiry(input: {
@@ -92,29 +139,12 @@ export async function handle591LinkInquiry(input: {
 
     return {
       caseRecord: created,
-      messages: [
-        {
-          type: "template",
-          altText: `「${listing.title}」目前可以安排看屋`,
-          template: {
-            type: "buttons",
-            text: truncateLineTemplateText(
-              `收到連結了。「${listing.title}」可安排看屋，點下方選時間。`,
-              60,
-            ),
-            actions: [
-              {
-                type: "uri",
-                label: "選看屋時間",
-                uri: liffUrlForGuest({
-                  lineUserId: input.lineUserId,
-                  listingId: listing.id,
-                }),
-              },
-            ],
-          },
-        },
-      ],
+      messages: matchedListingActions({
+        lineUserId: input.lineUserId,
+        listingId: listing.id,
+        title: listing.title,
+        altPrefix: "可安排看屋：",
+      }),
     };
   }
 
@@ -191,11 +221,59 @@ export async function handle591LinkInquiry(input: {
   };
 }
 
+function listingToPicked(listing: RentalMatchListing) {
+  return [{ id: listing.id, title: listing.title, price: listing.price }];
+}
+
 export async function handleImageInquiry(input: {
   lineUserId: string | null;
   displayName: string;
   imageMessageId?: string;
 }): Promise<InquiryAutoReply> {
+  let matched: Awaited<ReturnType<typeof matchPublishedRentalByImage>> = null;
+  if (input.imageMessageId) {
+    try {
+      const buffer = await fetchLineMessageImageBuffer(input.imageMessageId);
+      if (buffer) matched = await matchPublishedRentalByImage(buffer);
+    } catch (error) {
+      console.warn("[line-591-inquiry] image match failed", error);
+    }
+  }
+
+  if (matched?.listing) {
+    const listing = matched.listing;
+    const summary = `客人傳的照片對上「${listing.title}」（圖相似度距離 ${matched.distance}）。`;
+    const created = await appendLineRentalCase({
+      kind: "image_inquiry",
+      status: "pending_confirm",
+      lineUserId: input.lineUserId,
+      displayName: input.displayName,
+      phone: "",
+      occupation: "",
+      nationality: "",
+      peopleCount: 1,
+      petNote: "",
+      moveInDate: "",
+      criteriaText: `${listing.city}${listing.district} · ${listing.title}`,
+      picked: listingToPicked(listing),
+      requestedWhen: "",
+      summaryText: summary,
+      source591Id: "",
+      source591Url: "",
+      guestMessage: input.imageMessageId ? `image:${input.imageMessageId}` : "image",
+    });
+
+    return {
+      caseRecord: created,
+      messages: matchedListingActions({
+        lineUserId: input.lineUserId,
+        listingId: listing.id,
+        title: listing.title,
+        altPrefix: "照片對上：",
+      }),
+    };
+  }
+
   const created = await appendLineRentalCase({
     kind: "image_inquiry",
     status: "awaiting_staff",
