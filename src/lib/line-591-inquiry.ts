@@ -1,7 +1,11 @@
 import { ListingType } from "@prisma/client";
 import { extract591ListingId, find591UrlInText } from "@/lib/listing-591-id";
 import { appendLineRentalCase, type LineRentalCase } from "@/lib/line-rental-cases";
-import { buildLiffRentAssistantUrl, type LineMessage } from "@/lib/line-messaging";
+import {
+  buildLiffRentAssistantUrl,
+  truncateLineTemplateText,
+  type LineMessage,
+} from "@/lib/line-messaging";
 import { prisma } from "@/lib/prisma";
 
 export type Matched591Listing = {
@@ -41,15 +45,15 @@ export type InquiryAutoReply = {
   caseRecord: LineRentalCase | null;
 };
 
-function liffUrlWithListing(listingId?: string) {
-  const base = buildLiffRentAssistantUrl();
-  if (!listingId) return base;
-  const join = base.includes("?") ? "&" : "?";
-  return `${base}${join}listingId=${encodeURIComponent(listingId)}`;
+function liffUrlForGuest(input: {
+  lineUserId?: string | null;
+  listingId?: string;
+}) {
+  const query: Record<string, string> = {};
+  if (input.lineUserId?.startsWith("U")) query.uid = input.lineUserId;
+  if (input.listingId) query.listingId = input.listingId;
+  return buildLiffRentAssistantUrl(Object.keys(query).length ? query : undefined);
 }
-
-/** 暫時下架：貼 591 連結仍建案件進客服，但不自動回客人話術 */
-const DISABLE_591_LINK_AUTO_REPLY = true;
 
 export async function handle591LinkInquiry(input: {
   text: string;
@@ -62,7 +66,7 @@ export async function handle591LinkInquiry(input: {
   if (!source591Id && !url) return null;
 
   const listing = source591Id ? await findListingBy591Id(source591Id) : null;
-  const liffHome = buildLiffRentAssistantUrl();
+  const liffHome = liffUrlForGuest({ lineUserId: input.lineUserId });
 
   if (listing && listing.isPublished && listing.listingType === ListingType.RENT) {
     const summary = `客人貼 591 詢問「${listing.title}」是否可看（591 #${source591Id}）。`;
@@ -88,25 +92,29 @@ export async function handle591LinkInquiry(input: {
 
     return {
       caseRecord: created,
-      messages: DISABLE_591_LINK_AUTO_REPLY
-        ? []
-        : [
-            {
-              type: "template",
-              altText: `「${listing.title}」目前可以安排看屋`,
-              template: {
-                type: "buttons",
-                text: `收到連結了。「${listing.title}」目前可以安排看屋，點下方選時間即可。`,
-                actions: [
-                  {
-                    type: "uri",
-                    label: "選看屋時間",
-                    uri: liffUrlWithListing(listing.id),
-                  },
-                ],
+      messages: [
+        {
+          type: "template",
+          altText: `「${listing.title}」目前可以安排看屋`,
+          template: {
+            type: "buttons",
+            text: truncateLineTemplateText(
+              `收到連結了。「${listing.title}」可安排看屋，點下方選時間。`,
+              60,
+            ),
+            actions: [
+              {
+                type: "uri",
+                label: "選看屋時間",
+                uri: liffUrlForGuest({
+                  lineUserId: input.lineUserId,
+                  listingId: listing.id,
+                }),
               },
-            },
-          ],
+            ],
+          },
+        },
+      ],
     };
   }
 
@@ -134,19 +142,20 @@ export async function handle591LinkInquiry(input: {
 
     return {
       caseRecord: created,
-      messages: DISABLE_591_LINK_AUTO_REPLY
-        ? []
-        : [
-            {
-              type: "template",
-              altText: "這間目前無法安排看屋",
-              template: {
-                type: "buttons",
-                text: `這間「${listing.title}」目前無法安排看屋。需要我幫你找類似條件的房子嗎？`,
-                actions: [{ type: "uri", label: "開始找房", uri: liffHome }],
-              },
-            },
-          ],
+      messages: [
+        {
+          type: "template",
+          altText: "這間目前無法安排看屋",
+          template: {
+            type: "buttons",
+            text: truncateLineTemplateText(
+              `「${listing.title}」目前無法安排看屋。要找類似條件嗎？`,
+              60,
+            ),
+            actions: [{ type: "uri", label: "開始找房", uri: liffHome }],
+          },
+        },
+      ],
     };
   }
 
@@ -173,15 +182,12 @@ export async function handle591LinkInquiry(input: {
 
   return {
     caseRecord: created,
-    // 暫時下架自動回覆；連結仍會進客服收件匣，改由人工回
-    messages: DISABLE_591_LINK_AUTO_REPLY
-      ? []
-      : [
-          {
-            type: "text",
-            text: "收到你的 591 連結了，我這邊先轉給同事確認這間能不能看，稍後回你。若方便也可以再說一下希望看屋的時段。",
-          },
-        ],
+    messages: [
+      {
+        type: "text",
+        text: "收到你的 591 連結了，我這邊先轉給同事確認這間能不能看，稍後回你。若方便也可以再說一下希望看屋的時段。",
+      },
+    ],
   };
 }
 
@@ -210,9 +216,13 @@ export async function handleImageInquiry(input: {
     guestMessage: input.imageMessageId ? `image:${input.imageMessageId}` : "image",
   });
 
-  // 不再自動回「請貼 591 連結」話術；圖片已進客服對話，改由人工回
   return {
     caseRecord: created,
-    messages: [],
+    messages: [
+      {
+        type: "text",
+        text: "收到截圖了，我先轉給同事確認是哪一間，稍後回你。若有 591 連結也可以貼過來，對物件會更快。",
+      },
+    ],
   };
 }

@@ -1,10 +1,10 @@
 import { LineLiffRentAssistant } from "@/components/line-liff-rent-assistant";
-import { getLineUserProfile } from "@/lib/line-messaging";
-import { getGuestWatchByUserId, watchRecordToCriteria } from "@/lib/line-guest-watch";
-import { findLatestOpenViewing } from "@/lib/line-rental-cases";
-import { LINE_LIFF_RENT_ASSISTANT_ID, messagingUidFromSearch } from "@/lib/line-liff-id";
-import { loadRentalMatchListings } from "@/lib/line-rental-assistant";
 import type { LiffDirectListingEntry } from "@/components/line-liff-rent-form";
+import { getGuestWatchByUserId, watchRecordToCriteria } from "@/lib/line-guest-watch";
+import { LINE_LIFF_RENT_ASSISTANT_ID, messagingUidFromSearch } from "@/lib/line-liff-id";
+import { getLineUserProfile } from "@/lib/line-messaging";
+import { findLatestOpenViewing } from "@/lib/line-rental-cases";
+import { emptyCriteria, loadRentalMatchListings } from "@/lib/line-rental-assistant";
 
 export const dynamic = "force-dynamic";
 
@@ -44,17 +44,18 @@ export default async function LiffRentAssistantPage({
 
   const cards = await loadRentalMatchListings(null, [...pushedListingIds, ...priorListingIds]);
   let directListing: LiffDirectListingEntry | null = null;
-  if (fallbackLineUserId && pushedListingIds.length) {
-    const watch = await getGuestWatchByUserId(fallbackLineUserId);
-    if (watch) {
-      directListing = {
-        listingIds: pushedListingIds,
-        criteria: watchRecordToCriteria(watch),
-        priceMin: watch.priceMin,
-        priceMax: watch.priceMax,
-        petNote: watch.petNote,
-      };
-    }
+  // 591／推播帶 listingId 時直接開該物件；有舊條件就帶上，沒有也不擋。
+  if (pushedListingIds.length) {
+    const watch = fallbackLineUserId
+      ? await getGuestWatchByUserId(fallbackLineUserId)
+      : null;
+    directListing = {
+      listingIds: pushedListingIds,
+      criteria: watch ? watchRecordToCriteria(watch) : emptyCriteria(),
+      priceMin: watch?.priceMin ?? null,
+      priceMax: watch?.priceMax ?? null,
+      petNote: watch?.petNote ?? "",
+    };
   }
   const listingBaseUrl =
     process.env.NEXT_PUBLIC_LISTING_BASE_URL?.replace(/\/$/, "") ||

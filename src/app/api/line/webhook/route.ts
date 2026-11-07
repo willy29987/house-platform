@@ -360,13 +360,16 @@ async function handleEvent(event: LineEvent, state: { failed: boolean }) {
   }
 
   if (messageType === "image") {
-    // 圖片已寫入對話；可建案件給客服，但不自動回客人話術
+    // 圖片已寫入對話；建案件並回覆收到截圖
     if (userId && isViewingAgentUserId(userId)) return;
-    await handleImageInquiry({
+    const result = await handleImageInquiry({
       lineUserId: userId,
       displayName,
       imageMessageId: message.id,
     });
+    if (event.replyToken && result.messages.length) {
+      await replyLineMessages(event.replyToken, result.messages, { lineUserId: userId });
+    }
   }
 }
 
