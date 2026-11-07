@@ -1,9 +1,14 @@
 import Link from "next/link";
 import { getAdminListings, getAdminStats, getInquiries } from "@/lib/listings";
 import { AdminListingTable } from "@/components/admin-listing-table";
+import { AdminStaffDailyOps } from "@/components/admin-staff-daily-ops";
 import { AdminUpcomingRelease } from "@/components/admin-upcoming-release";
 import { getCurrentAdmin } from "@/lib/admin-auth";
-import { formatAdminStaffLabel, loadAdminStaffLabelMap } from "@/lib/admin-staff-labels";
+import {
+  formatAdminStaffLabel,
+  listStaffUsernamesForAssigneeFilter,
+  loadAdminStaffLabelMap,
+} from "@/lib/admin-staff-labels";
 
 function formatDateTime(d: Date) {
   return new Intl.DateTimeFormat("zh-TW", {
@@ -21,12 +26,13 @@ type AdminPageProps = {
 export default async function AdminPage({ searchParams }: AdminPageProps) {
   const { type } = await searchParams;
   const activeType = type === "sale" ? "SALE" : "RENT";
-  const [listings, current, stats, inquiries, staffLabels] = await Promise.all([
+  const [listings, current, stats, inquiries, staffLabels, staffUsernames] = await Promise.all([
     getAdminListings(),
     getCurrentAdmin(),
     getAdminStats(),
     getInquiries(),
     loadAdminStaffLabelMap(),
+    listStaffUsernamesForAssigneeFilter(),
   ]);
   const isSuperAdmin = current?.role === "SUPER_ADMIN";
   const pendingInquiries = inquiries.filter((i) => !i.isHandled).slice(0, 5);
@@ -62,6 +68,15 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
               {isSuperAdmin ? "最高管理員" : "業務"}
             </span>
           </p>
+        ) : null}
+
+        {isSuperAdmin ? (
+          <AdminStaffDailyOps
+            currentUsername={current?.username ?? ""}
+            isSuperAdmin
+            staffUsernames={staffUsernames}
+            staffLabels={staffLabels}
+          />
         ) : null}
 
         <section className="grid grid-cols-2 gap-2.5">
@@ -154,6 +169,15 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
               {isSuperAdmin ? "最高管理員" : "物件操作員"}
             </span>
           </p>
+        ) : null}
+
+        {isSuperAdmin ? (
+          <AdminStaffDailyOps
+            currentUsername={current?.username ?? ""}
+            isSuperAdmin
+            staffUsernames={staffUsernames}
+            staffLabels={staffLabels}
+          />
         ) : null}
 
         <section className="grid gap-3 md:grid-cols-3">

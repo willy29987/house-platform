@@ -2,6 +2,8 @@ import type { CellValue, Worksheet } from "exceljs";
 import { formatAdminStaffLabel } from "@/lib/admin-staff-labels";
 import { formatFollowUpWhen, formatOwnerCaseAddress, type OwnerTrackingStore } from "@/lib/owner-tracking-preview";
 import { listCommunityCell, type OwnerTrackingListRow } from "@/lib/owner-tracking-list-query";
+import { taipeiTodayYmd } from "@/lib/owner-tracking-next-contact";
+import { buildStaffDailyOpsRows } from "@/lib/owner-tracking-staff-stats";
 import { formatParkingTypeLabel } from "@/lib/parking-type-label";
 import { houseConditionLabel, splitHouseFields } from "@/lib/house-fields";
 import { propertyTypeLabel } from "@/lib/property-type-label";
@@ -53,6 +55,14 @@ const followUpColumns: ColumnSpec[] = [
   { header: "填寫人", width: 10 },
   { header: "狀態", width: 12 },
   { header: "備註", width: 36 },
+];
+
+const dailyCallsColumns: ColumnSpec[] = [
+  { header: "日期", width: 12 },
+  { header: "員工帳號", width: 12 },
+  { header: "顯示名稱", width: 14 },
+  { header: "今日電訪", width: 10 },
+  { header: "待聯繫", width: 10 },
 ];
 
 function normalizeUrl(url: string): string | null {
@@ -188,6 +198,27 @@ export async function buildOwnerTrackingWorkbook(
 
   const followSheet = workbook.addWorksheet("追蹤明細");
   setupSimpleSheet(followSheet, followUpColumns, followUpRows(store, listRows, staffLabels));
+
+  const today = taipeiTodayYmd();
+  const staffFromStore = [
+    ...new Set([
+      ...store.cases.map((c) => c.assignee.trim()).filter((a) => a && a !== "—"),
+      ...store.followUps.map((f) => f.createdBy.trim()).filter(Boolean),
+    ]),
+  ];
+  const dailyRows = buildStaffDailyOpsRows(store, {
+    staffUsernames: staffFromStore,
+    currentUsername: "",
+    isSuperAdmin: true,
+  }).map((row) => [
+    today,
+    row.username,
+    formatAdminStaffLabel(row.username, staffLabels),
+    row.followUpsToday,
+    row.contactDue,
+  ]);
+  const dailySheet = workbook.addWorksheet("今日電訪");
+  setupSimpleSheet(dailySheet, dailyCallsColumns, dailyRows);
 
   // 網址欄超連結樣式（案件一覽第 10 欄）
   const urlCol = 10;
