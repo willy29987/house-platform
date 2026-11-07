@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { appendFileSync, mkdirSync } from "fs";
 import path from "path";
 import { NextResponse } from "next/server";
-import { handle591LinkInquiry, handleImageInquiry } from "@/lib/line-591-inquiry";
+import { handle591LinkInquiry } from "@/lib/line-591-inquiry";
 import {
   appendLineConversationMessage,
   patchLineConversationProfiles,
@@ -360,15 +360,20 @@ async function handleEvent(event: LineEvent, state: { failed: boolean }) {
   }
 
   if (messageType === "image") {
-    // 圖片已寫入對話；建案件並回覆收到截圖
+    // 圖片已寫入對話；建案件並回覆。圖檔比對延遲載入，避免 sharp 拖垮文字 webhook。
     if (userId && isViewingAgentUserId(userId)) return;
-    const result = await handleImageInquiry({
-      lineUserId: userId,
-      displayName,
-      imageMessageId: message.id,
-    });
-    if (event.replyToken && result.messages.length) {
-      await replyLineMessages(event.replyToken, result.messages, { lineUserId: userId });
+    try {
+      const { handleImageInquiry } = await import("@/lib/line-591-inquiry");
+      const result = await handleImageInquiry({
+        lineUserId: userId,
+        displayName,
+        imageMessageId: message.id,
+      });
+      if (event.replyToken && result.messages.length) {
+        await replyLineMessages(event.replyToken, result.messages, { lineUserId: userId });
+      }
+    } catch (error) {
+      console.warn("[line/webhook] image inquiry failed", error);
     }
   }
 }

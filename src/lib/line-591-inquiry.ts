@@ -1,9 +1,5 @@
 import { ListingType } from "@prisma/client";
 import { extract591ListingId, find591UrlInText } from "@/lib/listing-591-id";
-import {
-  fetchLineMessageImageBuffer,
-  matchPublishedRentalByImage,
-} from "@/lib/line-listing-image-match";
 import { appendLineRentalCase, type LineRentalCase } from "@/lib/line-rental-cases";
 import {
   buildLiffRentAssistantUrl,
@@ -230,9 +226,18 @@ export async function handleImageInquiry(input: {
   displayName: string;
   imageMessageId?: string;
 }): Promise<InquiryAutoReply> {
-  let matched: Awaited<ReturnType<typeof matchPublishedRentalByImage>> = null;
+  // sharp／圖檔比對延遲載入，避免拖垮整條 webhook 模組
+  let matched: {
+    listing: RentalMatchListing;
+    distance: number;
+    matchedUrl: string;
+  } | null = null;
   if (input.imageMessageId) {
     try {
+      const {
+        fetchLineMessageImageBuffer,
+        matchPublishedRentalByImage,
+      } = await import("@/lib/line-listing-image-match");
       const buffer = await fetchLineMessageImageBuffer(input.imageMessageId);
       if (buffer) matched = await matchPublishedRentalByImage(buffer);
     } catch (error) {

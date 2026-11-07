@@ -1,18 +1,22 @@
 /** 用 dHash 把客人傳來的照片對上已上架租屋圖。 */
 
 import { ListingType } from "@prisma/client";
-import sharp from "sharp";
 import { ADMIN_CLOUD_DATA_KEYS } from "@/lib/admin-cloud-data-keys";
 import { readAdminCloudPayload, writeAdminCloudPayload } from "@/lib/admin-cloud-data-server";
+import { normalizeItemList } from "@/lib/furniture-appliance-value";
+import { parseListingInternalMeta } from "@/lib/listing-internal-meta";
 import { getLineChannelAccessToken } from "@/lib/line-messaging";
 import {
   loadPublishedRentalMatchListing,
   toRentalMatchListing,
   type RentalMatchListing,
 } from "@/lib/line-rental-assistant";
-import { normalizeItemList } from "@/lib/furniture-appliance-value";
-import { parseListingInternalMeta } from "@/lib/listing-internal-meta";
 import { prisma } from "@/lib/prisma";
+
+async function loadSharp() {
+  const mod = await import("sharp");
+  return mod.default;
+}
 
 const DHASH_SIZE = 8;
 /** 允許壓縮／再存圖造成的差異；整頁截圖通常會遠大於此 */
@@ -62,6 +66,7 @@ function hammingHex(a: string, b: string) {
 
 /** 64-bit dHash → 16 hex chars */
 export async function computeDHash(buffer: Buffer): Promise<string> {
+  const sharp = await loadSharp();
   const { data, info } = await sharp(buffer)
     .rotate()
     .grayscale()
