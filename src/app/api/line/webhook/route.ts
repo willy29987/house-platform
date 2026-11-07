@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { appendFileSync, mkdirSync } from "fs";
 import path from "path";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { handle591LinkInquiry } from "@/lib/line-591-inquiry";
 import {
   appendLineConversationMessage,
@@ -23,10 +23,15 @@ import {
 } from "@/lib/line-viewing-agent";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+/** 寫入對話後要盡快 200；圖檔對物件改 after() 背景跑 */
+export const maxDuration = 30;
 
 function rememberLineUserId(userId: string | null | undefined, eventType?: string) {
   if (!userId) return;
   console.info("[line/webhook] from userId=", userId, "type=", eventType);
+  // Vercel 唯讀／暫時檔案系統，寫檔無益且可能製造噪音
+  if (process.env.VERCEL) return;
   try {
     const dir = path.join(process.cwd(), ".cursor");
     mkdirSync(dir, { recursive: true });
@@ -330,40 +335,49 @@ async function handleEvent(event: LineEvent, state: { failed: boolean }) {
     const text = message.text?.trim() ?? "";
     if (!text) return;
 
-    if (userId && isViewingAgentUserId(userId)) {
-      const handled = await handleAgentProposeText({
-        replyToken: event.replyToken,
-        agentLineUserId: userId,
-        text,
-      });
-      if (handled) return;
-    }
+    // 對話已寫入；後續自動回覆失敗不可讓 webhook 整包 500（否則 LINE 重送也救不回體感）
+    try {
+      if (userId && isViewingAgentUserId(userId)) {
+        const handled = await handleAgentProposeText({
+          replyToken: event.replyToken,
+          agentLineUserId: userId,
+          text,
+        });
+        if (handled) return;
+      }
 
-    if (userId) {
-      const guestHandled = await handleGuestText({
-        replyToken: event.replyToken,
-        lineUserId: userId,
+      if (userId) {
+        const guestHandled = await handleGuestText({
+          replyToken: event.replyToken,
+          lineUserId: userId,
+          text,
+          displayName,
+        });
+        if (guestHandled) return;
+      }
+
+      const result = await handle591LinkInquiry({
         text,
+        lineUserId: userId,
         displayName,
       });
-      if (guestHandled) return;
+      if (!result) return;
+      if (result.messages.length) {
+        await replyLineMessages(event.replyToken, result.messages, { lineUserId: userId });
+      }
+    } catch (error) {
+      console.warn("[line/webhook] text auto-reply failed", error);
     }
-
-    const result = await handle591LinkInquiry({
-      text,
-      lineUserId: userId,
-      displayName,
-    });
-    if (!result) return;
-    await replyLineMessages(event.replyToken, result.messages, { lineUserId: userId });
     return;
   }
 
   if (messageType === "image") {
-    // 圖片已寫入對話；建案件並回覆。圖檔比對延遲載入，避免 sharp 拖垮文字 webhook。
+    // 圖片已寫入對話；先快速回覆，圖檔對物件放到 after() 背景跑。
     if (userId && isViewingAgentUserId(userId)) return;
     try {
-      const { handleImageInquiry } = await import("@/lib/line-591-inquiry");
+      const { handleImageInquiry, refineImageInquiryMatch } = await import(
+        "@/lib/line-591-inquiry"
+      );
       const result = await handleImageInquiry({
         lineUserId: userId,
         displayName,
@@ -371,6 +385,19 @@ async function handleEvent(event: LineEvent, state: { failed: boolean }) {
       });
       if (event.replyToken && result.messages.length) {
         await replyLineMessages(event.replyToken, result.messages, { lineUserId: userId });
+      }
+      const caseId = result.caseRecord?.id;
+      const imageMessageId = message.id;
+      if (caseId && imageMessageId) {
+        after(() =>
+          refineImageInquiryMatch({
+            caseId,
+            lineUserId: userId,
+            imageMessageId,
+          }).catch((error) => {
+            console.warn("[line/webhook] background image match failed", error);
+          }),
+        );
       }
     } catch (error) {
       console.warn("[line/webhook] image inquiry failed", error);

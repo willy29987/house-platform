@@ -21,7 +21,7 @@ async function loadSharp() {
 const DHASH_SIZE = 8;
 /** 允許壓縮／再存圖造成的差異；整頁截圖通常會遠大於此 */
 const MAX_HAMMING = 10;
-const MATCH_BUDGET_MS = 9000;
+const MATCH_BUDGET_MS = 6000;
 const FETCH_CONCURRENCY = 6;
 
 type HashCache = {

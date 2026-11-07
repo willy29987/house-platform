@@ -924,6 +924,7 @@ export function LineRentalPreview({
     [initialConversations, initialCases, initialSessions, initialWatches, initialProfileUserIds],
   );
   const [liveReady, setLiveReady] = useState(() => seedLive.length > 0);
+  const [liveLoadError, setLiveLoadError] = useState("");
   const [liveGuests, setLiveGuests] = useState<StaffGuest[]>(() => seedLive);
   const [guests, setGuests] = useState<StaffGuest[]>(() => (seedLive.length ? seedLive : []));
   const [filter, setFilter] = useState<ListFilter>("all");
@@ -1083,7 +1084,14 @@ export function LineRentalPreview({
           headers: { Pragma: "no-cache", "Cache-Control": "no-cache" },
         });
         if (!response.ok) {
-          if (!cancelled) setLiveReady(true);
+          if (cancelled) return;
+          // 失敗時不要假裝「已載入空白名單」，否則客服會以為掛掉、漏訊
+          if (response.status === 401 || response.status === 403) {
+            setLiveLoadError("登入已失效，請重新登入後台後再打開租屋客服。");
+          } else {
+            setLiveLoadError("對話載入失敗，正在重試…");
+            startFallback();
+          }
           return;
         }
         const data = (await response.json()) as {
@@ -1093,9 +1101,12 @@ export function LineRentalPreview({
           watches?: GuestWatchRecord[];
           profileUserIds?: string[];
         };
+        setLiveLoadError("");
         applySnapshot(data);
       } catch {
-        if (!cancelled) setLiveReady(true);
+        if (cancelled) return;
+        setLiveLoadError("對話載入失敗，正在重試…");
+        startFallback();
       }
     }
 
@@ -1716,7 +1727,9 @@ export function LineRentalPreview({
             mobilePane === "chat" ? "max-lg:hidden" : ""
           }`}
         >
-          {!liveReady ? (
+          {liveLoadError ? (
+            <li className="px-4 py-8 text-center text-sm text-red-600">{liveLoadError}</li>
+          ) : !liveReady ? (
             <li className="px-4 py-8 text-center text-sm text-zinc-500">載入對話中…</li>
           ) : visible.length === 0 ? (
             <li className="px-4 py-8 text-center text-sm text-zinc-500">這個篩選目前沒有客人</li>
