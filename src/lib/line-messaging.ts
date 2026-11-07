@@ -1,6 +1,7 @@
 /** LINE Messaging API 推播／回覆。預設對所有客人真送；只有明確關閉時才停。 */
 
 import { appendLineConversationBotMessages } from "@/lib/line-conversations";
+import { LINE_LIFF_RENT_ASSISTANT_ID } from "@/lib/line-liff-id";
 import { readLineChannelAccessTokenFromCloud } from "@/lib/line-runtime-secrets";
 
 function lineTokenFromEnv() {
@@ -278,9 +279,8 @@ export function buildLiffRentAssistantUrl(query?: Record<string, string>) {
         .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
         .join("&")}`
     : "";
-  // LIFF 頻道仍是 Developing，liff.line.me 會對一般客人回 400。直接開表單頁。
-  const base = buildPublicBaseUrl() || "https://house-platform.vercel.app";
-  return `${base}/liff/rent-assistant${qs}`;
+  // 公開後的 LIFF：圖文選單與按鈕直接開 LINE 內建視窗。
+  return `https://liff.line.me/${LINE_LIFF_RENT_ASSISTANT_ID}${qs}`;
 }
 
 export function buildAgentRescheduleUrl(caseId: string) {

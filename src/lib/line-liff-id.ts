@@ -1,6 +1,6 @@
 /** LIFF ID 會出現在前端，屬公開設定。可用環境變數覆寫。 */
 export const LINE_LIFF_RENT_ASSISTANT_ID =
-  process.env.NEXT_PUBLIC_LIFF_ID?.trim() || "2012308800-rDFp5dsT";
+  process.env.NEXT_PUBLIC_LIFF_ID?.trim() || "2012308800-9xNMWz5n";
 
 /** 從 LIFF 網址或 liff.state 取出 Messaging API 的 uid。 */
 export function messagingUidFromSearch(search: string): string | null {
