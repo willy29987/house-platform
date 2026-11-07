@@ -208,6 +208,7 @@ export function AdminShell({ current: currentProp = null, children }: AdminShell
               <>
                 <Link
                   href="/admin/line-assistant"
+                  prefetch
                   className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
                 >
                   租屋客服
@@ -308,7 +309,12 @@ export function AdminShell({ current: currentProp = null, children }: AdminShell
                 </Link>
                 {isSuperAdmin ? (
                   <>
-                    <Link href="/admin/line-assistant" onClick={() => setMenuOpen(false)} className={menuLinkCls}>
+                    <Link
+                      href="/admin/line-assistant"
+                      prefetch
+                      onClick={() => setMenuOpen(false)}
+                      className={menuLinkCls}
+                    >
                       租屋客服
                     </Link>
                     <Link

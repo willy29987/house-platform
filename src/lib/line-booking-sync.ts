@@ -20,6 +20,9 @@ import {
 } from "@/lib/line-rental-cases";
 
 const SYNC_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+/** 客服輪詢很頻繁，預約回補不必每次都掃整包對話 */
+const SYNC_MIN_INTERVAL_MS = 60_000;
+let lastSyncStartedAt = 0;
 
 function realName(name: string | undefined) {
   const value = name?.trim() ?? "";
@@ -180,8 +183,11 @@ export async function syncGuestBookingMessage(input: {
 
 /** 客服打開名單時，把已在對話裡、但右側還沒資料的預約補上。 */
 export async function syncRecentGuestBookings() {
-  const conversations = await readLineConversations();
   const now = Date.now();
+  if (now - lastSyncStartedAt < SYNC_MIN_INTERVAL_MS) return;
+  lastSyncStartedAt = now;
+
+  const conversations = await readLineConversations();
   const edits: Array<{ lineUserId: string; messageId: string; text: string }> = [];
 
   for (const conversation of conversations) {

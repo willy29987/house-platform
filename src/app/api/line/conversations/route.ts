@@ -31,7 +31,8 @@ export async function GET() {
   const denied = await requireSuperAdmin();
   if (denied) return denied;
 
-  await syncRecentGuestBookings().catch((error) => {
+  // 先回對話快照；預約回補在背景跑，不拖慢客服開頁／輪詢
+  void syncRecentGuestBookings().catch((error) => {
     console.warn("[line/conversations] sync bookings failed", error);
   });
 

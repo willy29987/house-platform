@@ -923,12 +923,11 @@ export function LineRentalPreview({
       ),
     [initialConversations, initialCases, initialSessions, initialWatches, initialProfileUserIds],
   );
+  const [liveReady, setLiveReady] = useState(() => seedLive.length > 0);
   const [liveGuests, setLiveGuests] = useState<StaffGuest[]>(() => seedLive);
-  const [guests, setGuests] = useState<StaffGuest[]>(() =>
-    seedLive.length ? seedLive : buildStaffGuests(listings),
-  );
+  const [guests, setGuests] = useState<StaffGuest[]>(() => (seedLive.length ? seedLive : []));
   const [filter, setFilter] = useState<ListFilter>("all");
-  const [selectedId, setSelectedId] = useState(() => seedLive[0]?.id ?? "wang");
+  const [selectedId, setSelectedId] = useState(() => seedLive[0]?.id ?? "");
   /** 手機：列表與對話分開全螢幕；桌機三欄不受這個狀態影響 */
   const [mobilePane, setMobilePane] = useState<"list" | "chat">("list");
   const [editingTime, setEditingTime] = useState(false);
@@ -1074,6 +1073,7 @@ export function LineRentalPreview({
       );
       notifyNewGuestMessages(next);
       setLiveGuests(next);
+      setLiveReady(true);
     }
 
     async function loadLiveOnce() {
@@ -1082,7 +1082,10 @@ export function LineRentalPreview({
           cache: "no-store",
           headers: { Pragma: "no-cache", "Cache-Control": "no-cache" },
         });
-        if (!response.ok) return;
+        if (!response.ok) {
+          if (!cancelled) setLiveReady(true);
+          return;
+        }
         const data = (await response.json()) as {
           conversations?: LineConversation[];
           cases?: LineRentalCase[];
@@ -1092,7 +1095,7 @@ export function LineRentalPreview({
         };
         applySnapshot(data);
       } catch {
-        /* ignore */
+        if (!cancelled) setLiveReady(true);
       }
     }
 
@@ -1234,8 +1237,13 @@ export function LineRentalPreview({
       setGuests((current) => mergePendingStaffLines(liveGuests, current));
       return;
     }
+    // 尚未載入完成前不要塞示範客人，避免手機先閃假名單
+    if (!liveReady) {
+      setGuests([]);
+      return;
+    }
     setGuests(demoGuests);
-  }, [liveGuests, demoGuests]);
+  }, [liveGuests, demoGuests, liveReady]);
 
   useEffect(() => {
     if (!liveGuests.length) return;
@@ -1708,7 +1716,9 @@ export function LineRentalPreview({
             mobilePane === "chat" ? "max-lg:hidden" : ""
           }`}
         >
-          {visible.length === 0 ? (
+          {!liveReady ? (
+            <li className="px-4 py-8 text-center text-sm text-zinc-500">載入對話中…</li>
+          ) : visible.length === 0 ? (
             <li className="px-4 py-8 text-center text-sm text-zinc-500">這個篩選目前沒有客人</li>
           ) : (
             visible.map((guest) => {
