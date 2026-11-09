@@ -1,8 +1,0 @@
-{
-  "crons": [
-    {
-      "path": "/api/cron/591-banqiao-sync",
-      "schedule": "0 */2 * * *"
-    }
-  ]
-}
