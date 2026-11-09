@@ -1,14 +1,11 @@
 import { NextResponse } from "next/server";
 import { ADMIN_CLOUD_DATA_KEYS } from "@/lib/admin-cloud-data-keys";
 import { readAdminCloudPayload, writeAdminCloudPayload } from "@/lib/admin-cloud-data-server";
-import { getCurrentAdmin, requireAdminSession } from "@/lib/admin-auth";
-import { apply591RemovedToOwnerStore } from "@/lib/owner-tracking-release";
-import { normalizeOwnerTrackingStore } from "@/lib/owner-tracking-preview";
+import { requireAdminSession } from "@/lib/admin-auth";
 import { check591ListingUrlBatch, is591ListingUrl } from "@/lib/listing-591-check";
 import {
   mergeListing591CheckResults,
   normalizeOwnerTrackingListingChecksStore,
-  type OwnerTrackingListingChecksStore,
 } from "@/lib/owner-tracking-listing-checks";
 
 const MAX_ITEMS = 30;
@@ -60,34 +57,6 @@ export async function POST(request: Request) {
     console.error("[listing-url-check] cloud persist failed:", error);
   }
 
-  let ownerTrackingUpdated = false;
-  const removedCaseIds = Object.entries(results)
-    .filter(([, entry]) => entry.status === "removed")
-    .map(([caseId]) => caseId);
-
-  if (removedCaseIds.length > 0) {
-    try {
-      const current = await getCurrentAdmin();
-      const ownerRaw = await readAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.ownerTracking);
-      const ownerStore = normalizeOwnerTrackingStore(
-        (ownerRaw as Parameters<typeof normalizeOwnerTrackingStore>[0]) ?? { cases: [], followUps: [] },
-      );
-      const { store: nextOwner, changed, updatedCaseIds } = apply591RemovedToOwnerStore(
-        ownerStore,
-        removedCaseIds,
-        { createdBy: current?.username ?? "system" },
-      );
-      if (changed) {
-        await writeAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.ownerTracking, nextOwner);
-        ownerTrackingUpdated = true;
-      }
-      if (updatedCaseIds.length > 0) {
-        console.info("[listing-url-check] 591 下架已寫入釋出追蹤:", updatedCaseIds.join(", "));
-      }
-    } catch (error) {
-      console.error("[listing-url-check] owner tracking auto-invalid failed:", error);
-    }
-  }
-
-  return NextResponse.json({ ok: true, results, cloudPersisted, ownerTrackingUpdated });
+  // 暫不自動寫入下架／釋出追蹤：檢查只更新 LIVE／REMOVED 標記，不改案件狀態
+  return NextResponse.json({ ok: true, results, cloudPersisted, ownerTrackingUpdated: false });
 }

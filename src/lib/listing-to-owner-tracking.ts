@@ -164,10 +164,24 @@ function fillEmptyFields(current: OwnerCaseInput, incoming: OwnerCaseInput): Own
   return next;
 }
 
+function overwriteNonEmptyFields(current: OwnerCaseInput, incoming: OwnerCaseInput): OwnerCaseInput {
+  const next = { ...current };
+  (Object.keys(incoming) as (keyof OwnerCaseInput)[]).forEach((key) => {
+    if (key === "caseNote") return;
+    if (text(incoming[key])) next[key] = incoming[key];
+  });
+  if (text(incoming.caseNote)) next.caseNote = incoming.caseNote;
+  return next;
+}
+
 export async function addPublishedListingToViewableOwnerCase(input: {
   listingId: string;
   data: ListingInput;
   assignee: string;
+  /** 新建追蹤時的備註；預設為手動上架文案 */
+  initialNote?: string;
+  /** 已存在時：true 則用新資料覆寫非空欄位（預設只補空欄） */
+  overwriteExisting?: boolean;
 }): Promise<string | null> {
   const listingId = input.listingId.trim();
   if (!listingId) return null;
@@ -187,14 +201,19 @@ export async function addPublishedListingToViewableOwnerCase(input: {
   if (!existing) {
     const created = appendOwnerCase(store, incoming, input.assignee, VIEWABLE_STATUS);
     caseId = created.caseId;
+    const note = input.initialNote?.trim() || "從新增廣告的 591 帶入上架，加入可帶看";
     next = {
       ...created.store,
       followUps: created.store.followUps.map((row) =>
-        row.caseId === caseId ? { ...row, note: "從新增廣告的 591 帶入上架，加入可帶看" } : row,
+        row.caseId === caseId ? { ...row, note } : row,
       ),
     };
   } else {
-    const filled = updateOwnerCase(store, existing.id, fillEmptyFields(ownerCaseToInput(existing), incoming));
+    const base = ownerCaseToInput(existing);
+    const merged = input.overwriteExisting
+      ? overwriteNonEmptyFields(base, incoming)
+      : fillEmptyFields(base, incoming);
+    const filled = updateOwnerCase(store, existing.id, merged);
     next = filled ?? store;
   }
 
