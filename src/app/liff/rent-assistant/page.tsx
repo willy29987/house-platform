@@ -94,6 +94,19 @@ export default async function LiffRentAssistantPage({
         });
       }
     }
+  } else if (similarMode && fallbackLineUserId) {
+    // 非官網物件（591／截圖）：用剛存的條件直接列類似物件
+    const watch = await getGuestWatchByUserId(fallbackLineUserId);
+    if (watch) {
+      directListing = {
+        listingIds: [],
+        criteria: watchRecordToCriteria(watch),
+        priceMin: watch.priceMin ?? null,
+        priceMax: watch.priceMax ?? null,
+        petNote: watch.petNote ?? "",
+        mode: "similar",
+      };
+    }
   } else if (pushedListingIds.length) {
     // 591／推播／照片「選看屋時間」：直接開該物件；有舊條件就帶上。
     const watch = fallbackLineUserId

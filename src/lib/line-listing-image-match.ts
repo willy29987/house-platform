@@ -19,10 +19,16 @@ async function loadSharp() {
 }
 
 const DHASH_SIZE = 8;
-/** 允許壓縮／再存圖造成的差異；整頁截圖通常會遠大於此 */
+/** 直接採用的距離；裁切截圖誤配的別間通常在 13 以上 */
+const SURE_HAMMING = 8;
+/** 稍遠時要比第二名（別間）明顯近才採用 */
 const MAX_HAMMING = 10;
+const MIN_MARGIN = 3;
 const MATCH_BUDGET_MS = 6000;
 const FETCH_CONCURRENCY = 6;
+/** 直式手機截圖：照片通常在上方、滿版寬，比例 4:3／3:2／16:9 */
+const SCREENSHOT_CROP_RATIOS = [0.8, 0.75, 0.667, 0.5625];
+const SCREENSHOT_CROP_TOPS = [0, 0.02, 0.04, 0.06, 0.08, 0.1];
 
 type HashCache = {
   /** imageUrl → 16-hex dHash */
@@ -87,6 +93,32 @@ export async function computeDHash(buffer: Buffer): Promise<string> {
     }
   }
   return bits.toString(16).padStart(16, "0");
+}
+
+/** 整張圖＋（直式截圖時）上方照片區的多種裁切。 */
+async function guestImageHashes(buffer: Buffer): Promise<string[]> {
+  const sharp = await loadSharp();
+  const upright = await sharp(buffer).rotate().toBuffer({ resolveWithObject: true });
+  const width = upright.info.width;
+  const height = upright.info.height;
+  const hashes = new Set<string>([await computeDHash(upright.data)]);
+  if (!width || !height || height / width < 1.3) return [...hashes];
+  for (const ratio of SCREENSHOT_CROP_RATIOS) {
+    const cropHeight = Math.round(width * ratio);
+    for (const topRatio of SCREENSHOT_CROP_TOPS) {
+      const top = Math.round(height * topRatio);
+      if (top + cropHeight > height) continue;
+      try {
+        const cropped = await sharp(upright.data)
+          .extract({ left: 0, top, width, height: cropHeight })
+          .toBuffer();
+        hashes.add(await computeDHash(cropped));
+      } catch {
+        /* skip bad crop */
+      }
+    }
+  }
+  return [...hashes];
 }
 
 async function fetchImageBuffer(url: string, signal?: AbortSignal): Promise<Buffer | null> {
@@ -199,15 +231,102 @@ export async function matchPublishedRentalByImage(
 ): Promise<ImageMatchResult | null> {
   const started = Date.now();
   const deadline = started + MATCH_BUDGET_MS;
-  let guestHash: string;
+  let guestHashes: string[];
   try {
-    guestHash = await computeDHash(imageBuffer);
+    guestHashes = await guestImageHashes(imageBuffer);
   } catch {
     return null;
   }
 
   if (!process.env.DATABASE_URL) return null;
+  const rows = await loadMatchRows();
+  if (!rows.length) return null;
+
+  let cache = normalizeCache(
+    await readAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.lineListingImageHashes),
+  );
+  const before = Object.keys(cache.byUrl).length;
+  cache = await ensureListingHashes(cache, rows, deadline);
+  if (Object.keys(cache.byUrl).length !== before) {
+    await saveCache(cache);
+  }
+
+  const bestByListing = new Map<string, { distance: number; url: string }>();
+  for (const row of rows) {
+    for (const url of listingImageUrls(row)) {
+      const hash = cache.byUrl[url];
+      if (!hash) continue;
+      for (const guestHash of guestHashes) {
+        const distance = hammingHex(guestHash, hash);
+        const current = bestByListing.get(row.id);
+        if (!current || distance < current.distance) {
+          bestByListing.set(row.id, { distance, url });
+        }
+      }
+    }
+  }
+
+  const ranked = [...bestByListing.entries()].sort((a, b) => a[1].distance - b[1].distance);
+  const [first, second] = ranked;
+  if (!first) return null;
+  const bestDistance = first[1].distance;
+  const margin = second ? second[1].distance - bestDistance : Number.POSITIVE_INFINITY;
+  const accepted =
+    bestDistance <= SURE_HAMMING || (bestDistance <= MAX_HAMMING && margin >= MIN_MARGIN);
+  if (!accepted) return null;
+  const best = { listingId: first[0], distance: bestDistance, url: first[1].url };
+
+  const row = rows.find((item) => item.id === best.listingId);
+  if (!row) {
+    const loaded = await loadPublishedRentalMatchListing(best.listingId);
+    if (!loaded) return null;
+    return { listing: loaded, distance: best.distance, matchedUrl: best.url };
+  }
+  const meta = parseListingInternalMeta(row.description);
+  return {
+    listing: toRentalMatchListing({
+      ...row,
+      furnitureItems: normalizeItemList(meta.furnitureItems),
+      equipmentItems: normalizeItemList(meta.equipmentItems),
+      securityDeposit: meta.securityDeposit ?? null,
+      availableFrom: meta.availableFrom ?? null,
+      shortTermRent: meta.shortTermRent ?? null,
+      serviceFee: meta.serviceFee ?? null,
+      houseCondition: meta.houseCondition ?? null,
+    }),
+    distance: best.distance,
+    matchedUrl: best.url,
+  };
+}
+
+async function saveCache(cache: HashCache) {
+  try {
+    await writeAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.lineListingImageHashes, cache);
+  } catch (error) {
+    console.warn("[line-listing-image-match] cache write failed", error);
+  }
+}
+
+/** 補算尚未快取的物件圖指紋（新上架物件），回傳新增數量。 */
+export async function warmListingImageHashes(budgetMs = 20_000): Promise<number> {
+  if (!process.env.DATABASE_URL) return 0;
   const rows = await prisma.listing.findMany({
+    where: { listingType: ListingType.RENT, isPublished: true },
+    select: { id: true, coverImage: true, images: true },
+    take: 400,
+  });
+  const cache = normalizeCache(
+    await readAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.lineListingImageHashes),
+  );
+  const before = Object.keys(cache.byUrl).length;
+  await ensureListingHashes(cache, rows, Date.now() + budgetMs);
+  const added = Object.keys(cache.byUrl).length - before;
+  if (added > 0) await saveCache(cache);
+  return added;
+}
+
+async function loadMatchRows() {
+  return prisma.listing.findMany({
     where: { listingType: ListingType.RENT, isPublished: true },
     select: {
       id: true,
@@ -245,56 +364,4 @@ export async function matchPublishedRentalByImage(
     },
     take: 400,
   });
-  if (!rows.length) return null;
-
-  let cache = normalizeCache(
-    await readAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.lineListingImageHashes),
-  );
-  const before = Object.keys(cache.byUrl).length;
-  cache = await ensureListingHashes(cache, rows, deadline);
-  if (Object.keys(cache.byUrl).length !== before) {
-    void writeAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.lineListingImageHashes, cache).catch(
-      (error) => {
-        console.warn("[line-listing-image-match] cache write failed", error);
-      },
-    );
-  }
-
-  let best: { listingId: string; distance: number; url: string } | null = null;
-  for (const row of rows) {
-    for (const url of listingImageUrls(row)) {
-      const hash = cache.byUrl[url];
-      if (!hash) continue;
-      const distance = hammingHex(guestHash, hash);
-      if (distance > MAX_HAMMING) continue;
-      if (!best || distance < best.distance) {
-        best = { listingId: row.id, distance, url };
-      }
-      if (distance === 0) break;
-    }
-    if (best?.distance === 0) break;
-  }
-
-  if (!best) return null;
-  const row = rows.find((item) => item.id === best.listingId);
-  if (!row) {
-    const loaded = await loadPublishedRentalMatchListing(best.listingId);
-    if (!loaded) return null;
-    return { listing: loaded, distance: best.distance, matchedUrl: best.url };
-  }
-  const meta = parseListingInternalMeta(row.description);
-  return {
-    listing: toRentalMatchListing({
-      ...row,
-      furnitureItems: normalizeItemList(meta.furnitureItems),
-      equipmentItems: normalizeItemList(meta.equipmentItems),
-      securityDeposit: meta.securityDeposit ?? null,
-      availableFrom: meta.availableFrom ?? null,
-      shortTermRent: meta.shortTermRent ?? null,
-      serviceFee: meta.serviceFee ?? null,
-      houseCondition: meta.houseCondition ?? null,
-    }),
-    distance: best.distance,
-    matchedUrl: best.url,
-  };
 }

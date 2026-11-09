@@ -690,6 +690,9 @@ export function LineLiffRentForm({
       });
       const focus = listings.filter((item) => focusSet.has(item.id));
       const rest = filtered.filter((item) => !focusSet.has(item.id));
+      if (!focus.length && !rest.length) {
+        return similarRentals(listings, directListing.criteria, [], 8).items;
+      }
       return [...focus, ...rest];
     }
     const ids = new Set(directListing.listingIds);
@@ -1599,7 +1602,9 @@ export function LineLiffRentForm({
             >
               <p className="px-1 text-sm text-zinc-500">
                 {directMode === "similar"
-                  ? "已依你傳的物件推薦這間與類似條件；點選想看（最多 3 間），再填資料與看屋時間。"
+                  ? directListing?.listingIds.length
+                    ? "已依你傳的物件推薦這間與類似條件；點選想看（最多 3 間），再填資料與看屋時間。"
+                    : "已依你傳的物件條件推薦類似的房子；點選想看（最多 3 間），再填資料與看屋時間。"
                   : "點照片查看照片與資訊；點文字可複選想看，一次最多 3 間。"}
                 {matchedRelaxed.length ? `（已放寬：${matchedRelaxed.join("、")}）` : ""}
               </p>

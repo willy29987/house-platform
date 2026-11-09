@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { appendFileSync, mkdirSync } from "fs";
 import path from "path";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { handle591LinkInquiry } from "@/lib/line-591-inquiry";
 import {
   appendLineConversationMessage,
@@ -24,8 +24,8 @@ import {
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-/** 圖檔對物件最多約數秒；寫入對話後仍要盡快回 LINE */
-export const maxDuration = 30;
+/** 圖檔辨識（照片比對＋讀截圖＋查 591）最多約 20 秒，之後背景補算物件圖指紋 */
+export const maxDuration = 60;
 
 function rememberLineUserId(userId: string | null | undefined, eventType?: string) {
   if (!userId) return;
@@ -387,6 +387,14 @@ async function handleEvent(event: LineEvent, state: { failed: boolean }) {
     } catch (error) {
       console.warn("[line/webhook] image inquiry failed", error);
     }
+    after(async () => {
+      try {
+        const { warmListingImageHashes } = await import("@/lib/line-listing-image-match");
+        await warmListingImageHashes(15_000);
+      } catch (error) {
+        console.warn("[line/webhook] warm image hashes failed", error);
+      }
+    });
   }
 }
 
