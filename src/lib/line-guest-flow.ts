@@ -45,8 +45,12 @@ async function replyGuest(
   return replyLineMessages(replyToken, messages, { lineUserId });
 }
 
-const WELCOME =
-  "您好～請問最近有在找房子嗎？如果有需要找房子可以點選「 開始找房 」，點選您要的需求就可以推薦您合適的房源哦！";
+const WELCOME = [
+  "您好，歡迎加入「不動產實踐家」🏠 我們主要服務租屋，也有買賣物件～",
+  "",
+  "✅ 想找房：點下方「開始找房」，選好條件就會推薦合適的房子，還能直接預約看屋時間！",
+  "✅ 已經看到喜歡的房子：直接傳 591 連結或截圖給我們，系統會幫你找出是哪一間，馬上可以約看！",
+].join("\n");
 
 function qr(actions: LineMessageAction[]) {
   return {
@@ -344,8 +348,8 @@ function openFullLiffFormMessages(lineUserId?: string): LineMessage[] {
       template: {
         type: "buttons",
         title: "開始找房",
-        text: "一頁式填寫條件、基本資料，並選物件與看屋時間。",
-        actions: [{ type: "uri", label: "打開找房表單", uri }],
+        text: "選條件、看推薦物件，一次約好看屋時間。",
+        actions: [{ type: "uri", label: "開始找房", uri }],
       },
     },
   ];
