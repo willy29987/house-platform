@@ -228,19 +228,24 @@ export type ImageMatchResult = {
 /** 把客人照片對上已上架出租物件；逾時或失敗回 null。 */
 export async function matchPublishedRentalByImage(
   imageBuffer: Buffer,
+  notes: string[] = [],
 ): Promise<ImageMatchResult | null> {
   const started = Date.now();
   const deadline = started + MATCH_BUDGET_MS;
   let guestHashes: string[];
   try {
     guestHashes = await guestImageHashes(imageBuffer);
-  } catch {
+  } catch (error) {
+    notes.push(`照片處理失敗：${error instanceof Error ? error.message : String(error)}`.slice(0, 160));
     return null;
   }
 
   if (!process.env.DATABASE_URL) return null;
   const rows = await loadMatchRows();
-  if (!rows.length) return null;
+  if (!rows.length) {
+    notes.push("沒有上架中的出租物件");
+    return null;
+  }
 
   let cache = normalizeCache(
     await readAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.lineListingImageHashes),
@@ -268,12 +273,18 @@ export async function matchPublishedRentalByImage(
 
   const ranked = [...bestByListing.entries()].sort((a, b) => a[1].distance - b[1].distance);
   const [first, second] = ranked;
-  if (!first) return null;
+  if (!first) {
+    notes.push(`物件圖指紋 0 筆（快取 ${Object.keys(cache.byUrl).length}）`);
+    return null;
+  }
   const bestDistance = first[1].distance;
   const margin = second ? second[1].distance - bestDistance : Number.POSITIVE_INFINITY;
   const accepted =
     bestDistance <= SURE_HAMMING || (bestDistance <= MAX_HAMMING && margin >= MIN_MARGIN);
-  if (!accepted) return null;
+  if (!accepted) {
+    notes.push(`照片最接近距離 ${bestDistance}（需 ≤${SURE_HAMMING}）`);
+    return null;
+  }
   const best = { listingId: first[0], distance: bestDistance, url: first[1].url };
 
   const row = rows.find((item) => item.id === best.listingId);

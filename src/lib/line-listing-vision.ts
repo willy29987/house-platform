@@ -47,11 +47,18 @@ function normalizeCity(city: string) {
 
 export async function readListingFromImage(
   buffer: Buffer,
+  notes: string[] = [],
 ): Promise<Partial<ExternalListingInfo> | null> {
   const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
-  if (!apiKey || !listingVisionEnabled()) return null;
+  if (!apiKey || !listingVisionEnabled()) {
+    notes.push("AI 讀圖未啟用");
+    return null;
+  }
   const data = await shrinkForVision(buffer);
-  if (!data) return null;
+  if (!data) {
+    notes.push("AI 讀圖：縮圖失敗");
+    return null;
+  }
 
   try {
     const response = await fetch(
@@ -82,15 +89,23 @@ export async function readListingFromImage(
       },
     );
     if (!response.ok) {
-      console.warn("[line-listing-vision] api", response.status, (await response.text()).slice(0, 200));
+      const body = (await response.text()).slice(0, 200);
+      console.warn("[line-listing-vision] api", response.status, body);
+      notes.push(`AI 讀圖失敗 ${response.status}${response.status === 401 ? "（金鑰無效）" : ""}`);
       return null;
     }
     const json = (await response.json()) as { content?: { type: string; text?: string }[] };
     const text = json.content?.find((part) => part.type === "text")?.text ?? "";
     const raw = text.match(/\{[\s\S]*\}/)?.[0];
-    if (!raw) return null;
+    if (!raw) {
+      notes.push("AI 讀圖：沒回資料");
+      return null;
+    }
     const parsed = JSON.parse(raw) as Record<string, unknown>;
-    if (parsed.isListing === false) return null;
+    if (parsed.isListing === false) {
+      notes.push("AI 判斷不是物件圖");
+      return null;
+    }
     const str = (key: string) => (typeof parsed[key] === "string" ? (parsed[key] as string).trim() : "");
     const num = (key: string) => {
       const value = Number(String(parsed[key] ?? "").replace(/[^\d.]/g, ""));
@@ -111,6 +126,7 @@ export async function readListingFromImage(
     };
   } catch (error) {
     console.warn("[line-listing-vision] failed", error);
+    notes.push(`AI 讀圖錯誤：${error instanceof Error ? error.name : "unknown"}`);
     return null;
   }
 }

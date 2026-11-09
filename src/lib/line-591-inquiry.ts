@@ -187,13 +187,52 @@ async function externalListingInquiry(input: {
   };
 }
 
+function unwrap591Redirect(raw: string): string | null {
+  try {
+    const u = new URL(raw);
+    if (!/(^|\.)591\.com\.tw$/i.test(u.hostname)) return null;
+    const inner = u.searchParams.get("url");
+    return inner && /^https?:\/\//i.test(inner) ? inner : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 591 App 分享的短網址（591.to/xxx）與 line-liff 轉址，換成真正的物件網址。 */
+export async function expand591ShortLinks(text: string): Promise<string> {
+  const candidates = text.match(/https?:\/\/[^\s<>"']+/gi) ?? [];
+  let next = text;
+  for (const candidate of candidates) {
+    const cleaned = candidate.replace(/[),.;]+$/g, "");
+    let target = unwrap591Redirect(cleaned);
+    if (!target && /^https?:\/\/591\.to\//i.test(cleaned)) {
+      try {
+        const response = await fetch(cleaned, {
+          redirect: "manual",
+          cache: "no-store",
+          signal: AbortSignal.timeout(4000),
+        });
+        const location = response.headers.get("location") ?? "";
+        target = unwrap591Redirect(location) ?? (location.includes("591.com.tw") ? location : null);
+      } catch (error) {
+        console.warn("[line-591-inquiry] expand short link failed", cleaned, error);
+      }
+    }
+    if (target) next = next.replace(cleaned, target);
+  }
+  return next;
+}
+
 export async function handle591LinkInquiry(input: {
   text: string;
   lineUserId: string | null;
   displayName: string;
 }): Promise<InquiryAutoReply | null> {
-  const url = find591UrlInText(input.text);
-  const idFromText = extract591ListingId(input.text);
+  const text = /591\.(to|com\.tw)/i.test(input.text)
+    ? await expand591ShortLinks(input.text)
+    : input.text;
+  const url = find591UrlInText(text);
+  const idFromText = extract591ListingId(text);
   const source591Id = (url && extract591ListingId(url)) || idFromText;
   if (!source591Id && !url) return null;
 
@@ -353,16 +392,23 @@ type ImageIdentifyResult =
   | { kind: "own"; listing: RentalMatchListing; how: string }
   | { kind: "external"; info: Partial<ExternalListingInfo> };
 
-async function identifyImageMessage(imageMessageId: string): Promise<ImageIdentifyResult | null> {
+async function identifyImageMessage(
+  imageMessageId: string,
+  notes: string[],
+): Promise<ImageIdentifyResult | null> {
   const {
     fetchLineMessageImageBuffer,
     matchPublishedRentalByImage,
   } = await import("@/lib/line-listing-image-match");
   const buffer = await fetchLineMessageImageBuffer(imageMessageId);
-  if (!buffer) return null;
+  if (!buffer) {
+    notes.push("下載 LINE 圖片失敗");
+    return null;
+  }
 
-  const byPhoto = await matchPublishedRentalByImage(buffer).catch((error) => {
+  const byPhoto = await matchPublishedRentalByImage(buffer, notes).catch((error) => {
     console.warn("[line-591-inquiry] photo match failed", error);
+    notes.push(`照片比對錯誤：${error instanceof Error ? error.message : String(error)}`.slice(0, 160));
     return null;
   });
   if (byPhoto) {
@@ -370,7 +416,7 @@ async function identifyImageMessage(imageMessageId: string): Promise<ImageIdenti
   }
 
   const { readListingFromImage } = await import("@/lib/line-listing-vision");
-  let info = await readListingFromImage(buffer);
+  let info = await readListingFromImage(buffer, notes);
   if (!info) return null;
 
   if (info.source591Id) {
@@ -389,6 +435,7 @@ async function identifyImageMessage(imageMessageId: string): Promise<ImageIdenti
   const own = findOwnListingByFeatures(info, await loadAllPublishedRentals());
   if (own) return { kind: "own", listing: own, how: `截圖文字「${info.title ?? ""}」` };
   if (info.district || info.city) return { kind: "external", info };
+  notes.push(`AI 讀到「${info.title ?? ""}」但缺地區`);
   return null;
 }
 
@@ -418,16 +465,21 @@ export async function handleImageInquiry(input: {
   imageMessageId?: string;
 }): Promise<InquiryAutoReply> {
   let matched: ImageIdentifyResult | null = null;
+  const notes: string[] = [];
   if (input.imageMessageId) {
     try {
       matched = await Promise.race([
-        identifyImageMessage(input.imageMessageId),
+        identifyImageMessage(input.imageMessageId, notes),
         new Promise<null>((resolve) => {
-          setTimeout(() => resolve(null), IMAGE_MATCH_REPLY_MS);
+          setTimeout(() => {
+            notes.push(`辨識逾時 ${IMAGE_MATCH_REPLY_MS / 1000} 秒`);
+            resolve(null);
+          }, IMAGE_MATCH_REPLY_MS);
         }),
       ]);
     } catch (error) {
       console.warn("[line-591-inquiry] image match failed", error);
+      notes.push(`辨識錯誤：${error instanceof Error ? error.message : String(error)}`.slice(0, 160));
     }
   }
   const guestMessage = input.imageMessageId ? `image:${input.imageMessageId}` : "image";
@@ -514,7 +566,7 @@ export async function handleImageInquiry(input: {
     criteriaText: "客人傳了物件截圖／照片",
     picked: [],
     requestedWhen: "",
-    summaryText: "客人傳了圖片，系統未自動對上物件。",
+    summaryText: `客人傳了圖片，系統未自動對上物件。${notes.length ? `（${notes.join("；")}）` : ""}`,
     source591Id: "",
     source591Url: "",
     guestMessage: input.imageMessageId ? `image:${input.imageMessageId}` : "image",
