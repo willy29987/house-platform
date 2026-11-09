@@ -1598,7 +1598,9 @@ export function LineLiffRentForm({
               className="rounded-none border-x-0 px-2 py-3"
             >
               <p className="px-1 text-sm text-zinc-500">
-                點照片查看照片與資訊；點文字可複選想看，一次最多 3 間。
+                {directMode === "similar"
+                  ? "已依你傳的物件推薦這間與類似條件；點選想看（最多 3 間），再填資料與看屋時間。"
+                  : "點照片查看照片與資訊；點文字可複選想看，一次最多 3 間。"}
                 {matchedRelaxed.length ? `（已放寬：${matchedRelaxed.join("、")}）` : ""}
               </p>
               {matched.length === 0 ? (

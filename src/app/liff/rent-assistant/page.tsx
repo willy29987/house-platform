@@ -1,6 +1,10 @@
 import { LineLiffRentAssistant } from "@/components/line-liff-rent-assistant";
 import type { LiffDirectListingEntry } from "@/components/line-liff-rent-form";
-import { getGuestWatchByUserId, watchRecordToCriteria } from "@/lib/line-guest-watch";
+import {
+  getGuestWatchByUserId,
+  upsertGuestWatchCriteria,
+  watchRecordToCriteria,
+} from "@/lib/line-guest-watch";
 import { LINE_LIFF_RENT_ASSISTANT_ID, messagingUidFromSearch } from "@/lib/line-liff-id";
 import { getLineUserProfile } from "@/lib/line-messaging";
 import { findLatestOpenViewing } from "@/lib/line-rental-cases";
@@ -59,6 +63,8 @@ export default async function LiffRentAssistantPage({
   const cards = await loadRentalMatchListings(null, [...pushedListingIds, ...priorListingIds]);
   let directListing: LiffDirectListingEntry | null = null;
 
+  const lineProfile = fallbackLineUserId ? await getLineUserProfile(fallbackLineUserId) : null;
+
   if (pushedListingIds.length && similarMode) {
     const seed =
       (await loadPublishedRentalMatchListing(pushedListingIds[0]!)) ||
@@ -74,6 +80,19 @@ export default async function LiffRentAssistantPage({
         petNote: "",
         mode: "similar",
       };
+      // 依該物件條件寫入／更新客人找房需求，之後新案可推播
+      if (fallbackLineUserId) {
+        void upsertGuestWatchCriteria({
+          lineUserId: fallbackLineUserId,
+          displayName: lineProfile?.displayName ?? undefined,
+          criteria: widened.criteria,
+          priceMin: widened.priceMin,
+          priceMax: widened.priceMax,
+          active: true,
+        }).catch((error) => {
+          console.warn("[liff/rent-assistant] seed watch failed", error);
+        });
+      }
     }
   } else if (pushedListingIds.length) {
     // 591／推播／照片「選看屋時間」：直接開該物件；有舊條件就帶上。
@@ -93,7 +112,6 @@ export default async function LiffRentAssistantPage({
   const listingBaseUrl =
     process.env.NEXT_PUBLIC_LISTING_BASE_URL?.replace(/\/$/, "") ||
     "https://house-platform.vercel.app";
-  const lineProfile = fallbackLineUserId ? await getLineUserProfile(fallbackLineUserId) : null;
 
   return (
     <LineLiffRentAssistant

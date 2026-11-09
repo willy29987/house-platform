@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { appendFileSync, mkdirSync } from "fs";
 import path from "path";
-import { after, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { handle591LinkInquiry } from "@/lib/line-591-inquiry";
 import {
   appendLineConversationMessage,
@@ -24,7 +24,7 @@ import {
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-/** 寫入對話後要盡快 200；圖檔對物件改 after() 背景跑 */
+/** 圖檔對物件最多約數秒；寫入對話後仍要盡快回 LINE */
 export const maxDuration = 30;
 
 function rememberLineUserId(userId: string | null | undefined, eventType?: string) {
@@ -372,12 +372,10 @@ async function handleEvent(event: LineEvent, state: { failed: boolean }) {
   }
 
   if (messageType === "image") {
-    // 圖片已寫入對話；先快速回覆，圖檔對物件放到 after() 背景跑。
+    // 圖片已寫入對話；對中則回 LIFF 按鈕（該間＋類似），並寫入找房條件。
     if (userId && isViewingAgentUserId(userId)) return;
     try {
-      const { handleImageInquiry, refineImageInquiryMatch } = await import(
-        "@/lib/line-591-inquiry"
-      );
+      const { handleImageInquiry } = await import("@/lib/line-591-inquiry");
       const result = await handleImageInquiry({
         lineUserId: userId,
         displayName,
@@ -385,19 +383,6 @@ async function handleEvent(event: LineEvent, state: { failed: boolean }) {
       });
       if (event.replyToken && result.messages.length) {
         await replyLineMessages(event.replyToken, result.messages, { lineUserId: userId });
-      }
-      const caseId = result.caseRecord?.id;
-      const imageMessageId = message.id;
-      if (caseId && imageMessageId) {
-        after(() =>
-          refineImageInquiryMatch({
-            caseId,
-            lineUserId: userId,
-            imageMessageId,
-          }).catch((error) => {
-            console.warn("[line/webhook] background image match failed", error);
-          }),
-        );
       }
     } catch (error) {
       console.warn("[line/webhook] image inquiry failed", error);

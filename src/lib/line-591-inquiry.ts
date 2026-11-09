@@ -221,15 +221,114 @@ function listingToPicked(listing: RentalMatchListing) {
   return [{ id: listing.id, title: listing.title, price: listing.price }];
 }
 
-/**
- * 圖片進 webhook 時只做建案＋快速回覆，不在這裡跑 sharp。
- * 對圖改由 refineImageInquiryMatch 背景執行，避免拖垮整條 webhook。
- */
+const IMAGE_MATCH_REPLY_MS = 5500;
+
+async function matchListingFromImageMessage(imageMessageId: string) {
+  const {
+    fetchLineMessageImageBuffer,
+    matchPublishedRentalByImage,
+  } = await import("@/lib/line-listing-image-match");
+  const buffer = await fetchLineMessageImageBuffer(imageMessageId);
+  if (!buffer) return null;
+  return matchPublishedRentalByImage(buffer);
+}
+
+async function saveWatchFromListing(
+  lineUserId: string | null,
+  displayName: string,
+  listing: RentalMatchListing,
+) {
+  if (!lineUserId?.startsWith("U")) return;
+  const { widenCriteriaFromListing } = await import("@/lib/line-rental-assistant");
+  const { upsertGuestWatchCriteria } = await import("@/lib/line-guest-watch");
+  const widened = widenCriteriaFromListing(listing);
+  await upsertGuestWatchCriteria({
+    lineUserId,
+    displayName,
+    criteria: widened.criteria,
+    priceMin: widened.priceMin,
+    priceMax: widened.priceMax,
+    active: true,
+  });
+}
+
+/** 圖片／截圖：對中就給一顆 LIFF 按鈕看該間＋類似物件，並寫入找房條件。 */
 export async function handleImageInquiry(input: {
   lineUserId: string | null;
   displayName: string;
   imageMessageId?: string;
 }): Promise<InquiryAutoReply> {
+  let matched: Awaited<ReturnType<typeof matchListingFromImageMessage>> = null;
+  if (input.imageMessageId) {
+    try {
+      matched = await Promise.race([
+        matchListingFromImageMessage(input.imageMessageId),
+        new Promise<null>((resolve) => {
+          setTimeout(() => resolve(null), IMAGE_MATCH_REPLY_MS);
+        }),
+      ]);
+    } catch (error) {
+      console.warn("[line-591-inquiry] image match failed", error);
+    }
+  }
+
+  if (matched?.listing) {
+    const listing = matched.listing;
+    const summary = `客人傳的照片對上「${listing.title}」，已開推薦表單（距離 ${matched.distance}）。`;
+    try {
+      await saveWatchFromListing(input.lineUserId, input.displayName, listing);
+    } catch (error) {
+      console.warn("[line-591-inquiry] save watch from image failed", error);
+    }
+    const created = await appendLineRentalCase({
+      kind: "image_inquiry",
+      status: "pending_confirm",
+      lineUserId: input.lineUserId,
+      displayName: input.displayName,
+      phone: "",
+      occupation: "",
+      nationality: "",
+      peopleCount: 1,
+      petNote: "",
+      moveInDate: "",
+      criteriaText: `${listing.city}${listing.district} · ${listing.title}`,
+      picked: listingToPicked(listing),
+      requestedWhen: "",
+      summaryText: summary,
+      source591Id: "",
+      source591Url: "",
+      guestMessage: input.imageMessageId ? `image:${input.imageMessageId}` : "image",
+    });
+
+    return {
+      caseRecord: created,
+      messages: [
+        {
+          type: "template",
+          altText: `找到「${listing.title}」與類似物件`,
+          template: {
+            type: "buttons",
+            text: truncateLineTemplateText(
+              `對到「${listing.title}」。點下方看這間與類似物件，選完再填資料約時間。`,
+              60,
+            ),
+            actions: [
+              {
+                type: "uri",
+                label: "看推薦物件",
+                uri: liffUrlForGuest({
+                  lineUserId: input.lineUserId,
+                  listingId: listing.id,
+                  similar: true,
+                }),
+              },
+            ],
+          },
+        },
+      ],
+    };
+  }
+
   const created = await appendLineRentalCase({
     kind: "image_inquiry",
     status: "awaiting_staff",
@@ -244,7 +343,7 @@ export async function handleImageInquiry(input: {
     criteriaText: "客人傳了物件截圖／照片",
     picked: [],
     requestedWhen: "",
-    summaryText: "客人傳了圖片，待客服人工回覆。",
+    summaryText: "客人傳了圖片，系統未自動對上物件。",
     source591Id: "",
     source591Url: "",
     guestMessage: input.imageMessageId ? `image:${input.imageMessageId}` : "image",
@@ -254,62 +353,20 @@ export async function handleImageInquiry(input: {
     caseRecord: created,
     messages: [
       {
-        type: "text",
-        text: "收到截圖了，我先轉給同事確認是哪一間，稍後回你。若有 591 連結也可以貼過來，對物件會更快。",
+        type: "template",
+        altText: "開始找房",
+        template: {
+          type: "buttons",
+          text: "還沒對到官網物件。點下方開始找房，選條件與想看的房子。",
+          actions: [
+            {
+              type: "uri",
+              label: "開始找房",
+              uri: liffUrlForGuest({ lineUserId: input.lineUserId }),
+            },
+          ],
+        },
       },
     ],
   };
-}
-
-/** webhook 回覆後背景對圖；對中就改案件並 push 雙按鈕。 */
-export async function refineImageInquiryMatch(input: {
-  caseId: string;
-  lineUserId: string | null;
-  imageMessageId?: string;
-}): Promise<boolean> {
-  if (!input.imageMessageId || !input.caseId) return false;
-  try {
-    const {
-      fetchLineMessageImageBuffer,
-      matchPublishedRentalByImage,
-    } = await import("@/lib/line-listing-image-match");
-    const { pushLineMessages } = await import("@/lib/line-messaging");
-    const { patchLineRentalCaseBooking, updateLineRentalCase } = await import(
-      "@/lib/line-rental-cases"
-    );
-
-    const buffer = await fetchLineMessageImageBuffer(input.imageMessageId);
-    if (!buffer) return false;
-    const matched = await matchPublishedRentalByImage(buffer);
-    if (!matched?.listing) return false;
-
-    const listing = matched.listing;
-    const summary = `客人傳的照片對上「${listing.title}」（圖相似度距離 ${matched.distance}）。`;
-    await patchLineRentalCaseBooking(input.caseId, {
-      criteriaText: `${listing.city}${listing.district} · ${listing.title}`,
-      picked: listingToPicked(listing),
-      summaryText: summary,
-    });
-    await updateLineRentalCase(input.caseId, {
-      status: "pending_confirm",
-      summaryText: summary,
-    });
-
-    if (input.lineUserId?.startsWith("U")) {
-      await pushLineMessages(
-        input.lineUserId,
-        matchedListingActions({
-          lineUserId: input.lineUserId,
-          listingId: listing.id,
-          title: listing.title,
-          altPrefix: "照片對上：",
-        }),
-        { force: true, logAs: "bot" },
-      );
-    }
-    return true;
-  } catch (error) {
-    console.warn("[line-591-inquiry] refine image match failed", error);
-    return false;
-  }
 }
