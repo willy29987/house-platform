@@ -6,7 +6,6 @@ import {
 } from "@/lib/owner-tracking-listing-checks";
 import { matchesOwnerCaseStatusFilter, resolveOwnerCaseEffectiveStatus } from "@/lib/owner-tracking-case-status";
 import {
-  canViewOwnerTrackingCase,
   isCompanySharedOwnerStatus,
   matchesOwnerTrackingAssigneeFilter,
   type OwnerCasePreview,
@@ -82,10 +81,6 @@ export function buildOwnerTrackingListRows(
   const listing591Filter = filters.listing591Filter ?? "ALL";
   const contactFilter = filters.contactFilter ?? "ALL";
   const checks = filters.listingChecksByCaseId ?? {};
-  const visibility =
-    filters.isSuperAdmin === false && filters.currentUsername
-      ? { currentUsername: filters.currentUsername, isSuperAdmin: false as const }
-      : null;
   const followUpsByCaseId = indexFollowUpsByCaseId(store.followUps);
   const rows = store.cases
     .map((c) => {
@@ -98,18 +93,14 @@ export function buildOwnerTrackingListRows(
     })
     .filter(({ case: c, last }) => {
       const effective = resolveOwnerCaseEffectiveStatus(store, c, last);
+      // 點了特定負責人時，只可帶看／可上591 也只看這個人，不再混進全公司。
+      const explicitStaffPick =
+        filters.assigneeFilter.trim() !== "" && filters.assigneeFilter !== "ALL";
       const companyShared =
-        contactFilter === "ALL" && isCompanySharedOwnerStatus(effective);
-      if (
-        visibility &&
-        !canViewOwnerTrackingCase(c, {
-          ...visibility,
-          effectiveStatus: companyShared ? effective : undefined,
-        })
-      ) {
-        return false;
-      }
-      if (!companyShared && !matchesOwnerTrackingAssigneeFilter(c.assignee, filters.assigneeFilter)) {
+        !explicitStaffPick && contactFilter === "ALL" && isCompanySharedOwnerStatus(effective);
+      if (explicitStaffPick) {
+        if (c.assignee.trim() !== filters.assigneeFilter.trim()) return false;
+      } else if (!companyShared && !matchesOwnerTrackingAssigneeFilter(c.assignee, filters.assigneeFilter)) {
         return false;
       }
       if (!matchesOwnerCaseStatusFilter(store, c, filters.statusFilter, last)) return false;
@@ -152,14 +143,8 @@ export function countContactDueCases(
   opts: { assigneeFilter: string; isSuperAdmin: boolean; currentUsername: string },
   now = new Date(),
 ): number {
-  const assigneeFilter = opts.isSuperAdmin ? opts.assigneeFilter : opts.currentUsername;
-  const visibility =
-    !opts.isSuperAdmin && opts.currentUsername
-      ? { currentUsername: opts.currentUsername, isSuperAdmin: false as const }
-      : null;
   return store.cases.filter((c) => {
-    if (visibility && !canViewOwnerTrackingCase(c, visibility)) return false;
-    if (!matchesOwnerTrackingAssigneeFilter(c.assignee, assigneeFilter)) return false;
+    if (!matchesExplicitAssignee(c.assignee, opts.assigneeFilter)) return false;
     return matchesContactFilter(c.nextContactDate, "DUE", now);
   }).length;
 }
@@ -170,14 +155,15 @@ export function countContactUpcomingCases(
   opts: { assigneeFilter: string; isSuperAdmin: boolean; currentUsername: string },
   now = new Date(),
 ): number {
-  const assigneeFilter = opts.isSuperAdmin ? opts.assigneeFilter : opts.currentUsername;
-  const visibility =
-    !opts.isSuperAdmin && opts.currentUsername
-      ? { currentUsername: opts.currentUsername, isSuperAdmin: false as const }
-      : null;
   return store.cases.filter((c) => {
-    if (visibility && !canViewOwnerTrackingCase(c, visibility)) return false;
-    if (!matchesOwnerTrackingAssigneeFilter(c.assignee, assigneeFilter)) return false;
+    if (!matchesExplicitAssignee(c.assignee, opts.assigneeFilter)) return false;
     return matchesContactFilter(c.nextContactDate, "LATER", now);
   }).length;
+}
+
+/** 選了特定負責人就只算這個人；全部才含未分配。 */
+function matchesExplicitAssignee(assignee: string, assigneeFilter: string): boolean {
+  const filter = assigneeFilter.trim();
+  if (!filter || filter === "ALL") return true;
+  return assignee.trim() === filter;
 }

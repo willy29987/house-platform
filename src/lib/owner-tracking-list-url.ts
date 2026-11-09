@@ -48,21 +48,28 @@ export function parseOwnerTrackingListSearch(
   };
 }
 
-export function buildOwnerTrackingListQuery(state: OwnerTrackingListUrlState): string {
+export function buildOwnerTrackingListQuery(
+  state: OwnerTrackingListUrlState,
+  opts?: { persistAllAssignee?: boolean },
+): string {
   const p = new URLSearchParams();
   const q = state.keyword.trim();
   if (q) p.set("q", q);
   if (state.statusFilter !== "ALL") p.set("status", state.statusFilter);
   if (state.propertyTypeFilter !== "ALL") p.set("ptype", state.propertyTypeFilter);
   if (state.assigneeFilter !== "ALL") p.set("assignee", state.assigneeFilter);
+  else if (opts?.persistAllAssignee) p.set("assignee", "ALL");
   if (state.listing591Filter !== "ALL") p.set("l591", state.listing591Filter);
   if (state.contactFilter !== "ALL") p.set("contact", state.contactFilter);
   if (state.page > 1) p.set("page", String(state.page));
   return p.toString();
 }
 
-export function ownerTrackingListHref(state: OwnerTrackingListUrlState): string {
-  const qs = buildOwnerTrackingListQuery(state);
+export function ownerTrackingListHref(
+  state: OwnerTrackingListUrlState,
+  opts?: { persistAllAssignee?: boolean },
+): string {
+  const qs = buildOwnerTrackingListQuery(state, opts);
   return qs ? `${OWNER_TRACKING_LIST_PATH}?${qs}` : OWNER_TRACKING_LIST_PATH;
 }
 

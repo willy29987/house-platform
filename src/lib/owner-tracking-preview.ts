@@ -486,15 +486,14 @@ export function canEditOwnerTrackingCase(
 }
 
 /**
- * 可查看：可修改的案件，以及全公司的「只可帶看／可上591」。
- * effectiveStatus 要傳目前狀態，別人才看得到那兩類。
+ * 可查看：登入後台即可看任一負責人的案件（業務用列表篩選指定人）。
+ * 修改仍限自己的案件、未分配，或最高管理員。
  */
 export function canViewOwnerTrackingCase(
-  ownerCase: Pick<OwnerCasePreview, "assignee">,
-  opts: { currentUsername: string; isSuperAdmin: boolean; effectiveStatus?: string },
+  _ownerCase: Pick<OwnerCasePreview, "assignee">,
+  _opts: { currentUsername: string; isSuperAdmin: boolean; effectiveStatus?: string },
 ): boolean {
-  if (canEditOwnerTrackingCase(ownerCase, opts)) return true;
-  return Boolean(opts.effectiveStatus && isCompanySharedOwnerStatus(opts.effectiveStatus));
+  return true;
 }
 
 export function lastFollowUp(

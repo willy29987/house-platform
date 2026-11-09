@@ -154,9 +154,14 @@ function OwnerTrackingListInner({
   const [keywordInput, setKeywordInput] = useState(keyword);
   keywordInputRef.current = keywordInput;
 
+  const listQueryOpts = useMemo(
+    () => ({ persistAllAssignee: !isSuperAdmin }),
+    [isSuperAdmin],
+  );
+
   const listQuery = useMemo(
-    () => buildOwnerTrackingListQuery({ ...filters, keyword: keywordInput.trim() }),
-    [filters, keywordInput],
+    () => buildOwnerTrackingListQuery({ ...filters, keyword: keywordInput.trim() }, listQueryOpts),
+    [filters, keywordInput, listQueryOpts],
   );
 
   const patchListUrl = useCallback(
@@ -173,14 +178,14 @@ function OwnerTrackingListInner({
       };
       filtersRef.current = next;
       setFilters(next);
-      const qs = buildOwnerTrackingListQuery(next);
+      const qs = buildOwnerTrackingListQuery(next, { persistAllAssignee: !isSuperAdmin });
       writtenQueryRef.current = qs;
       const url = qs ? `${pathname}?${qs}` : pathname;
       // 帶著 Next 自己的 history state（含 __NA）時，被包過的 replaceState 不會重抓這頁。
       const historyState = window.history.state;
       window.history.replaceState(historyState, "", url);
     },
-    [pathname, keywordInput],
+    [pathname, keywordInput, isSuperAdmin],
   );
 
   useEffect(() => {
@@ -243,12 +248,14 @@ function OwnerTrackingListInner({
 
   const assigneeOptions = useMemo(() => {
     const names = new Set(staffUsernames.map((u) => u.trim()).filter(Boolean));
+    const me = currentUsername.trim();
+    if (me) names.add(me);
     for (const c of store.cases) {
       const a = c.assignee.trim();
       if (a && a !== "—") names.add(a);
     }
     return Array.from(names).sort((a, b) => a.localeCompare(b, "zh-Hant"));
-  }, [store.cases, staffUsernames]);
+  }, [store.cases, staffUsernames, currentUsername]);
 
   useEffect(() => {
     // SSR 已有雲端資料時先寫入本機，再背景合併；否則先畫本機快取
@@ -447,7 +454,7 @@ function OwnerTrackingListInner({
         keyword: keywordInput,
         statusFilter,
         propertyTypeFilter,
-        assigneeFilter: isSuperAdmin ? assigneeFilter : currentUsername,
+        assigneeFilter,
         listing591Filter,
         contactFilter,
         listingChecksByCaseId: checkStore.byCaseId,
@@ -471,7 +478,7 @@ function OwnerTrackingListInner({
   const contactDueCount = useMemo(
     () =>
       countContactDueCases(store, {
-        assigneeFilter: isSuperAdmin ? assigneeFilter : currentUsername,
+        assigneeFilter,
         isSuperAdmin,
         currentUsername,
       }),
@@ -481,7 +488,7 @@ function OwnerTrackingListInner({
   const contactUpcomingCount = useMemo(
     () =>
       countContactUpcomingCases(store, {
-        assigneeFilter: isSuperAdmin ? assigneeFilter : currentUsername,
+        assigneeFilter,
         isSuperAdmin,
         currentUsername,
       }),
@@ -491,15 +498,18 @@ function OwnerTrackingListInner({
   /** 今日待聯繫：新分頁開啟（僅保留負責人範圍） */
   const contactDueHref = useMemo(
     () =>
-      ownerTrackingListHref({
-        keyword: "",
-        statusFilter: "ALL",
-        propertyTypeFilter: "ALL",
-        assigneeFilter: isSuperAdmin ? assigneeFilter : currentUsername,
-        listing591Filter: "ALL",
-        contactFilter: "DUE",
-        page: 1,
-      }),
+      ownerTrackingListHref(
+        {
+          keyword: "",
+          statusFilter: "ALL",
+          propertyTypeFilter: "ALL",
+          assigneeFilter,
+          listing591Filter: "ALL",
+          contactFilter: "DUE",
+          page: 1,
+        },
+        { persistAllAssignee: !isSuperAdmin },
+      ),
     [isSuperAdmin, assigneeFilter, currentUsername],
   );
 
@@ -721,13 +731,7 @@ function OwnerTrackingListInner({
             ) : null}
           </div>
         </label>
-        <div
-          className={
-            isSuperAdmin
-              ? "grid w-full grid-cols-2 gap-3 sm:inline-grid sm:w-auto sm:grid-cols-4"
-              : "grid w-full grid-cols-2 gap-3 sm:inline-grid sm:w-auto sm:grid-cols-3"
-          }
-        >
+        <div className="grid w-full grid-cols-2 gap-3 sm:inline-grid sm:w-auto sm:grid-cols-4">
           <label className={COMPACT_FILTER_LABEL}>
             <span className="mb-1 block text-xs font-medium text-zinc-600">目前狀態</span>
             <select
@@ -762,26 +766,24 @@ function OwnerTrackingListInner({
               ) : null}
             </select>
           </label>
-          {isSuperAdmin ? (
-            <label className={COMPACT_FILTER_LABEL}>
-              <span className="mb-1 block text-xs font-medium text-zinc-600">負責人</span>
-              <select
-                value={assigneeFilter}
-                onChange={(e) => patchListUrl({ assigneeFilter: e.target.value, page: 1 })}
-                className={COMPACT_FILTER_SELECT}
-              >
-                <option value="ALL">全部</option>
-                {assigneeOptions.map((name) => {
-                  const label = formatAdminStaffLabel(name, staffLabels);
-                  return (
-                    <option key={name} value={name}>
-                      {name === currentUsername ? `${label}（我）` : label}
-                    </option>
-                  );
-                })}
-              </select>
-            </label>
-          ) : null}
+          <label className={COMPACT_FILTER_LABEL}>
+            <span className="mb-1 block text-xs font-medium text-zinc-600">負責人</span>
+            <select
+              value={assigneeFilter}
+              onChange={(e) => patchListUrl({ assigneeFilter: e.target.value, page: 1 })}
+              className={COMPACT_FILTER_SELECT}
+            >
+              <option value="ALL">全部</option>
+              {assigneeOptions.map((name) => {
+                const label = formatAdminStaffLabel(name, staffLabels);
+                return (
+                  <option key={name} value={name}>
+                    {name === currentUsername ? `${label}（我）` : label}
+                  </option>
+                );
+              })}
+            </select>
+          </label>
           <label className={COMPACT_FILTER_LABEL}>
             <span className="mb-1 block text-xs font-medium text-zinc-600">591 狀態</span>
             <select
