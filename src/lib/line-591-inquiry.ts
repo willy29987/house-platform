@@ -64,34 +64,26 @@ function liffUrlForGuest(input: {
   return buildLiffRentAssistantUrl(Object.keys(query).length ? query : undefined);
 }
 
+/** 判定是官網哪一間：不論連結、截圖或照片，都回同一顆「選看屋時間」，開推薦總覽。 */
 function matchedListingActions(input: {
   lineUserId?: string | null;
   listingId: string;
   title: string;
-  altPrefix?: string;
 }): LineMessage[] {
   return [
     {
       type: "template",
-      altText: `${input.altPrefix ?? ""}${input.title}`.slice(0, 400) || "找到對應物件",
+      altText: `找到你問的物件：${input.title}`.slice(0, 400),
       template: {
         type: "buttons",
         text: truncateLineTemplateText(
-          `「${input.title}」可安排看屋。可選時間，或看同區類似物件。`,
+          `找到你問的這間了：「${truncateLineTemplateText(input.title, 26)}」。點下方預約看屋，也幫你挑了類似的一起比較。`,
           60,
         ),
         actions: [
           {
             type: "uri",
             label: "選看屋時間",
-            uri: liffUrlForGuest({
-              lineUserId: input.lineUserId,
-              listingId: input.listingId,
-            }),
-          },
-          {
-            type: "uri",
-            label: "看類似物件",
             uri: liffUrlForGuest({
               lineUserId: input.lineUserId,
               listingId: input.listingId,
@@ -287,7 +279,6 @@ export async function handle591LinkInquiry(input: {
         lineUserId: input.lineUserId,
         listingId: listing.id,
         title: listing.title,
-        altPrefix: "可安排看屋：",
       }),
     };
   }
@@ -525,30 +516,11 @@ export async function handleImageInquiry(input: {
 
     return {
       caseRecord: created,
-      messages: [
-        {
-          type: "template",
-          altText: `找到「${listing.title}」與類似物件`,
-          template: {
-            type: "buttons",
-            text: truncateLineTemplateText(
-              `對到「${listing.title}」。點下方看這間與類似物件，選完再填資料約時間。`,
-              60,
-            ),
-            actions: [
-              {
-                type: "uri",
-                label: "看推薦物件",
-                uri: liffUrlForGuest({
-                  lineUserId: input.lineUserId,
-                  listingId: listing.id,
-                  similar: true,
-                }),
-              },
-            ],
-          },
-        },
-      ],
+      messages: matchedListingActions({
+        lineUserId: input.lineUserId,
+        listingId: listing.id,
+        title: listing.title,
+      }),
     };
   }
 

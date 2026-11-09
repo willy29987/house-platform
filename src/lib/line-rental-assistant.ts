@@ -432,6 +432,32 @@ export function similarRentals(
   return { items: items.slice(0, limit), notes };
 }
 
+/** 以客人問的那間為中心排類似物件：同縣市為前提，同區、同房型、租金接近者優先。 */
+export function rankSimilarToListing(
+  listings: RentalMatchListing[],
+  focus: RentalMatchListing,
+  excludeIds: Iterable<string>,
+  limit = 6,
+): RentalMatchListing[] {
+  const exclude = new Set(excludeIds);
+  exclude.add(focus.id);
+  const focusRoom = roomKeyFromListing(focus);
+  const scored = listings
+    .filter((listing) => !exclude.has(listing.id) && listing.city === focus.city)
+    .map((listing) => {
+      let score = 0;
+      if (listing.district === focus.district) score += 3;
+      if (focusRoom && roomKeyFromListing(listing) === focusRoom) score += 2;
+      const ratio = focus.price > 0 ? listing.price / focus.price : 1;
+      if (ratio >= 0.8 && ratio <= 1.2) score += 3;
+      else if (ratio >= 0.65 && ratio <= 1.35) score += 1;
+      return { listing, score, gap: Math.abs(listing.price - focus.price) };
+    })
+    .filter((row) => row.score >= 3)
+    .sort((a, b) => b.score - a.score || a.gap - b.gap);
+  return scored.slice(0, limit).map((row) => row.listing);
+}
+
 function labelsOf(ids: string[], options: readonly { value?: string; id?: string; label: string }[], empty: string) {
   if (!ids.length) return empty;
   return ids

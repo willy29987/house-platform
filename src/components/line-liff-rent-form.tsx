@@ -19,6 +19,7 @@ import {
   formatDateYmd,
   formatViewingRange,
   matchRentals,
+  rankSimilarToListing,
   similarRentals,
   type RentalExtra,
   type RentalMatchCriteria,
@@ -124,12 +125,14 @@ function ListingPickRow({
   onOpen,
   onToggle,
   hideToggle = false,
+  badge,
 }: {
   item: RentalMatchListing;
   selected: boolean;
   onOpen: () => void;
   onToggle: () => void;
   hideToggle?: boolean;
+  badge?: string;
 }) {
   const photo = listingPhotos(item)[0];
   const selectLabel = selected ? "取消想看" : "想看這間";
@@ -156,6 +159,11 @@ function ListingPickRow({
         aria-label={hideToggle ? `查看${item.title}` : selectLabel}
         className="flex min-w-0 flex-1 flex-col justify-center text-left"
       >
+        {badge ? (
+          <span className="mb-1 inline-flex w-fit rounded-full bg-[#06c755] px-2 py-0.5 text-xs font-bold text-white">
+            {badge}
+          </span>
+        ) : null}
         <span className="line-clamp-2 text-base font-bold leading-snug text-zinc-900">
           {item.title}
         </span>
@@ -699,7 +707,16 @@ export function LineLiffRentForm({
     return listings.filter((item) => ids.has(item.id));
   });
   const [matchedRelaxed, setMatchedRelaxed] = useState<string[]>([]);
-  const [similar, setSimilar] = useState<RentalMatchListing[]>([]);
+  const [similar, setSimilar] = useState<RentalMatchListing[]>(() => {
+    if (directMode !== "similar" || !directListing?.listingIds.length) return [];
+    const focus = listings.find((item) => item.id === directListing.listingIds[0]);
+    if (!focus) return [];
+    return rankSimilarToListing(
+      listings,
+      focus,
+      matched.map((item) => item.id),
+    );
+  });
   const [similarNotes, setSimilarNotes] = useState<string[]>([]);
   const [watchSaved, setWatchSaved] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(
@@ -1597,13 +1614,17 @@ export function LineLiffRentForm({
         {step === "listings" ? (
           <>
             <Section
-              title={`配對物件（${matched.length}）`}
+              title={
+                directMode === "similar" && directListing?.listingIds.length
+                  ? `推薦物件（${matched.length}）`
+                  : `配對物件（${matched.length}）`
+              }
               className="rounded-none border-x-0 px-2 py-3"
             >
               <p className="px-1 text-sm text-zinc-500">
                 {directMode === "similar"
                   ? directListing?.listingIds.length
-                    ? "已依你傳的物件推薦這間與類似條件；點選想看（最多 3 間），再填資料與看屋時間。"
+                    ? "你問的這間已幫你選好；下方還有類似物件可一起勾選（最多 3 間），再填資料與看屋時間。"
                     : "已依你傳的物件條件推薦類似的房子；點選想看（最多 3 間），再填資料與看屋時間。"
                   : "點照片查看照片與資訊；點文字可複選想看，一次最多 3 間。"}
                 {matchedRelaxed.length ? `（已放寬：${matchedRelaxed.join("、")}）` : ""}
@@ -1632,6 +1653,11 @@ export function LineLiffRentForm({
                     <ListingPickRow
                       key={item.id}
                       item={item}
+                      badge={
+                        directMode === "similar" && item.id === directListing?.listingIds[0]
+                          ? "你問的物件"
+                          : undefined
+                      }
                       selected={pickedIds.includes(item.id)}
                       onOpen={() => setDetailId(item.id)}
                       onToggle={() => togglePick(item.id)}
@@ -1647,7 +1673,9 @@ export function LineLiffRentForm({
                 className="rounded-none border-x-0 px-2 py-3"
               >
                 <p className="text-xs text-zinc-500">
-                  符合你條件的相近物件，可一併勾選想看，一次最多 3 間。
+                  {directMode === "similar"
+                    ? "同區、房型或租金相近的物件，可一併勾選想看，一次最多 3 間。"
+                    : "符合你條件的相近物件，可一併勾選想看，一次最多 3 間。"}
                   {similarNotes[0] ? `（${similarNotes[0]}）` : ""}
                 </p>
                 <div className="divide-y divide-zinc-300">
