@@ -5,7 +5,11 @@ import {
   upsertGuestWatchCriteria,
   watchRecordToCriteria,
 } from "@/lib/line-guest-watch";
-import { LINE_LIFF_RENT_ASSISTANT_ID, messagingUidFromSearch } from "@/lib/line-liff-id";
+import {
+  LINE_LIFF_RENT_ASSISTANT_ID,
+  liffStateParams,
+  messagingUidFromSearch,
+} from "@/lib/line-liff-id";
 import { getLineUserProfile } from "@/lib/line-messaging";
 import { findLatestOpenViewing } from "@/lib/line-rental-cases";
 import {
@@ -53,8 +57,12 @@ export default async function LiffRentAssistantPage({
   if (params.uid) search.set("uid", params.uid);
   if (params["liff.state"]) search.set("liff.state", params["liff.state"]);
   const fallbackLineUserId = messagingUidFromSearch(search.toString());
-  const pushedListingIds = listingIdsFromParam(params.listingId);
-  const similarMode = truthyParam(params.similar);
+  // 第一次開 LIFF 時參數在 liff.state 裡；不讀的話會先閃出條件頁才跳到物件
+  const stateParams = liffStateParams(params["liff.state"]);
+  const pushedListingIds = listingIdsFromParam(
+    params.listingId ?? (stateParams.getAll("listingId").length ? stateParams.getAll("listingId") : undefined),
+  );
+  const similarMode = truthyParam(params.similar ?? stateParams.get("similar") ?? undefined);
   const openViewing = fallbackLineUserId
     ? await findLatestOpenViewing(fallbackLineUserId)
     : null;

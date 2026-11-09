@@ -2,14 +2,9 @@
 export const LINE_LIFF_RENT_ASSISTANT_ID =
   process.env.NEXT_PUBLIC_LIFF_ID?.trim() || "2012308800-9xNMWz5n";
 
-/** 從 LIFF 網址或 liff.state 取出 Messaging API 的 uid。 */
-export function messagingUidFromSearch(search: string): string | null {
-  const raw = search.startsWith("?") ? search.slice(1) : search;
-  const params = new URLSearchParams(raw);
-  const direct = params.get("uid")?.trim();
-  if (direct) return direct;
-  const state = params.get("liff.state");
-  if (!state) return null;
+/** LIFF 第一次開啟時，原本的 query 會被包在 liff.state 裡。 */
+export function liffStateParams(state: string | null | undefined): URLSearchParams {
+  if (!state) return new URLSearchParams();
   let decoded = state;
   try {
     decoded = decodeURIComponent(state);
@@ -19,7 +14,16 @@ export function messagingUidFromSearch(search: string): string | null {
   const query = decoded.includes("?")
     ? decoded.slice(decoded.indexOf("?") + 1)
     : decoded.replace(/^\?/, "");
-  return new URLSearchParams(query).get("uid")?.trim() || null;
+  return new URLSearchParams(query);
+}
+
+/** 從 LIFF 網址或 liff.state 取出 Messaging API 的 uid。 */
+export function messagingUidFromSearch(search: string): string | null {
+  const raw = search.startsWith("?") ? search.slice(1) : search;
+  const params = new URLSearchParams(raw);
+  const direct = params.get("uid")?.trim();
+  if (direct) return direct;
+  return liffStateParams(params.get("liff.state")).get("uid")?.trim() || null;
 }
 
 /** 瀏覽器裡讀 uid，並記住，避免 LIFF 把參數藏進 liff.state 後遺失。 */
