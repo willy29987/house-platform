@@ -341,7 +341,7 @@ function listingWriteData(data: ListingInput, source591Id: string, source591Url:
   return {
     title: data.title,
     description: toListingDescription({
-      createdByUsername: process.env["591_SYNC_ASSIGNEE"]?.trim() || "R001",
+      createdByUsername: process.env.BANQIAO_SYNC_ASSIGNEE?.trim() || "R001",
       furnitureProvided: data.furnitureProvided ?? null,
       applianceProvided: data.applianceProvided ?? null,
       furnitureItems: normalizeItemList(data.furnitureItems),
@@ -433,7 +433,7 @@ async function upsertOne(candidate: Banqiao591ListItem): Promise<"created" | "up
       await addPublishedListingToViewableOwnerCase({
         listingId: existing.id,
         data: { ...input, source591Url, source591Id, isPublished: false },
-        assignee: process.env["591_SYNC_ASSIGNEE"]?.trim() || "R001",
+        assignee: process.env.BANQIAO_SYNC_ASSIGNEE?.trim() || "R001",
         overwriteExisting: true,
         initialNote: "",
       });
@@ -454,7 +454,7 @@ async function upsertOne(candidate: Banqiao591ListItem): Promise<"created" | "up
     await addPublishedListingToViewableOwnerCase({
       listingId: created.id,
       data: { ...input, source591Url, source591Id, isPublished: false },
-      assignee: process.env["591_SYNC_ASSIGNEE"]?.trim() || "R001",
+      assignee: process.env.BANQIAO_SYNC_ASSIGNEE?.trim() || "R001",
       initialNote: "",
     });
   } catch (error) {
