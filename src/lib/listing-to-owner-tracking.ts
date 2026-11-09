@@ -201,7 +201,10 @@ export async function addPublishedListingToViewableOwnerCase(input: {
   if (!existing) {
     const created = appendOwnerCase(store, incoming, input.assignee, VIEWABLE_STATUS);
     caseId = created.caseId;
-    const note = input.initialNote?.trim() || "從新增廣告的 591 帶入上架，加入可帶看";
+    const note =
+      input.initialNote !== undefined
+        ? input.initialNote.trim()
+        : "從新增廣告的 591 帶入上架，加入可帶看";
     next = {
       ...created.store,
       followUps: created.store.followUps.map((row) =>

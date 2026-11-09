@@ -341,7 +341,7 @@ function listingWriteData(data: ListingInput, source591Id: string, source591Url:
   return {
     title: data.title,
     description: toListingDescription({
-      createdByUsername: process.env["591_SYNC_ASSIGNEE"]?.trim() || "system",
+      createdByUsername: process.env["591_SYNC_ASSIGNEE"]?.trim() || "R001",
       furnitureProvided: data.furnitureProvided ?? null,
       applianceProvided: data.applianceProvided ?? null,
       furnitureItems: normalizeItemList(data.furnitureItems),
@@ -433,8 +433,9 @@ async function upsertOne(candidate: Banqiao591ListItem): Promise<"created" | "up
       await addPublishedListingToViewableOwnerCase({
         listingId: existing.id,
         data: { ...input, source591Url, source591Id, isPublished: false },
-        assignee: process.env["591_SYNC_ASSIGNEE"]?.trim() || "system",
+        assignee: process.env["591_SYNC_ASSIGNEE"]?.trim() || "R001",
         overwriteExisting: true,
+        initialNote: "",
       });
     } catch (error) {
       console.error("[591-banqiao-sync] owner tracking update failed", source591Id, error);
@@ -453,8 +454,8 @@ async function upsertOne(candidate: Banqiao591ListItem): Promise<"created" | "up
     await addPublishedListingToViewableOwnerCase({
       listingId: created.id,
       data: { ...input, source591Url, source591Id, isPublished: false },
-      assignee: process.env["591_SYNC_ASSIGNEE"]?.trim() || "system",
-      initialNote: "591 板橋範圍自動同步（未刊登草稿）",
+      assignee: process.env["591_SYNC_ASSIGNEE"]?.trim() || "R001",
+      initialNote: "",
     });
   } catch (error) {
     console.error("[591-banqiao-sync] owner tracking create failed", source591Id, error);
