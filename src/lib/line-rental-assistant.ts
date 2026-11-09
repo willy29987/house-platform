@@ -198,6 +198,16 @@ export async function loadPublishedRentalMatchListing(id: string): Promise<Renta
   }
 }
 
+/** 推播／591／照片對中後直開：book＝該間詳情；similar＝放寬條件後的配對列表 */
+export type LiffDirectListingEntry = {
+  listingIds: string[];
+  criteria: RentalMatchCriteria;
+  priceMin: number | null;
+  priceMax: number | null;
+  petNote: string;
+  mode?: "book" | "similar";
+};
+
 export const ROOM_TYPE_OPTIONS = [
   { id: "studio", label: "獨立套房" },
   { id: "1", label: "1 房" },

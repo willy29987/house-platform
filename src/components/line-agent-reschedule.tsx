@@ -85,7 +85,17 @@ export function LineAgentReschedule({ caseId }: { caseId: string }) {
   }
 
   if (loading) {
-    return <p className="p-6 text-center text-sm text-zinc-500">載入約看資料…</p>;
+    return (
+      <div className="mx-auto min-h-[100dvh] w-full max-w-md bg-white px-4 py-5">
+        <div className="mb-4 h-7 w-36 animate-pulse rounded bg-zinc-200" />
+        <div className="mb-2 h-4 w-48 animate-pulse rounded bg-zinc-100" />
+        <div className="mt-6 space-y-3">
+          <div className="h-40 animate-pulse rounded-2xl bg-zinc-100" />
+          <div className="h-11 animate-pulse rounded-xl bg-zinc-200" />
+        </div>
+        <p className="mt-4 text-center text-[11px] text-zinc-500">載入約看資料…</p>
+      </div>
+    );
   }
 
   if (error && !caseData) {

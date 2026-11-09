@@ -2,6 +2,47 @@
 export const LINE_LIFF_RENT_ASSISTANT_ID =
   process.env.NEXT_PUBLIC_LIFF_ID?.trim() || "2012308800-9xNMWz5n";
 
+export type LiffBootstrapHint = {
+  mode: "criteria" | "book" | "similar";
+  listingIds: string[];
+};
+
+function listingIdsFromParam(raw: string | string[] | undefined) {
+  const list = Array.isArray(raw) ? raw : raw ? [raw] : [];
+  return [
+    ...new Set(
+      list
+        .flatMap((value) => value.split(","))
+        .map((value) => value.trim())
+        .filter(Boolean),
+    ),
+  ];
+}
+
+function truthyParam(raw: string | string[] | undefined) {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (!value) return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes";
+}
+
+/** 只從網址判斷要先秀哪種殼（不打 DB） */
+export function resolveLiffBootstrapHint(input: {
+  listingId?: string | string[];
+  similar?: string | string[];
+  "liff.state"?: string;
+}): LiffBootstrapHint {
+  const stateParams = liffStateParams(input["liff.state"]);
+  const listingIds = listingIdsFromParam(
+    input.listingId ??
+      (stateParams.getAll("listingId").length ? stateParams.getAll("listingId") : undefined),
+  );
+  const similarMode = truthyParam(input.similar ?? stateParams.get("similar") ?? undefined);
+  if (similarMode) return { mode: "similar", listingIds };
+  if (listingIds.length) return { mode: "book", listingIds };
+  return { mode: "criteria", listingIds: [] };
+}
+
 /** LIFF 第一次開啟時，原本的 query 會被包在 liff.state 裡。 */
 export function liffStateParams(state: string | null | undefined): URLSearchParams {
   if (!state) return new URLSearchParams();

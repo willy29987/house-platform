@@ -21,6 +21,7 @@ import {
   matchRentals,
   rankSimilarToListing,
   similarRentals,
+  type LiffDirectListingEntry,
   type RentalExtra,
   type RentalMatchCriteria,
   type RentalMatchListing,
@@ -29,17 +30,9 @@ import { taipeiTodayYmd } from "@/lib/owner-tracking-next-contact";
 import { PARKING_TYPE_LABELS } from "@/lib/parking-type-label";
 import { propertyTypeLabel } from "@/lib/property-type-label";
 
-type Step = "criteria" | "listings" | "profile";
+export type { LiffDirectListingEntry };
 
-/** 推播／591／照片對中後直開：book＝該間詳情；similar＝放寬條件後的配對列表 */
-export type LiffDirectListingEntry = {
-  listingIds: string[];
-  criteria: RentalMatchCriteria;
-  priceMin: number | null;
-  priceMax: number | null;
-  petNote: string;
-  mode?: "book" | "similar";
-};
+type Step = "criteria" | "listings" | "profile";
 
 const STEPS: { id: Step; label: string }[] = [
   { id: "criteria", label: "條件" },
