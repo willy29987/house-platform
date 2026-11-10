@@ -434,14 +434,17 @@ async function upsertOne(candidate: Banqiao591ListItem): Promise<"created" | "up
   const nextFp = syncFingerprint(input);
   if (existing) {
     const prevFp = existingFingerprint(existing);
-    if (prevFp === nextFp) return "unchanged";
-    await prisma.listing.update({
-      where: { id: existing.id },
-      data: {
-        ...listingWriteData(input, source591Id, source591Url),
-        // 已存在者不改刊登狀態（新建才保持未刊登）
-      },
-    });
+    const listingChanged = prevFp !== nextFp;
+    if (listingChanged) {
+      await prisma.listing.update({
+        where: { id: existing.id },
+        data: {
+          ...listingWriteData(input, source591Id, source591Url),
+          // 已存在者不改刊登狀態（新建才保持未刊登）
+        },
+      });
+    }
+    // 內容 unchanged 也要確保屋主追蹤有當天電訪筆（先前漏寫／只更新物件時會沒算到）
     try {
       await addPublishedListingToViewableOwnerCase({
         listingId: existing.id,
@@ -453,7 +456,7 @@ async function upsertOne(candidate: Banqiao591ListItem): Promise<"created" | "up
     } catch (error) {
       console.error("[591-banqiao-sync] owner tracking update failed", source591Id, error);
     }
-    return "updated";
+    return listingChanged ? "updated" : "unchanged";
   }
 
   const created = await prisma.listing.create({

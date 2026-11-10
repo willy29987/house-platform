@@ -22,19 +22,18 @@ export function normalizeStaffOpsDate(raw: string | null | undefined, now = new 
 }
 
 /**
- * 電訪＝屋主追蹤在「當天」寫入的追蹤（含首次建檔空備註、後續追蹤）。
- * 只排除明顯非人工電訪的系統／591 自動紀錄。
+ * 電訪＝屋主追蹤在「當天」寫入的追蹤（含首次建檔空備註、591 自抓建檔、後續追蹤）。
+ * 只排除 591 下架／釋出／帶入上架文案與無效案；自抓空備註要算。
  */
 export function isFollowUpExcludedFromDailyCalls(
   f: Pick<OwnerFollowUpPreview, "note" | "status" | "createdBy">,
 ): boolean {
   const note = f.note.trim();
-  const by = (f.createdBy || "").trim();
-  if (by === "system") return true;
+  // 注意：不因 createdBy=system 排除——舊自抓曾寫成 system，仍應算電訪
   if (note.includes("591") && note.includes("下架")) return true;
   if (note.includes("可再開發") && note.includes("591")) return true;
   if (note.includes("下架") && (note.includes("連結") || note.includes("釋出"))) return true;
-  if (note.includes("自動同步")) return true;
+  // 「自動同步」舊文案若只是同步標記且無下架語意，仍算自抓電訪；僅排除帶入上架類
   if (note.includes("591 帶入") || note.includes("帶入上架")) return true;
   return f.status.trim() === "無效／重複";
 }

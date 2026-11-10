@@ -7,6 +7,8 @@ import { extract591ListingId } from "@/lib/listing-591-id";
 import type { ListingInput } from "@/lib/listing-validation";
 import {
   appendOwnerCase,
+  lastFollowUp,
+  newId,
   normalizeOwnerTrackingStore,
   ownerCaseToInput,
   patchOwnerCaseLinkedListing,
@@ -14,8 +16,44 @@ import {
   type OwnerCaseInput,
   type OwnerTrackingStore,
 } from "@/lib/owner-tracking-preview";
+import { taipeiTodayYmd } from "@/lib/owner-tracking-next-contact";
 
 const VIEWABLE_STATUS = "只可帶看" as const;
+
+function followUpTaipeiYmd(iso: string, now = new Date()): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-CA", { timeZone: "Asia/Taipei" }) || taipeiTodayYmd(now);
+}
+
+/** 自抓同一案件當天只記一筆電訪，避免每 2 小時同步灌水 */
+function ensureSameDaySyncFollowUp(
+  store: OwnerTrackingStore,
+  caseId: string,
+  assignee: string,
+  now = new Date(),
+): OwnerTrackingStore {
+  const day = taipeiTodayYmd(now);
+  const hasToday = store.followUps.some(
+    (row) => row.caseId === caseId && followUpTaipeiYmd(row.createdAt, now) === day,
+  );
+  if (hasToday) return store;
+  const prev = lastFollowUp(store, caseId);
+  return {
+    ...store,
+    followUps: [
+      ...store.followUps,
+      {
+        id: newId("fu"),
+        caseId,
+        status: prev?.status || VIEWABLE_STATUS,
+        note: "",
+        createdBy: assignee,
+        createdAt: now.toISOString(),
+      },
+    ],
+  };
+}
 
 function text(value: string | number | null | undefined): string {
   if (value == null) return "";
@@ -249,7 +287,7 @@ export async function addPublishedListingToViewableOwnerCase(input: {
         ),
         followUps: next.followUps.map((row) => {
           if (row.caseId !== existing.id) return row;
-          if ((row.createdBy || "").trim() === "system") {
+          if ((row.createdBy || "").trim().toLowerCase() === "system") {
             return {
               ...row,
               createdBy: assignee,
@@ -262,6 +300,8 @@ export async function addPublishedListingToViewableOwnerCase(input: {
           return row;
         }),
       };
+      // 既有案件被自抓更新時，若今天還沒有追蹤筆，補一筆空備註電訪
+      next = ensureSameDaySyncFollowUp(next, existing.id, assignee);
     }
   }
 
