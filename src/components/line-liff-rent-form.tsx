@@ -71,10 +71,6 @@ function listingPhotos(item: RentalMatchListing) {
   return item.images.length ? item.images : item.coverImage ? [item.coverImage] : [];
 }
 
-function listingPageUrl(baseUrl: string, id: string) {
-  return `${baseUrl.replace(/\/$/, "")}/listings/${id}`;
-}
-
 function layoutLabel(item: Pick<RentalMatchListing, "propertyType" | "houseCondition" | "rooms" | "livingRooms" | "bathrooms" | "balconies">) {
   const condition = item.houseCondition || item.propertyType;
   if (condition === "STUDIO") return "獨立套房";
@@ -285,14 +281,12 @@ function StepDots({ step, hideCriteria }: { step: Step; hideCriteria?: boolean }
 
 function ListingDetailSheet({
   listing,
-  pageUrl,
   wanted,
   onToggleWant,
   onClose,
   onWantNext,
 }: {
   listing: RentalMatchListing;
-  pageUrl: string;
   wanted: boolean;
   onToggleWant?: () => void;
   onClose: () => void;
@@ -565,15 +559,6 @@ function ListingDetailSheet({
                 ) : null}
               </dl>
             </div>
-
-            <a
-              href={pageUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-block text-xs font-semibold text-[#067a36] underline"
-            >
-              開啟完整物件網頁
-            </a>
           </div>
         </div>
         {onWantNext ? (
@@ -649,7 +634,6 @@ export function LineLiffRentForm({
   liffId,
   lineUserId,
   displayName,
-  listingBaseUrl,
   directListing = null,
   onSubmitted,
 }: {
@@ -657,7 +641,8 @@ export function LineLiffRentForm({
   liffId: string;
   lineUserId: string | null;
   displayName: string | null;
-  listingBaseUrl: string;
+  /** 舊呼叫端仍會傳；客人端不再連到官網 */
+  listingBaseUrl?: string;
   directListing?: LiffDirectListingEntry | null;
   onSubmitted?: (caseId: string) => void;
 }) {
@@ -1251,7 +1236,7 @@ export function LineLiffRentForm({
                 console.warn("[liff-rent-form] sendMessages failed", sendError);
               }
               const cards = clientSent
-                ? buildListingCardsFlex(pickedListings, listingBaseUrl)
+                ? buildListingCardsFlex(pickedListings)
                 : null;
               if (cards) {
                 try {
@@ -1940,7 +1925,6 @@ export function LineLiffRentForm({
       {detailListing ? (
         <ListingDetailSheet
           listing={detailListing}
-          pageUrl={listingPageUrl(listingBaseUrl, detailListing.id)}
           wanted={pickedIds.includes(detailListing.id)}
           onToggleWant={
             detailReadOnly || skipCriteria ? undefined : () => togglePick(detailListing.id)

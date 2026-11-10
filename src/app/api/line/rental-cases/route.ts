@@ -163,13 +163,10 @@ export async function POST(request: Request) {
       }
     }
 
-    const listingBase =
-      process.env.NEXT_PUBLIC_LISTING_BASE_URL?.replace(/\/$/, "") ||
-      "https://house-platform.vercel.app";
     const listingLines = created.picked.map((item, index) => {
       const price =
         item.price > 0 ? `（${item.price.toLocaleString("zh-TW")} 元/月）` : "";
-      return `${index + 1}. ${item.title}${price}\n${listingBase}/listings/${item.id}`;
+      return `${index + 1}. ${item.title}${price}`;
     });
     const confirmText = mergeTarget
       ? [
@@ -196,7 +193,7 @@ export async function POST(request: Request) {
           `寵物：${created.petNote || "未填"}`,
           `條件：${created.criteriaText}`,
           "",
-          "想看的物件（網頁）：",
+          "想看的物件：",
           ...listingLines,
         ].join("\n");
 

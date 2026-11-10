@@ -18,7 +18,7 @@ export type ViewingConfirmListing = {
 
 /**
  * 客服／業務點「可以這個時間」後傳給客人。
- * 開頭確認句 → 感謝句 → 每個物件：標題 → 物件網址 → 地圖連結
+ * 開頭確認句 → 感謝句 → 每個物件：標題 → 地圖連結（不給官網網址，避免客人逛到其他物件）
  */
 export function buildViewingConfirmedGuestText(
   when: string,
@@ -30,9 +30,7 @@ export function buildViewingConfirmedGuestText(
   ];
   for (const item of listings) {
     const title = item.title.trim();
-    const pageUrl = item.pageUrl.trim();
     if (title) parts.push("", title);
-    if (pageUrl) parts.push(pageUrl);
     const address = item.address?.trim();
     if (address) parts.push(buildGoogleMapsSearchUrl(address));
   }

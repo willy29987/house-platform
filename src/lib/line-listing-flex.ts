@@ -1,15 +1,17 @@
 /** 客人送出預約時，用 liff.sendMessages 代客人送出的物件卡（Flex）。 */
 
+import { LINE_LIFF_RENT_ASSISTANT_ID } from "@/lib/line-liff-id";
 import type { RentalMatchListing } from "@/lib/line-rental-assistant";
 
 const BRAND_BLUE = "#2563EB";
 
-function listingUrl(baseUrl: string, id: string) {
-  return `${baseUrl.replace(/\/$/, "")}/listings/${id}`;
+/** 在 LINE 內開這間的詳情，不導去官網（避免客人逛到其他物件） */
+function listingUrl(id: string) {
+  return `https://liff.line.me/${LINE_LIFF_RENT_ASSISTANT_ID}?listingId=${encodeURIComponent(id)}`;
 }
 
-function listingBubble(listing: RentalMatchListing, baseUrl: string) {
-  const uri = listingUrl(baseUrl, listing.id);
+function listingBubble(listing: RentalMatchListing) {
+  const uri = listingUrl(listing.id);
   const image = listing.images[0] || listing.coverImage || "";
   const meta = [
     listing.district,
@@ -72,8 +74,8 @@ function listingBubble(listing: RentalMatchListing, baseUrl: string) {
   };
 }
 
-export function buildListingCardsFlex(listings: RentalMatchListing[], baseUrl: string) {
-  const bubbles = listings.slice(0, 10).map((item) => listingBubble(item, baseUrl));
+export function buildListingCardsFlex(listings: RentalMatchListing[]) {
+  const bubbles = listings.slice(0, 10).map(listingBubble);
   if (!bubbles.length) return null;
   const titles = listings.map((item) => item.title).join("、");
   return {
