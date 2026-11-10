@@ -2,6 +2,7 @@ import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminSession } from "@/lib/admin-auth";
+import { enhanceListingPhoto, type ListingPhotoEnhanceTier } from "@/lib/listing-photo-enhance";
 import { isSupabaseStorageConfigured, uploadToSupabaseStorage } from "@/lib/storage";
 import {
   classifyUploadFile,
@@ -15,6 +16,8 @@ export async function POST(request: NextRequest) {
 
   const formData = await request.formData();
   const files = formData.getAll("files") as File[];
+  const purpose = String(formData.get("purpose") ?? "").trim().toLowerCase();
+  const enhanceListingPhotos = purpose === "listing";
 
   if (!files || files.length === 0) {
     return NextResponse.json({ ok: false, message: "未收到檔案" }, { status: 400 });
@@ -35,6 +38,7 @@ export async function POST(request: NextRequest) {
   }
 
   const urls: string[] = [];
+  const enhance: Array<{ tier: ListingPhotoEnhanceTier; reason: string }> = [];
 
   for (const file of files) {
     const kind = classifyUploadFile(file);
@@ -62,11 +66,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const ext = file.name.split(".").pop()?.toLowerCase() || defaultUploadExtension(kind);
+    let ext = file.name.split(".").pop()?.toLowerCase() || defaultUploadExtension(kind);
+    let buffer = Buffer.from(await file.arrayBuffer());
+    let contentType = resolveUploadContentType(file, kind);
+
+    if (enhanceListingPhotos && kind === "image") {
+      const enhanced = await enhanceListingPhoto(buffer);
+      buffer = Buffer.from(enhanced.buffer);
+      contentType = enhanced.contentType;
+      ext = enhanced.extension;
+      enhance.push({ tier: enhanced.tier, reason: enhanced.reason });
+    }
+
     const subdir = kind === "image" ? "images" : kind === "video" ? "videos" : "docs";
     const filename = `${subdir}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const contentType = resolveUploadContentType(file, kind);
 
     if (useSupabase) {
       try {
@@ -85,5 +98,9 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, urls });
+  return NextResponse.json({
+    ok: true,
+    urls,
+    ...(enhance.length ? { enhance } : {}),
+  });
 }

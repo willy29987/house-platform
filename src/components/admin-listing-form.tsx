@@ -424,6 +424,8 @@ export function AdminListingForm({
     try {
       const fd = new FormData();
       for (const file of files) fd.append("files", file);
+      // 物件廣告圖：後端依品質自動輕調光（夠好的幾乎不動）
+      if (kind === "image") fd.append("purpose", "listing");
       const res = await fetch("/api/admin/upload", {
         method: "POST",
         body: fd,
@@ -431,8 +433,18 @@ export function AdminListingForm({
       });
       const contentType = res.headers.get("content-type") ?? "";
       const result = contentType.includes("application/json")
-        ? ((await res.json()) as { ok: boolean; urls?: string[]; message?: string })
-        : ({ ok: false, message: await res.text() } as { ok: boolean; urls?: string[]; message?: string });
+        ? ((await res.json()) as {
+            ok: boolean;
+            urls?: string[];
+            message?: string;
+            enhance?: Array<{ tier: string; reason: string }>;
+          })
+        : ({ ok: false, message: await res.text() } as {
+            ok: boolean;
+            urls?: string[];
+            message?: string;
+            enhance?: Array<{ tier: string; reason: string }>;
+          });
 
       if (!res.ok || !result.ok || !result.urls) {
         const fallback = kind === "video"
@@ -452,7 +464,14 @@ export function AdminListingForm({
           images: [...prev.images, ...result.urls!],
           coverImage: prev.coverImage || result.urls![0] || "",
         }));
-        setMediaStatus(`已上傳 ${result.urls.length} 張圖片`);
+        const tiers = result.enhance ?? [];
+        const adjusted = tiers.filter((t) => t.tier !== "skip").length;
+        const kept = tiers.filter((t) => t.tier === "skip").length;
+        setMediaStatus(
+          tiers.length
+            ? `已上傳 ${result.urls.length} 張（自動美化 ${adjusted}／原圖感保留 ${kept}）`
+            : `已上傳 ${result.urls.length} 張圖片`,
+        );
       } else {
         setFormData((prev) => ({ ...prev, videoUrl: result.urls![0] ?? prev.videoUrl }));
         setMediaStatus("影片已上傳");
@@ -1487,9 +1506,11 @@ export function AdminListingForm({
               onChange={(e) => { if (e.target.files) uploadFiles(e.target.files, "image"); }} />
             <button type="button" disabled={uploading} onClick={() => fileInputRef.current?.click()}
               className="w-full rounded-lg border border-dashed border-zinc-400 bg-zinc-50 px-2 py-2.5 text-xs text-zinc-600 hover:bg-zinc-100 disabled:opacity-60 sm:px-4 sm:py-3 sm:text-sm">
-              {uploading ? "上傳中..." : "＋ 選擇圖片"}
+              {uploading ? "上傳中（自動美化）..." : "＋ 選擇圖片"}
             </button>
-            <p className="mt-1 text-[10px] text-zinc-400 sm:text-xs">JPG、PNG、WEBP、HEIC</p>
+            <p className="mt-1 text-[10px] text-zinc-400 sm:text-xs">
+              JPG、PNG、WEBP、HEIC｜上傳後依品質自動調光（夠好的幾乎不動）
+            </p>
           </div>
 
           {/* 影片區 */}
