@@ -9,6 +9,7 @@ import {
 } from "@/components/viewing-schedule-picker";
 import { EQUIPMENT_ITEMS, FURNITURE_ITEMS } from "@/lib/furniture-appliance-value";
 import { loadLiffClient } from "@/lib/line-liff-client";
+import { buildListingCardsFlex } from "@/lib/line-listing-flex";
 import { readClientMessagingUid } from "@/lib/line-liff-id";
 import {
   EXTRA_OPTIONS,
@@ -614,16 +615,14 @@ function buildGuestChatMessage(input: {
   criteriaText: string;
   when: string;
   picked: { id: string; title: string; price: number }[];
-  listingBaseUrl: string;
 }) {
   const listingBlock = input.picked
     .map((item, index) => {
       const price =
         item.price > 0 ? `（${item.price.toLocaleString("zh-TW")} 元/月）` : "";
-      const url = listingPageUrl(input.listingBaseUrl, item.id);
-      return `${index + 1}. ${item.title}${price}\n${url}`;
+      return `${index + 1}. ${item.title}${price}`;
     })
-    .join("\n\n");
+    .join("\n");
 
   return [
     "【找房預約】我想看以下物件，請協助確認時間。",
@@ -640,7 +639,7 @@ function buildGuestChatMessage(input: {
     `寵物：${input.petNote === "沒有" ? "沒有" : input.petNote}`,
     `條件：${input.criteriaText}`,
     "",
-    "想看的物件（網頁）：",
+    "想看的物件：",
     listingBlock,
   ].join("\n");
 }
@@ -1175,10 +1174,14 @@ export function LineLiffRentForm({
       return;
     }
 
-    const picked = [...pickedIds]
+    const pickedListings = [...pickedIds]
       .map((id) => listingPool.get(id))
-      .filter((item): item is RentalMatchListing => Boolean(item))
-      .map((item) => ({ id: item.id, title: item.title, price: item.price }));
+      .filter((item): item is RentalMatchListing => Boolean(item));
+    const picked = pickedListings.map((item) => ({
+      id: item.id,
+      title: item.title,
+      price: item.price,
+    }));
     const phoneTrim = phone.trim();
     const name = displayName || "LINE 客人";
     const criteriaText = [
@@ -1210,7 +1213,6 @@ export function LineLiffRentForm({
         criteriaText,
         when,
         picked,
-        listingBaseUrl,
       }),
     ]
       .filter(Boolean)
@@ -1247,6 +1249,16 @@ export function LineLiffRentForm({
                 clientSent = true;
               } catch (sendError) {
                 console.warn("[liff-rent-form] sendMessages failed", sendError);
+              }
+              const cards = clientSent
+                ? buildListingCardsFlex(pickedListings, listingBaseUrl)
+                : null;
+              if (cards) {
+                try {
+                  await liff.sendMessages([cards as Parameters<typeof liff.sendMessages>[0][number]]);
+                } catch (cardError) {
+                  console.warn("[liff-rent-form] send listing cards failed", cardError);
+                }
               }
             }
           }

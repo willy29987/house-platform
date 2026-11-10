@@ -34,13 +34,16 @@ function field(text: string, label: string) {
 
 function pickedFromBooking(text: string): LineRentalCasePicked[] {
   const picked: LineRentalCasePicked[] = [];
-  const pattern = /(\d+)\.\s+([^\n]+)\n(https?:\/\/[^\s]+)/g;
-  for (const match of text.matchAll(pattern)) {
+  const start = text.indexOf("想看的物件");
+  const block = start >= 0 ? text.slice(start) : text;
+  // 舊版每間下一行帶網址；新版網址改用物件卡送，只剩標題列
+  const pattern = /^(\d+)\.\s+([^\n]+)(?:\n(https?:\/\/[^\s]+))?/gm;
+  for (const match of block.matchAll(pattern)) {
     const line = match[2].trim();
     const priceMatch = line.match(/（([\d,]+)\s*元\/月）\s*$/);
     const title = priceMatch ? line.slice(0, priceMatch.index).trim() : line;
     const price = priceMatch ? Number(priceMatch[1].replace(/,/g, "")) || 0 : 0;
-    const id = match[3].match(/\/listings\/([^/?#]+)/)?.[1]?.trim() ?? "";
+    const id = match[3]?.match(/\/listings\/([^/?#]+)/)?.[1]?.trim() ?? "";
     if (!title) continue;
     picked.push({ id, title, price });
   }
