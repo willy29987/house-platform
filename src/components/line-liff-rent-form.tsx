@@ -1338,9 +1338,7 @@ export function LineLiffRentForm({
       ? "確認條件，看物件"
       : step === "listings"
         ? canContinueListings
-          ? profileReady
-            ? "下一步：選看屋時間"
-            : "下一步：填基本資料"
+          ? "下一步"
           : skipCriteria
             ? "請先看這間物件"
             : "重新挑選條件"
@@ -1908,7 +1906,7 @@ export function LineLiffRentForm({
         ) : null}
       </div>
 
-      <footer className="shrink-0 border-t border-zinc-200 bg-white px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+      <footer className="sticky bottom-0 z-20 shrink-0 border-t border-zinc-200 bg-white px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <div className={step === "listings" ? "w-full" : "mx-auto max-w-md"}>
           {error ? <p className="mb-2 text-center text-sm text-red-600">{error}</p> : null}
           <button
