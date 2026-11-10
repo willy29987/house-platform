@@ -477,18 +477,18 @@ async function upsertOne(candidate: Banqiao591ListItem): Promise<"created" | "up
 }
 
 /**
- * 清掉既有自抓案的自動備註，並把負責人 system → R001。
- * 只動「未刊登 + 有 591 id」對應的屋主追蹤。
+ * 清掉自抓自動備註，並把所有 system 負責人／建立者改成 R001。
+ * 未刊登 591 對應案件：連案件備註一併清空。
  */
 export async function scrubBanqiaoSyncedOwnerTrackingNotes(): Promise<{
   casesFixed: number;
   notesCleared: number;
+  systemActorsFixed: number;
 }> {
   const listings = await prisma.listing.findMany({
     where: { source591Id: { not: null }, isPublished: false },
     select: { id: true, source591Id: true, source591Url: true },
   });
-  if (listings.length === 0) return { casesFixed: 0, notesCleared: 0 };
 
   const listingIds = new Set(listings.map((row) => row.id));
   const source591Ids = new Set(
@@ -500,28 +500,30 @@ export async function scrubBanqiaoSyncedOwnerTrackingNotes(): Promise<{
     (raw as OwnerTrackingStore | null) ?? { cases: [], followUps: [] },
   );
 
-  const matchedCaseIds = new Set<string>();
+  const syncedCaseIds = new Set<string>();
   for (const ownerCase of store.cases) {
     if (ownerCase.linkedListingId && listingIds.has(ownerCase.linkedListingId)) {
-      matchedCaseIds.add(ownerCase.id);
+      syncedCaseIds.add(ownerCase.id);
       continue;
     }
     const sid = extract591ListingId(ownerCase.listingUrl);
-    if (sid && source591Ids.has(sid)) matchedCaseIds.add(ownerCase.id);
+    if (sid && source591Ids.has(sid)) syncedCaseIds.add(ownerCase.id);
   }
-  if (matchedCaseIds.size === 0) return { casesFixed: 0, notesCleared: 0 };
 
   let casesFixed = 0;
   let notesCleared = 0;
+  let systemActorsFixed = 0;
   const cases = store.cases.map((ownerCase) => {
-    if (!matchedCaseIds.has(ownerCase.id)) return ownerCase;
     let changed = false;
     let next = ownerCase;
-    if ((ownerCase.assignee || "").trim() !== BANQIAO_SYNC_ASSIGNEE) {
+    const assignee = (ownerCase.assignee || "").trim();
+    const isSystem = assignee.toLowerCase() === "system";
+    if (isSystem || (syncedCaseIds.has(ownerCase.id) && assignee !== BANQIAO_SYNC_ASSIGNEE)) {
       next = { ...next, assignee: BANQIAO_SYNC_ASSIGNEE };
+      if (isSystem || assignee !== BANQIAO_SYNC_ASSIGNEE) systemActorsFixed += 1;
       changed = true;
     }
-    if (ownerCase.caseNote.trim()) {
+    if (syncedCaseIds.has(ownerCase.id) && ownerCase.caseNote.trim()) {
       next = { ...next, caseNote: "" };
       notesCleared += 1;
       changed = true;
@@ -531,13 +533,17 @@ export async function scrubBanqiaoSyncedOwnerTrackingNotes(): Promise<{
   });
 
   const followUps = store.followUps.map((row) => {
-    if (!matchedCaseIds.has(row.caseId)) return row;
     let next = row;
     const by = (row.createdBy || "").trim();
-    if (by === "system" || !by) {
+    const isSystem = by.toLowerCase() === "system";
+    if (isSystem) {
       next = { ...next, createdBy: BANQIAO_SYNC_ASSIGNEE };
+      systemActorsFixed += 1;
+    } else if (syncedCaseIds.has(row.caseId) && !by) {
+      next = { ...next, createdBy: BANQIAO_SYNC_ASSIGNEE };
+      systemActorsFixed += 1;
     }
-    if (isAutoScrapedOwnerTrackingNote(row.note) || by === "system") {
+    if (syncedCaseIds.has(row.caseId) && (isAutoScrapedOwnerTrackingNote(row.note) || isSystem)) {
       if (row.note.trim()) notesCleared += 1;
       next = { ...next, note: "" };
     }
@@ -549,7 +555,7 @@ export async function scrubBanqiaoSyncedOwnerTrackingNotes(): Promise<{
     { cases, followUps },
     { replace: true },
   );
-  return { casesFixed, notesCleared };
+  return { casesFixed, notesCleared, systemActorsFixed };
 }
 
 /**

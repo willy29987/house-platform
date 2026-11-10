@@ -196,6 +196,15 @@ export function hydrateOwnerTrackingStoreOnce(
           if (chosen !== local) {
             writeLocal(chosen);
           }
+          // 把舊的 system 負責人／建立者寫回雲端成 R001，避免下次又看到 system
+          const hadSystemActor =
+            (rawCloud?.cases ?? []).some((c) => String(c.assignee ?? "").trim().toLowerCase() === "system") ||
+            (rawCloud?.followUps ?? []).some(
+              (f) => String(f.createdBy ?? "").trim().toLowerCase() === "system",
+            );
+          if (hadSystemActor && cloudFetchOk) {
+            void pushCloudPayload(ADMIN_CLOUD_DATA_KEYS.ownerTracking, chosen, { replace: true });
+          }
           return chosen;
         }
         if (hasOwnerTrackingData(local)) {

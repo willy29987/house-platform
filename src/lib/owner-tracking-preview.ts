@@ -121,6 +121,14 @@ export const emptyOwnerTrackingStore: OwnerTrackingStore = { cases: [], followUp
 
 export const OWNER_TRACKING_STORAGE_KEY = "house-platform:owner-tracking-preview:v4";
 
+/** 591 自抓等誤寫的 system，一律視為 R001（Company） */
+export function canonicalizeOwnerTrackingActor(raw: string | null | undefined): string {
+  const value = String(raw ?? "").trim();
+  if (!value || value === "—") return value || "—";
+  if (value.toLowerCase() === "system") return "R001";
+  return value;
+}
+
 /** 舊版 localStorage 欄位相容 */
 export function normalizeCase(raw: Record<string, unknown>, fallbackAssignee = "—"): OwnerCasePreview {
   const id = String(raw.id ?? newId("case"));
@@ -135,7 +143,7 @@ export function normalizeCase(raw: Record<string, unknown>, fallbackAssignee = "
   }
   return {
     id,
-    assignee: String(raw.assignee ?? fallbackAssignee),
+    assignee: canonicalizeOwnerTrackingActor(String(raw.assignee ?? fallbackAssignee)),
     createdAt: String(raw.createdAt ?? new Date().toISOString()),
     address,
     city,
@@ -191,7 +199,7 @@ export function normalizeOwnerTrackingStore(store: OwnerTrackingStore): OwnerTra
       caseId: String(f.caseId ?? ""),
       status: normalizeFollowUpStatus(String(f.status ?? "")),
       note: stripLegacyCreateCaseNote(String(f.note ?? "")),
-      createdBy: String(f.createdBy ?? ""),
+      createdBy: canonicalizeOwnerTrackingActor(String(f.createdBy ?? "")),
       createdAt: String(f.createdAt ?? new Date().toISOString()),
     })),
   };
@@ -206,9 +214,10 @@ function parseOwnerTrackingStoreRaw(raw: string | null, withInitialFollowUps = t
       followUps: (parsed.followUps ?? []).map((f) => ({
         ...f,
         status: normalizeFollowUpStatus(String(f.status)),
+        createdBy: canonicalizeOwnerTrackingActor(String(f.createdBy ?? "")),
       })),
     };
-    return withInitialFollowUps ? ensureInitialFollowUps(store) : store;
+    return withInitialFollowUps ? ensureInitialFollowUps(normalizeOwnerTrackingStore(store)) : normalizeOwnerTrackingStore(store);
   } catch {
     return emptyOwnerTrackingStore;
   }

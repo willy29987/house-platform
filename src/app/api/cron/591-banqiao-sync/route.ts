@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { runBanqiao591SuiteSync } from "@/lib/listing-591-banqiao-sync";
+import {
+  runBanqiao591SuiteSync,
+  scrubBanqiaoSyncedOwnerTrackingNotes,
+} from "@/lib/listing-591-banqiao-sync";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -19,6 +22,11 @@ async function handle(request: Request) {
   }
 
   try {
+    const scrubOnly = new URL(request.url).searchParams.get("scrubOnly") === "1";
+    if (scrubOnly) {
+      const scrub = await scrubBanqiaoSyncedOwnerTrackingNotes();
+      return NextResponse.json({ ok: true, scrub });
+    }
     const summary = await runBanqiao591SuiteSync();
     return NextResponse.json({ ok: true, summary });
   } catch (error) {

@@ -94,7 +94,7 @@ export function apply591RemovedToOwnerStore(
   opts: { now?: Date; createdBy?: string } = {},
 ): Apply591RemovedResult {
   const now = opts.now ?? new Date();
-  const createdBy = opts.createdBy?.trim() || "system";
+  const createdBy = opts.createdBy?.trim() || "R001";
   const idSet = new Set(removedCaseIds.filter(Boolean));
   if (idSet.size === 0) {
     return { store, changed: false, updatedCaseIds: [] };

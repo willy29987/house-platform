@@ -14,9 +14,11 @@ export function formatAdminStaffLabel(
 ): string {
   const raw = (username ?? "").trim();
   if (!raw || raw === "—") return "—";
-  const fromMap = labelByUsername?.[raw]?.trim();
+  // 舊自抓資料曾寫成 system，顯示上等同 R001（Company）
+  const key = raw.toLowerCase() === "system" ? "R001" : raw;
+  const fromMap = labelByUsername?.[key]?.trim();
   if (fromMap) return fromMap;
-  return raw;
+  return key;
 }
 
 export function buildAdminStaffLabelMap(entries: AdminStaffLabelEntry[]): Record<string, string> {
