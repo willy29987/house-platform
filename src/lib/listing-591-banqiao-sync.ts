@@ -6,9 +6,22 @@ import {
   type Listing591ImportDraft,
 } from "@/lib/listing-591-import";
 import { toListingDescription, parseListingInternalMeta } from "@/lib/listing-internal-meta";
-import { addPublishedListingToViewableOwnerCase } from "@/lib/listing-to-owner-tracking";
+import {
+  addPublishedListingToViewableOwnerCase,
+  isAutoScrapedOwnerTrackingNote,
+} from "@/lib/listing-to-owner-tracking";
 import type { ListingInput } from "@/lib/listing-validation";
+import { extract591ListingId } from "@/lib/listing-591-id";
+import { ADMIN_CLOUD_DATA_KEYS } from "@/lib/admin-cloud-data-keys";
+import { readAdminCloudPayload, writeAdminCloudPayload } from "@/lib/admin-cloud-data-server";
+import {
+  normalizeOwnerTrackingStore,
+  type OwnerTrackingStore,
+} from "@/lib/owner-tracking-preview";
 import { prisma } from "@/lib/prisma";
+
+/** 591 自抓固定負責人；不吃會變成 system 的錯誤 env */
+export const BANQIAO_SYNC_ASSIGNEE = "R001";
 
 const BROWSER_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
@@ -341,7 +354,7 @@ function listingWriteData(data: ListingInput, source591Id: string, source591Url:
   return {
     title: data.title,
     description: toListingDescription({
-      createdByUsername: process.env.BANQIAO_SYNC_ASSIGNEE?.trim() || "R001",
+      createdByUsername: BANQIAO_SYNC_ASSIGNEE,
       furnitureProvided: data.furnitureProvided ?? null,
       applianceProvided: data.applianceProvided ?? null,
       furnitureItems: normalizeItemList(data.furnitureItems),
@@ -433,9 +446,9 @@ async function upsertOne(candidate: Banqiao591ListItem): Promise<"created" | "up
       await addPublishedListingToViewableOwnerCase({
         listingId: existing.id,
         data: { ...input, source591Url, source591Id, isPublished: false },
-        assignee: process.env.BANQIAO_SYNC_ASSIGNEE?.trim() || "R001",
+        assignee: BANQIAO_SYNC_ASSIGNEE,
         overwriteExisting: true,
-        initialNote: "",
+        suppressNotes: true,
       });
     } catch (error) {
       console.error("[591-banqiao-sync] owner tracking update failed", source591Id, error);
@@ -454,13 +467,85 @@ async function upsertOne(candidate: Banqiao591ListItem): Promise<"created" | "up
     await addPublishedListingToViewableOwnerCase({
       listingId: created.id,
       data: { ...input, source591Url, source591Id, isPublished: false },
-      assignee: process.env.BANQIAO_SYNC_ASSIGNEE?.trim() || "R001",
-      initialNote: "",
+      assignee: BANQIAO_SYNC_ASSIGNEE,
+      suppressNotes: true,
     });
   } catch (error) {
     console.error("[591-banqiao-sync] owner tracking create failed", source591Id, error);
   }
   return "created";
+}
+
+/**
+ * 清掉既有自抓案的自動備註，並把負責人 system → R001。
+ * 只動「未刊登 + 有 591 id」對應的屋主追蹤。
+ */
+export async function scrubBanqiaoSyncedOwnerTrackingNotes(): Promise<{
+  casesFixed: number;
+  notesCleared: number;
+}> {
+  const listings = await prisma.listing.findMany({
+    where: { source591Id: { not: null }, isPublished: false },
+    select: { id: true, source591Id: true, source591Url: true },
+  });
+  if (listings.length === 0) return { casesFixed: 0, notesCleared: 0 };
+
+  const listingIds = new Set(listings.map((row) => row.id));
+  const source591Ids = new Set(
+    listings.map((row) => (row.source591Id || "").trim()).filter(Boolean),
+  );
+
+  const raw = await readAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.ownerTracking);
+  const store = normalizeOwnerTrackingStore(
+    (raw as OwnerTrackingStore | null) ?? { cases: [], followUps: [] },
+  );
+
+  const matchedCaseIds = new Set<string>();
+  for (const ownerCase of store.cases) {
+    if (ownerCase.linkedListingId && listingIds.has(ownerCase.linkedListingId)) {
+      matchedCaseIds.add(ownerCase.id);
+      continue;
+    }
+    const sid = extract591ListingId(ownerCase.listingUrl);
+    if (sid && source591Ids.has(sid)) matchedCaseIds.add(ownerCase.id);
+  }
+  if (matchedCaseIds.size === 0) return { casesFixed: 0, notesCleared: 0 };
+
+  let casesFixed = 0;
+  let notesCleared = 0;
+  const cases = store.cases.map((ownerCase) => {
+    if (!matchedCaseIds.has(ownerCase.id)) return ownerCase;
+    let changed = false;
+    let next = ownerCase;
+    if ((ownerCase.assignee || "").trim() !== BANQIAO_SYNC_ASSIGNEE) {
+      next = { ...next, assignee: BANQIAO_SYNC_ASSIGNEE };
+      changed = true;
+    }
+    if (ownerCase.caseNote.trim()) {
+      next = { ...next, caseNote: "" };
+      notesCleared += 1;
+      changed = true;
+    }
+    if (changed) casesFixed += 1;
+    return next;
+  });
+
+  const followUps = store.followUps.map((row) => {
+    if (!matchedCaseIds.has(row.caseId)) return row;
+    let next = row;
+    const by = (row.createdBy || "").trim();
+    if (by === "system" || !by) {
+      next = { ...next, createdBy: BANQIAO_SYNC_ASSIGNEE };
+    }
+    if (isAutoScrapedOwnerTrackingNote(row.note) || by === "system") {
+      if (row.note.trim()) notesCleared += 1;
+      next = { ...next, note: "" };
+    }
+    return next;
+  });
+
+  await writeAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.ownerTracking, { cases, followUps });
+  return { casesFixed, notesCleared };
 }
 
 /**
@@ -485,6 +570,13 @@ export async function runBanqiao591SuiteSync(
   if (!process.env.DATABASE_URL) {
     summary.errors.push("缺少 DATABASE_URL");
     return summary;
+  }
+
+  try {
+    await scrubBanqiaoSyncedOwnerTrackingNotes();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    summary.errors.push(`scrub notes: ${message.slice(0, 160)}`);
   }
 
   const candidates = await listBanqiaoSuiteCandidates();

@@ -174,6 +174,16 @@ function overwriteNonEmptyFields(current: OwnerCaseInput, incoming: OwnerCaseInp
   return next;
 }
 
+/** 591 自動抓取產生的備註（標題：…／自動同步等），不應留在追蹤裡 */
+export function isAutoScrapedOwnerTrackingNote(note: string): boolean {
+  const n = note.trim();
+  if (!n) return false;
+  if (n.includes("自動同步")) return true;
+  if (n.includes("591 帶入") || n.includes("帶入上架")) return true;
+  if (n.startsWith("標題：") || n.includes("\n標題：")) return true;
+  return false;
+}
+
 export async function addPublishedListingToViewableOwnerCase(input: {
   listingId: string;
   data: ListingInput;
@@ -182,11 +192,20 @@ export async function addPublishedListingToViewableOwnerCase(input: {
   initialNote?: string;
   /** 已存在時：true 則用新資料覆寫非空欄位（預設只補空欄） */
   overwriteExisting?: boolean;
+  /**
+   * 591 自動抓取：不寫案件備註／追蹤備註；
+   * 已存在時也清掉自動備註，並覆寫負責人。
+   */
+  suppressNotes?: boolean;
 }): Promise<string | null> {
   const listingId = input.listingId.trim();
   if (!listingId) return null;
+  const assignee = input.assignee.trim() || "R001";
 
   const incoming = listingInputToOwnerCase(input.data);
+  if (input.suppressNotes) {
+    incoming.caseNote = "";
+  }
   const raw = await readAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.ownerTracking);
   const store = normalizeOwnerTrackingStore(
     (raw as OwnerTrackingStore | null) ?? { cases: [], followUps: [] },
@@ -199,10 +218,11 @@ export async function addPublishedListingToViewableOwnerCase(input: {
   let next = store;
   let caseId = existing?.id ?? "";
   if (!existing) {
-    const created = appendOwnerCase(store, incoming, input.assignee, VIEWABLE_STATUS);
+    const created = appendOwnerCase(store, incoming, assignee, VIEWABLE_STATUS);
     caseId = created.caseId;
-    const note =
-      input.initialNote !== undefined
+    const note = input.suppressNotes
+      ? ""
+      : input.initialNote !== undefined
         ? input.initialNote.trim()
         : "從新增廣告的 591 帶入上架，加入可帶看";
     next = {
@@ -213,11 +233,36 @@ export async function addPublishedListingToViewableOwnerCase(input: {
     };
   } else {
     const base = ownerCaseToInput(existing);
-    const merged = input.overwriteExisting
+    let merged = input.overwriteExisting
       ? overwriteNonEmptyFields(base, incoming)
       : fillEmptyFields(base, incoming);
+    if (input.suppressNotes) {
+      merged = { ...merged, caseNote: "" };
+    }
     const filled = updateOwnerCase(store, existing.id, merged);
     next = filled ?? store;
+    if (input.suppressNotes) {
+      next = {
+        ...next,
+        cases: next.cases.map((row) =>
+          row.id === existing.id ? { ...row, assignee, caseNote: "" } : row,
+        ),
+        followUps: next.followUps.map((row) => {
+          if (row.caseId !== existing.id) return row;
+          if ((row.createdBy || "").trim() === "system") {
+            return {
+              ...row,
+              createdBy: assignee,
+              note: isAutoScrapedOwnerTrackingNote(row.note) ? "" : row.note,
+            };
+          }
+          if (isAutoScrapedOwnerTrackingNote(row.note)) {
+            return { ...row, note: "" };
+          }
+          return row;
+        }),
+      };
+    }
   }
 
   next = patchOwnerCaseLinkedListing(next, caseId, listingId);
