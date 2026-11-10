@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { formatAdminStaffLabel } from "@/lib/admin-staff-labels";
-import { hydrateOwnerTrackingStoreOnce } from "@/lib/admin-cloud-sync-client";
+import { refreshOwnerTrackingFromCloud } from "@/lib/admin-cloud-sync-client";
 import {
   emptyOwnerTrackingStore,
   formatFollowUpWhen,
@@ -45,9 +45,38 @@ export function AdminStaffDailyOps({
   const [dayYmd, setDayYmd] = useState(() => taipeiTodayYmd());
 
   useEffect(() => {
-    void hydrateOwnerTrackingStoreOnce(loadOwnerTrackingStoreLocal, persistOwnerTrackingStoreFromCloud)
-      .then((next) => setStore(next))
-      .catch(() => setStore(normalizeOwnerTrackingStore(loadOwnerTrackingStoreLocal())));
+    let cancelled = false;
+
+    async function refreshFromCloud() {
+      try {
+        const next = await refreshOwnerTrackingFromCloud(
+          loadOwnerTrackingStoreLocal,
+          persistOwnerTrackingStoreFromCloud,
+        );
+        if (!cancelled) setStore(next);
+      } catch {
+        if (!cancelled) setStore(normalizeOwnerTrackingStore(loadOwnerTrackingStoreLocal()));
+      }
+    }
+
+    void refreshFromCloud();
+
+    // 首頁停留時也要跟上最新追蹤，避免「今日電訪」看起來沒更新
+    const onFocus = () => {
+      void refreshFromCloud();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void refreshFromCloud();
+    }, 60_000);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+      window.clearInterval(timer);
+    };
   }, []);
 
   const today = taipeiTodayYmd();

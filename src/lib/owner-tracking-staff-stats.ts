@@ -22,16 +22,20 @@ export function normalizeStaffOpsDate(raw: string | null | undefined, now = new 
 }
 
 /**
- * 591 下架／釋出備註（含檢查自動寫入、手動記下架）不算電訪。
- * 與 isOwnerCaseMarked591ReleaseTrack 的備註判斷對齊。
+ * 電訪＝屋主追蹤在「當天」寫入的追蹤（含首次建檔空備註、後續追蹤）。
+ * 只排除明顯非人工電訪的系統／591 自動紀錄。
  */
 export function isFollowUpExcludedFromDailyCalls(
-  f: Pick<OwnerFollowUpPreview, "note" | "status">,
+  f: Pick<OwnerFollowUpPreview, "note" | "status" | "createdBy">,
 ): boolean {
   const note = f.note.trim();
+  const by = (f.createdBy || "").trim();
+  if (by === "system") return true;
   if (note.includes("591") && note.includes("下架")) return true;
   if (note.includes("可再開發") && note.includes("591")) return true;
   if (note.includes("下架") && (note.includes("連結") || note.includes("釋出"))) return true;
+  if (note.includes("自動同步")) return true;
+  if (note.includes("591 帶入") || note.includes("帶入上架")) return true;
   return f.status.trim() === "無效／重複";
 }
 
