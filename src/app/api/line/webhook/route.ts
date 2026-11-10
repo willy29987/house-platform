@@ -165,6 +165,7 @@ async function storeGuestMessage(
     mediaType?: LineConversationMediaType;
     stickerId?: string;
     packageId?: string;
+    replyToken?: string;
   },
   state: { failed: boolean },
 ) {
@@ -179,6 +180,7 @@ async function storeGuestMessage(
       mediaType: input.mediaType,
       stickerId: input.stickerId,
       packageId: input.packageId,
+      replyToken: input.replyToken,
     });
     // 新訊息才推播；重複 webhook 不重複吵
     if (saved) {
@@ -308,6 +310,7 @@ async function handleEvent(event: LineEvent, state: { failed: boolean }) {
       mediaType: preview.mediaType,
       stickerId: preview.stickerId,
       packageId: preview.packageId,
+      replyToken: event.replyToken,
     },
     state,
   );

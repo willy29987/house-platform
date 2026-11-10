@@ -403,6 +403,9 @@ export async function handleGuestText(input: {
     }).catch((error) => {
       console.warn("[line-guest-flow] sync booking case failed", error);
     });
+    await replyGuest(input.replyToken, input.lineUserId, [
+      { type: "text", text: VIEWING_SUBMIT_ACK_TEXT },
+    ]);
     return true;
   }
 

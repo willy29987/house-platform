@@ -25,6 +25,8 @@ export type LineConversationMessage = {
   mediaType?: LineConversationMediaType;
   stickerId?: string;
   packageId?: string;
+  /** 客人訊息的 LINE replyToken；只在伺服器端用，不回給前端 */
+  replyToken?: string;
 };
 
 export type LineConversation = {
@@ -78,6 +80,7 @@ function normalizeMessage(raw: unknown): LineConversationMessage | null {
     mediaType,
     stickerId: typeof m.stickerId === "string" ? m.stickerId : undefined,
     packageId: typeof m.packageId === "string" ? m.packageId : undefined,
+    replyToken: typeof m.replyToken === "string" ? m.replyToken : undefined,
   };
 }
 
@@ -106,6 +109,7 @@ function mergeMessages(
       stickerId: message.stickerId ?? prev.stickerId,
       packageId: message.packageId ?? prev.packageId,
       messageId: message.messageId ?? prev.messageId,
+      replyToken: message.replyToken ?? prev.replyToken,
     });
   }
 
@@ -268,7 +272,33 @@ export async function readLineConversations(): Promise<LineConversation[]> {
   const store = normalizeStore(
     await readAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.lineConversations),
   );
-  return store.conversations.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  return store.conversations
+    .map((row) => ({
+      ...row,
+      messages: row.messages.map((message) => ({ ...message, replyToken: undefined })),
+    }))
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+/** 客服回覆可用的 replyToken：最後一則客人訊息之後還沒有客服回過，且在時限內。 */
+export async function findGuestReplyToken(
+  lineUserId: string,
+  withinMs = 30 * 60_000,
+): Promise<string | null> {
+  const store = normalizeStore(
+    await readAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.lineConversations),
+  );
+  const row = store.conversations.find((item) => item.lineUserId === lineUserId);
+  if (!row) return null;
+  for (let i = row.messages.length - 1; i >= 0; i -= 1) {
+    const message = row.messages[i];
+    if (message.from === "staff") return null;
+    if (message.from !== "guest") continue;
+    if (!message.replyToken) continue;
+    const age = Date.now() - new Date(message.createdAt).getTime();
+    return Number.isFinite(age) && age >= 0 && age <= withinMs ? message.replyToken : null;
+  }
+  return null;
 }
 
 export async function getLineConversation(
@@ -364,6 +394,7 @@ export async function appendLineConversationMessage(input: {
   mediaType?: LineConversationMediaType;
   stickerId?: string;
   packageId?: string;
+  replyToken?: string;
 }): Promise<LineConversationMessage | null> {
   const lineUserId = input.lineUserId.trim();
   const text = input.text.trim();
@@ -390,6 +421,7 @@ export async function appendLineConversationMessage(input: {
     mediaType: input.mediaType,
     stickerId: input.stickerId,
     packageId: input.packageId,
+    replyToken: input.replyToken,
   };
 
   if (!existing) {

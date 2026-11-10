@@ -171,7 +171,24 @@ export async function pushLineMessages(
     const body = await response.text().catch(() => "");
     return { sent: false as const, reason: "api_error" as const, status: response.status, body };
   }
-  const logAs = options?.logAs === undefined ? "bot" : options.logAs;
+  await logOutgoingMessages(
+    lineUserId,
+    messages,
+    options?.logAs === undefined ? "bot" : options.logAs,
+  );
+  return { sent: true as const };
+}
+
+/** LINE 回 429 且訊息含 monthly limit＝本月免費推播額度用完 */
+export function isLineMonthlyQuotaError(result: { status?: number; body?: string }) {
+  return result.status === 429 && /monthly limit/i.test(result.body ?? "");
+}
+
+async function logOutgoingMessages(
+  lineUserId: string,
+  messages: LineMessage[],
+  logAs: "bot" | "staff" | false,
+) {
   if (logAs) {
     try {
       if (logAs === "staff") {
@@ -222,17 +239,16 @@ export async function pushLineMessages(
         await appendLineConversationBotMessages({ lineUserId, messages });
       }
     } catch (error) {
-      console.warn("[line-messaging] append conversation (push) failed", error);
+      console.warn("[line-messaging] append conversation failed", error);
     }
   }
-  return { sent: true as const };
 }
 
-/** Webhook 用 replyToken 回覆（不需 live 旗標也可在測試時送，仍需 token） */
+/** 用 replyToken 回覆（不算月額度）。replyToken 只能用一次、會過期。 */
 export async function replyLineMessages(
   replyToken: string,
   messages: LineMessage[],
-  options?: { lineUserId?: string | null },
+  options?: { lineUserId?: string | null; logAs?: "bot" | "staff" },
 ) {
   const token = await resolveLineToken();
   if (!token || !replyToken || !messages.length) {
@@ -253,14 +269,7 @@ export async function replyLineMessages(
     return { sent: false as const, reason: "api_error" as const, status: response.status, body };
   }
   if (options?.lineUserId) {
-    try {
-      await appendLineConversationBotMessages({
-        lineUserId: options.lineUserId,
-        messages,
-      });
-    } catch (error) {
-      console.warn("[line-messaging] append conversation (reply) failed", error);
-    }
+    await logOutgoingMessages(options.lineUserId, messages, options.logAs ?? "bot");
   }
   return { sent: true as const };
 }

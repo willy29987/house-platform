@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server";
 import { requireSuperAdmin } from "@/lib/admin-auth";
-import { readLineConversations } from "@/lib/line-conversations";
+import { findGuestReplyToken, readLineConversations } from "@/lib/line-conversations";
 import { listOpenGuestSessions } from "@/lib/line-guest-sessions";
 import { listGuestProfileUserIds } from "@/lib/line-guest-profile";
 import { listActiveGuestWatches } from "@/lib/line-guest-watch";
-import { buildPublicBaseUrl, pushLineMessages, type LineMessage } from "@/lib/line-messaging";
+import {
+  buildPublicBaseUrl,
+  isLineMonthlyQuotaError,
+  pushLineMessages,
+  replyLineMessages,
+  type LineMessage,
+} from "@/lib/line-messaging";
 import { syncRecentGuestBookings } from "@/lib/line-booking-sync";
 import { readLineRentalCases } from "@/lib/line-rental-cases";
 
@@ -119,16 +125,32 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "缺少 text、sticker、imageUrl 或 videoUrl" }, { status: 400 });
   }
 
+  const replyToken = await findGuestReplyToken(lineUserId).catch(() => null);
+  if (replyToken) {
+    const replied = await replyLineMessages(replyToken, [message], {
+      lineUserId,
+      logAs: "staff",
+    });
+    if (replied.sent) return NextResponse.json({ ok: true, via: "reply" });
+  }
+
   const pushed = await pushLineMessages(lineUserId, [message], {
     force: true,
     logAs: "staff",
   });
   if (!pushed.sent) {
+    const quota = "status" in pushed && isLineMonthlyQuotaError(pushed);
     return NextResponse.json(
-      { error: "推播失敗", detail: pushed },
+      {
+        error: quota
+          ? "本月 LINE 免費推播額度已用完，這則沒送出。客人再傳訊息後馬上回可免費送出，或先用 LINE 官方帳號 App 回覆。"
+          : "推播失敗",
+        quotaExhausted: quota,
+        detail: pushed,
+      },
       { status: 502 },
     );
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, via: "push" });
 }

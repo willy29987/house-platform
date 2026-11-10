@@ -1352,7 +1352,11 @@ export function LineRentalPreview({
     }).then(async (response) => {
       if (response.ok) return;
       dropOutgoing(guest.id, lineIdLocal);
-      window.alert("傳送失敗，請再試一次");
+      const data = (await response.json().catch(() => null)) as {
+        error?: string;
+        quotaExhausted?: boolean;
+      } | null;
+      window.alert(data?.quotaExhausted && data.error ? data.error : "傳送失敗，請再試一次");
     });
   }
 

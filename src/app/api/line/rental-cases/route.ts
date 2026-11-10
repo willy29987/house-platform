@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireSuperAdmin } from "@/lib/admin-auth";
 import {
+  appendLineConversationBotMessages,
   appendLineConversationMessage,
   findRecentGuestUserIdByExactText,
 } from "@/lib/line-conversations";
@@ -15,7 +16,7 @@ import {
   type LineRentalCasePicked,
 } from "@/lib/line-rental-cases";
 import { applyLineDisplayName } from "@/lib/line-booking-text";
-import { getLineUserProfile, pushLineMessages } from "@/lib/line-messaging";
+import { getLineUserProfile, pushLineMessages, type LineMessage } from "@/lib/line-messaging";
 import { VIEWING_SUBMIT_ACK_TEXT } from "@/lib/line-viewing-guest-copy";
 import { upsertGuestProfile } from "@/lib/line-guest-profile";
 import { getViewingAgentUserIds, notifyAgentsOfNewViewing } from "@/lib/line-viewing-agent";
@@ -217,21 +218,26 @@ export async function POST(request: Request) {
         console.warn("[line/rental-cases] append booking to conversation failed", error);
       }
 
-      if (!clientDelivered) {
-        await pushLineMessages(
+      if (clientDelivered) {
+        // 客人自己送出的預約訊息會進 webhook，由 webhook 用 replyToken 回「稍等確認」（不算額度）
+        pushSent = true;
+        pushReason = "ack_via_reply";
+      } else {
+        const ackText: LineMessage = { type: "text", text: VIEWING_SUBMIT_ACK_TEXT };
+        const ack = await pushLineMessages(
           created.lineUserId,
-          [{ type: "text", text: confirmText }],
+          [{ type: "text", text: confirmText }, ackText],
           { force: true, logAs: false },
         );
+        if (ack.sent) {
+          await appendLineConversationBotMessages({
+            lineUserId: created.lineUserId,
+            messages: [ackText],
+          }).catch(() => undefined);
+        }
+        pushSent = ack.sent;
+        pushReason = ack.sent ? "ack_ok" : ("reason" in ack ? String(ack.reason) : "ack_failed");
       }
-
-      const ack = await pushLineMessages(
-        created.lineUserId,
-        [{ type: "text", text: VIEWING_SUBMIT_ACK_TEXT }],
-        { force: true, logAs: "bot" },
-      );
-      pushSent = ack.sent;
-      pushReason = ack.sent ? "ack_ok" : ("reason" in ack ? String(ack.reason) : "ack_failed");
     }
 
     const notify = await notifyAgentsOfNewViewing(created);
