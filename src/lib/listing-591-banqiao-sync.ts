@@ -544,7 +544,11 @@ export async function scrubBanqiaoSyncedOwnerTrackingNotes(): Promise<{
     return next;
   });
 
-  await writeAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.ownerTracking, { cases, followUps });
+  await writeAdminCloudPayload(
+    ADMIN_CLOUD_DATA_KEYS.ownerTracking,
+    { cases, followUps },
+    { replace: true },
+  );
   return { casesFixed, notesCleared };
 }
 
