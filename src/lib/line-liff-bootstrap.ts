@@ -54,10 +54,10 @@ export async function buildLiffBootstrap(input: {
   if (input["liff.state"]) search.set("liff.state", input["liff.state"]);
   const fallbackLineUserId = messagingUidFromSearch(search.toString());
   const stateParams = liffStateParams(input["liff.state"]);
-  const pushedListingIds = listingIdsFromParam(
-    input.listingId ??
-      (stateParams.getAll("listingId").length ? stateParams.getAll("listingId") : undefined),
-  );
+  const directIds = listingIdsFromParam(input.listingId);
+  const pushedListingIds = directIds.length
+    ? directIds
+    : listingIdsFromParam(stateParams.getAll("listingId"));
   const similarMode = truthyParam(input.similar ?? stateParams.get("similar") ?? undefined);
 
   const [openViewing, lineProfile] = await Promise.all([
