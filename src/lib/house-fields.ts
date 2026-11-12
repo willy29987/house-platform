@@ -95,13 +95,28 @@ export function skipsLayout(condition: string): boolean {
   return condition === "STUDIO" || condition === "SUITE";
 }
 
-/** 591 聯絡名稱常前面帶「屋主」，欄位只留姓氏姓名。 */
+/** 591 聯絡名稱常前面帶「屋主／仲介」，欄位只留姓氏姓名。 */
 export function formatOwnerPersonName(raw: string): string {
-  return raw
-    .trim()
-    .replace(/\s+/g, " ")
-    .replace(/^(?:屋主|房東|所有權人)[\s:：\-—－/／|·・]*/, "")
-    .trim();
+  let name = raw.trim().replace(/\s+/g, " ");
+  const prefix = /^(?:屋主|房東|所有權人|仲介)[\s:：\-—－/／|·・]*/;
+  for (let i = 0; i < 3; i += 1) {
+    const next = name.replace(prefix, "").trim();
+    if (!next || next === name) break;
+    name = next;
+  }
+  return name || raw.trim();
+}
+
+/**
+ * 有真正可聯絡的電話。空的、「無」、字面上有「轉接」，
+ * 或把分機黏在手機後面的長號碼，都算沒有電話。
+ */
+export function isRealOwnerPhone(raw: string): boolean {
+  const text = raw.trim();
+  if (!text || text === "無" || text === "—" || text === "-") return false;
+  if (text.includes("轉接")) return false;
+  const digits = text.replace(/\D/g, "");
+  return digits.length >= 8 && digits.length <= 10;
 }
 
 export function ownerContactFromTexts(nameRaw: string, imNameRaw: string, phoneRaw: string): { name: string; phone: string } {

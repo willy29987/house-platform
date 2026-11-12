@@ -12,6 +12,8 @@ import {
 } from "@/lib/listing-to-owner-tracking";
 import type { ListingInput } from "@/lib/listing-validation";
 import { extract591ListingId } from "@/lib/listing-591-id";
+import { formatOwnerPersonName, isRealOwnerPhone } from "@/lib/house-fields";
+import { check591ListingUrl } from "@/lib/listing-591-check";
 import { ADMIN_CLOUD_DATA_KEYS } from "@/lib/admin-cloud-data-keys";
 import { readAdminCloudPayload, writeAdminCloudPayload } from "@/lib/admin-cloud-data-server";
 import {
@@ -72,6 +74,9 @@ export type Banqiao591SyncSummary = {
   skipped: number;
   errors: string[];
   processedIds: string[];
+  purgedListings: number;
+  purgedCases: number;
+  namesFixed: number;
 };
 
 function text(value: unknown): string {
@@ -561,9 +566,172 @@ export async function scrubBanqiaoSyncedOwnerTrackingNotes(): Promise<{
   return { casesFixed, notesCleared, systemActorsFixed };
 }
 
+function isCompanySyncActor(username: string | null | undefined): boolean {
+  const value = (username ?? "").trim().toLowerCase();
+  return value === "r001" || value === "system";
+}
+
+/**
+ * 系統抓下來、負責人是 Company 的 591 案：
+ * 連結已下架，而且沒有真正電話（轉接算沒有）→ 刪屋主追蹤，廣告一併刪。
+ * 有電話的留下，並拿掉姓名前面的「仲介／屋主」。
+ */
+export async function purgeGoneCompany591WithoutPhone(opts?: {
+  maxChecks?: number;
+  dryRun?: boolean;
+}): Promise<{
+  checked: number;
+  purgedListings: number;
+  purgedCases: number;
+  namesFixed: number;
+  keptLive: number;
+  unknown: number;
+}> {
+  const maxChecks = Math.min(Math.max(opts?.maxChecks ?? 40, 1), 80);
+  const result = {
+    checked: 0,
+    purgedListings: 0,
+    purgedCases: 0,
+    namesFixed: 0,
+    keptLive: 0,
+    unknown: 0,
+  };
+  if (!process.env.DATABASE_URL) return result;
+
+  const listings = await prisma.listing.findMany({
+    where: { source591Id: { not: null } },
+    select: {
+      id: true,
+      source591Id: true,
+      source591Url: true,
+      contactName: true,
+      contactPhone: true,
+      description: true,
+    },
+  });
+  const company = listings.filter((row) =>
+    isCompanySyncActor(parseListingInternalMeta(row.description).createdByUsername),
+  );
+  if (company.length === 0) return result;
+
+  const raw = await readAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.ownerTracking);
+  const store = normalizeOwnerTrackingStore(
+    (raw as OwnerTrackingStore | null) ?? { cases: [], followUps: [] },
+  );
+  const casesByListingId = new Map<string, typeof store.cases>();
+  const casesBy591Id = new Map<string, typeof store.cases>();
+  for (const ownerCase of store.cases) {
+    if (ownerCase.linkedListingId) {
+      const list = casesByListingId.get(ownerCase.linkedListingId) ?? [];
+      list.push(ownerCase);
+      casesByListingId.set(ownerCase.linkedListingId, list);
+    }
+    const sid = extract591ListingId(ownerCase.listingUrl);
+    if (sid) {
+      const list = casesBy591Id.get(sid) ?? [];
+      list.push(ownerCase);
+      casesBy591Id.set(sid, list);
+    }
+  }
+
+  const deleteListingIds = new Set<string>();
+  const deleteCaseIds = new Set<string>();
+  const renameListings: Array<{ id: string; contactName: string }> = [];
+  const renameCases = new Map<string, string>();
+
+  const noPhone: typeof company = [];
+  for (const row of company) {
+    const related = new Map<string, (typeof store.cases)[number]>();
+    for (const ownerCase of casesByListingId.get(row.id) ?? []) related.set(ownerCase.id, ownerCase);
+    const sid = (row.source591Id || "").trim();
+    for (const ownerCase of casesBy591Id.get(sid) ?? []) {
+      if (!isCompanySyncActor(ownerCase.assignee) && ownerCase.linkedListingId !== row.id) continue;
+      related.set(ownerCase.id, ownerCase);
+    }
+    const phones = [row.contactPhone, ...Array.from(related.values()).map((ownerCase) => ownerCase.phone)];
+    const nextListingName = formatOwnerPersonName(row.contactName);
+    if (nextListingName && nextListingName !== row.contactName.trim()) {
+      renameListings.push({ id: row.id, contactName: nextListingName });
+    }
+    for (const ownerCase of related.values()) {
+      if (!isCompanySyncActor(ownerCase.assignee)) continue;
+      const nextName = formatOwnerPersonName(ownerCase.ownerName);
+      if (nextName && nextName !== ownerCase.ownerName.trim()) renameCases.set(ownerCase.id, nextName);
+    }
+    if (phones.some((phone) => isRealOwnerPhone(phone))) continue;
+    noPhone.push(row);
+  }
+
+  const queue = noPhone.slice(0, maxChecks);
+  let index = 0;
+  async function worker() {
+    while (index < queue.length) {
+      const row = queue[index++];
+      if (!row?.source591Id) continue;
+      const url = (row.source591Url || "").trim() || rentUrl(row.source591Id);
+      const check = await check591ListingUrl(url);
+      result.checked += 1;
+      if (check.status === "live") {
+        result.keptLive += 1;
+        continue;
+      }
+      if (check.status !== "removed") {
+        result.unknown += 1;
+        continue;
+      }
+      deleteListingIds.add(row.id);
+      const sid = row.source591Id.trim();
+      for (const ownerCase of casesByListingId.get(row.id) ?? []) {
+        if (isCompanySyncActor(ownerCase.assignee) || ownerCase.linkedListingId === row.id) {
+          deleteCaseIds.add(ownerCase.id);
+        }
+      }
+      for (const ownerCase of casesBy591Id.get(sid) ?? []) {
+        if (isCompanySyncActor(ownerCase.assignee) || ownerCase.linkedListingId === row.id) {
+          deleteCaseIds.add(ownerCase.id);
+        }
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(4, queue.length) }, () => worker()));
+
+  result.purgedListings = deleteListingIds.size;
+  result.purgedCases = deleteCaseIds.size;
+  result.namesFixed = renameListings.length + renameCases.size;
+  if (opts?.dryRun) return result;
+
+  for (const row of renameListings) {
+    if (deleteListingIds.has(row.id)) continue;
+    await prisma.listing.update({ where: { id: row.id }, data: { contactName: row.contactName } });
+  }
+  if (deleteListingIds.size > 0) {
+    await prisma.listing.deleteMany({ where: { id: { in: Array.from(deleteListingIds) } } });
+  }
+
+  if (deleteCaseIds.size > 0 || renameCases.size > 0) {
+    const nextCases = store.cases
+      .filter((ownerCase) => !deleteCaseIds.has(ownerCase.id))
+      .map((ownerCase) => {
+        const nextName = renameCases.get(ownerCase.id);
+        return nextName ? { ...ownerCase, ownerName: nextName } : ownerCase;
+      });
+    await writeAdminCloudPayload(
+      ADMIN_CLOUD_DATA_KEYS.ownerTracking,
+      {
+        cases: nextCases,
+        followUps: store.followUps.filter((row) => !deleteCaseIds.has(row.caseId)),
+      },
+      { replace: true },
+    );
+  }
+
+  return result;
+}
+
 /**
  * 同步板橋服務範圍屋主套房 → 本站未刊登物件 + 屋主追蹤。
- * 同一 source591Id 不重建；內容有差異才更新。不因 591 消失而自動下架。
+ * 同一 source591Id 不重建；內容有差異才更新。
+ * Company 自抓案若 591 連結已消失且沒有真正電話，連廣告一起刪。
  */
 export async function runBanqiao591SuiteSync(
   opts: { maxDetails?: number } = {},
@@ -578,6 +746,9 @@ export async function runBanqiao591SuiteSync(
     skipped: 0,
     errors: [],
     processedIds: [],
+    purgedListings: 0,
+    purgedCases: 0,
+    namesFixed: 0,
   };
 
   if (!process.env.DATABASE_URL) {
@@ -590,6 +761,16 @@ export async function runBanqiao591SuiteSync(
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     summary.errors.push(`scrub notes: ${message.slice(0, 160)}`);
+  }
+
+  try {
+    const purged = await purgeGoneCompany591WithoutPhone();
+    summary.purgedListings = purged.purgedListings;
+    summary.purgedCases = purged.purgedCases;
+    summary.namesFixed = purged.namesFixed;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    summary.errors.push(`purge: ${message.slice(0, 160)}`);
   }
 
   const candidates = await listBanqiaoSuiteCandidates();
