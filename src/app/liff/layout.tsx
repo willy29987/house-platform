@@ -9,10 +9,10 @@ export const metadata: Metadata = {
 /** LIFF 殼要極速出現：避免多餘外層，先給可見底色 */
 export default function LiffLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-dvh bg-zinc-100 text-zinc-900">
+    <div className="min-h-dvh bg-zinc-100 text-zinc-900 antialiased [-webkit-tap-highlight-color:transparent]">
       {/* 首屏保底：JS 還沒來也看得到找房頁在載 */}
       <noscript>
-        <p className="p-6 text-center text-sm">請在 LINE 內開啟找房頁面。</p>
+        <p className="p-6 text-center text-sm text-zinc-600">請在 LINE 內開啟找房頁面。</p>
       </noscript>
       {children}
     </div>

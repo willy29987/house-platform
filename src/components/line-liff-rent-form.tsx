@@ -125,10 +125,19 @@ function ListingPickRow({
   badge?: string;
 }) {
   const photo = listingPhotos(item)[0];
-  const selectLabel = selected ? "取消想看" : "想看這間";
+  const selectLabel = selected ? "取消想看" : "想看";
+  const areaText = [
+    `${item.city}${item.district}`,
+    guestFacingAddress(item.address) || null,
+    layoutLabel(item),
+    `${item.areaPing} 坪`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
-    <div
-      className={`flex items-stretch gap-3 px-2 py-3.5 ${
+    <article
+      className={`flex gap-3 px-3 py-3.5 transition-colors ${
         !hideToggle && selected ? "bg-[#e8f8ef]" : "bg-white"
       }`}
     >
@@ -136,45 +145,66 @@ function ListingPickRow({
         type="button"
         onClick={onOpen}
         aria-label={`查看${item.title}的照片與資訊`}
-        className="h-40 w-44 shrink-0 overflow-hidden rounded-xl bg-zinc-100"
+        className="relative h-[6.75rem] w-[6.75rem] shrink-0 overflow-hidden rounded-2xl bg-zinc-100 ring-1 ring-zinc-200/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#06c755]"
       >
         {photo ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={photo} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <span className="flex h-full items-center justify-center text-[11px] text-zinc-400">無圖</span>
+        )}
+        {!hideToggle && selected ? (
+          <span className="absolute left-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-[#06c755] text-white shadow-sm">
+            <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" fill="none" aria-hidden>
+              <path
+                d="M4.5 10.5 8 14l7.5-8"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </span>
         ) : null}
       </button>
-      <button
-        type="button"
-        onClick={hideToggle ? onOpen : onToggle}
-        aria-label={hideToggle ? `查看${item.title}` : selectLabel}
-        className="flex min-w-0 flex-1 flex-col justify-center text-left"
-      >
+
+      <div className="flex min-w-0 flex-1 flex-col">
         {badge ? (
-          <span className="mb-1 inline-flex w-fit rounded-full bg-[#06c755] px-2 py-0.5 text-xs font-bold text-white">
+          <span className="mb-1 inline-flex w-fit rounded-full bg-[#06c755] px-2 py-0.5 text-[10px] font-bold tracking-wide text-white">
             {badge}
           </span>
         ) : null}
-        <span className="line-clamp-2 text-base font-bold leading-snug text-zinc-900">
-          {item.title}
-        </span>
-        <span className="mt-1.5 block text-sm leading-snug text-zinc-600">
-          {item.city}
-          {item.district}
-          {guestFacingAddress(item.address) ? ` ${guestFacingAddress(item.address)}` : ""}
-        </span>
-        <span className="mt-1 block text-sm text-zinc-500">
-          {layoutLabel(item)} · {item.areaPing} 坪
-        </span>
-        <span className="mt-1.5 flex items-baseline justify-between gap-2">
-          <span className="text-lg font-semibold tabular-nums text-red-600">
+        <button
+          type="button"
+          onClick={onOpen}
+          className="text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#06c755]"
+        >
+          <h3 className="line-clamp-2 text-[15px] font-bold leading-snug text-zinc-900">{item.title}</h3>
+          <p className="mt-1 line-clamp-1 text-[11px] leading-snug text-zinc-500">{areaText}</p>
+          <p className="mt-1.5 text-[17px] font-bold tabular-nums leading-none text-red-600">
             {formatRent(item.price)}
-          </span>
-          {!hideToggle && selected ? (
-            <span className="shrink-0 text-xs font-bold text-[#067a36]">已選</span>
-          ) : null}
-        </span>
-      </button>
-    </div>
+          </p>
+        </button>
+
+        {!hideToggle ? (
+          <div className="mt-auto flex items-center justify-end pt-2.5">
+            <button
+              type="button"
+              onClick={onToggle}
+              aria-pressed={selected}
+              aria-label={selectLabel}
+              className={`inline-flex min-h-9 touch-manipulation items-center gap-1 rounded-full px-3 text-xs font-bold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#06c755] ${
+                selected
+                  ? "bg-[#06c755] text-white"
+                  : "border border-zinc-300 bg-white text-zinc-800"
+              }`}
+            >
+              {selected ? "已選想看" : "想看這間"}
+            </button>
+          </div>
+        ) : null}
+      </div>
+    </article>
   );
 }
 
@@ -193,7 +223,8 @@ function Chip({
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex min-h-11 shrink-0 touch-manipulation items-center rounded-full border px-3 py-2 text-sm active:opacity-80 ${
+      aria-pressed={active}
+      className={`inline-flex min-h-11 shrink-0 touch-manipulation items-center rounded-full border px-3 py-2 text-sm transition-colors active:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#06c755] ${
         active
           ? "border-[#06c755] bg-[#e8f8ef] font-semibold text-[#067a36]"
           : "border-zinc-200 bg-white text-zinc-700"
@@ -247,8 +278,8 @@ function Section({
   className?: string;
 }) {
   return (
-    <section className={`space-y-3 rounded-2xl border border-zinc-200 bg-white p-4 ${className}`}>
-      <h2 className="text-base font-bold text-zinc-900">{title}</h2>
+    <section className={`space-y-2.5 rounded-2xl border border-zinc-200 bg-white p-3.5 ${className}`}>
+      <h2 className="text-[15px] font-bold leading-tight text-zinc-900">{title}</h2>
       {children}
     </section>
   );
@@ -258,16 +289,17 @@ function StepDots({ step, hideCriteria }: { step: Step; hideCriteria?: boolean }
   const steps = hideCriteria ? STEPS.filter((item) => item.id !== "criteria") : STEPS;
   const index = steps.findIndex((item) => item.id === step);
   return (
-    <div className="mt-2 flex items-center gap-1.5">
+    <div className="mt-2.5 flex items-center gap-1.5" aria-label="步驟進度">
       {steps.map((item, i) => (
         <div key={item.id} className="flex min-w-0 flex-1 flex-col items-center gap-1">
           <div
-            className={`h-1.5 w-full rounded-full ${
+            className={`h-1.5 w-full rounded-full transition-colors ${
               i <= index ? "bg-[#06c755]" : "bg-zinc-200"
             }`}
+            aria-hidden
           />
           <span
-            className={`text-[10px] ${
+            className={`text-[10px] leading-none ${
               i === index ? "font-semibold text-zinc-900" : "text-zinc-400"
             }`}
           >
@@ -390,12 +422,12 @@ function ListingDetailSheet({
   return (
     <div className="fixed inset-0 z-30 flex flex-col bg-black/40 p-3">
       <div className="mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col overflow-hidden rounded-2xl bg-white shadow-lg">
-        <div className="flex items-center justify-between gap-2 border-b border-zinc-100 px-3 py-2">
+        <div className="flex items-center justify-between gap-2 border-b border-zinc-100 px-3 py-2.5">
           <p className="truncate text-sm font-bold text-zinc-900">{listing.title}</p>
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded-full border border-zinc-200 px-2.5 py-1 text-xs font-semibold text-zinc-700"
+            className="inline-flex min-h-10 shrink-0 touch-manipulation items-center rounded-full border border-zinc-200 px-3 text-xs font-semibold text-zinc-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#06c755]"
           >
             關閉
           </button>
@@ -1310,20 +1342,28 @@ export function LineLiffRentForm({
 
   if (done) {
     return (
-      <div className="mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center gap-3 bg-zinc-100 px-4 text-center">
-        <p className="text-lg font-bold text-zinc-900">已送出</p>
-        <div className="w-full rounded-2xl bg-white px-4 py-3 text-left text-sm text-zinc-700">
-          <p>
-            看屋時間：<span className="font-semibold text-zinc-900">{done.when}</span>
-          </p>
-          <p className="mt-2 font-semibold text-zinc-900">想看的物件</p>
-          <ul className="mt-1 list-disc space-y-1 pl-5">
+      <div className="mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center gap-4 bg-zinc-100 px-4 text-center">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#e8f8ef] text-[#067a36]" aria-hidden>
+          <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2.2">
+            <path d="M5 12.5 10 17.5 19 7.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
+        <div>
+          <p className="text-lg font-bold text-zinc-900">已送出預約</p>
+          <p className="mt-1 text-sm text-zinc-600">請回到 LINE 聊天室查看確認訊息。</p>
+        </div>
+        <div className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3.5 text-left text-sm text-zinc-700">
+          <p className="text-xs font-medium text-zinc-500">看屋時間</p>
+          <p className="mt-0.5 font-semibold text-zinc-900">{done.when}</p>
+          <p className="mt-3 text-xs font-medium text-zinc-500">想看的物件</p>
+          <ul className="mt-1 space-y-1.5">
             {done.titles.map((title) => (
-              <li key={title}>{title}</li>
+              <li key={title} className="font-medium text-zinc-900">
+                · {title}
+              </li>
             ))}
           </ul>
         </div>
-        <p className="text-sm text-zinc-600">資料已傳進 LINE 對話，請回到聊天室即可看到。</p>
       </div>
     );
   }
@@ -1338,7 +1378,9 @@ export function LineLiffRentForm({
       ? "確認條件，看物件"
       : step === "listings"
         ? canContinueListings
-          ? "下一步"
+          ? pickedIds.length > 0
+            ? `下一步（已選 ${pickedIds.length} 間）`
+            : "下一步"
           : skipCriteria
             ? "請先看這間物件"
             : "重新挑選條件"
@@ -1370,29 +1412,36 @@ export function LineLiffRentForm({
         step === "listings" ? "" : "max-w-md"
       }`}
     >
-      <header className="shrink-0 border-b border-zinc-200 bg-white px-4 py-3">
+      <header className="sticky top-0 z-20 shrink-0 border-b border-zinc-200 bg-white/95 px-4 pb-2.5 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur-sm">
         <div className="flex items-center gap-2">
           {step !== "criteria" && !(skipCriteria && step === "listings") ? (
             <button
               type="button"
               onClick={goBack}
-              className="touch-manipulation rounded-full border border-zinc-200 px-2.5 py-1 text-xs font-medium text-zinc-700"
+              className="inline-flex min-h-11 touch-manipulation items-center rounded-full border border-zinc-200 px-3 text-xs font-semibold text-zinc-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#06c755]"
             >
               返回
             </button>
           ) : null}
           <div className="min-w-0 flex-1">
-            <h1 className="text-lg font-bold text-zinc-900">找房需求表單</h1>
-            <p className="mt-0.5 text-xs text-zinc-500">
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg font-bold leading-tight text-zinc-900">找房</h1>
+              {step === "listings" && pickedIds.length > 0 ? (
+                <span className="rounded-full bg-[#06c755] px-2 py-0.5 text-[11px] font-bold text-white">
+                  已選 {pickedIds.length}/3
+                </span>
+              ) : null}
+            </div>
+            <p className="mt-0.5 text-xs leading-snug text-zinc-500">
               {step === "criteria"
-                ? "先填找房條件"
+                ? "先選條件，再看推薦"
                 : step === "listings"
                   ? skipCriteria
-                    ? "這間是推給你的物件，看完可直接約時間"
-                    : "點照片看資訊，點其他地方選想看"
+                    ? "看完這間可直接約時間"
+                    : "點照片看詳情；右側按鈕選想看"
                   : showSavedProfile
-                    ? "已有個人資料，只要選看屋時間"
-                    : "填基本資料與看屋時間後送出"}
+                    ? "已有資料，只要選看屋時間"
+                    : "填資料與看屋時間後送出"}
             </p>
           </div>
         </div>
@@ -1400,14 +1449,16 @@ export function LineLiffRentForm({
       </header>
 
       <div
-        className={`flex-1 space-y-3 py-3 pb-4 ${
+        className={`flex-1 space-y-2.5 py-2.5 pb-3 ${
           step === "listings" ? "px-0" : "px-3"
         }`}
       >
         {step === "criteria" ? (
-          <Section title="找房條件">
+          <Section title="找房條件" className="space-y-4">
             <div>
-              <p className="mb-2 text-xs font-medium text-zinc-500">縣市（可複選）</p>
+              <p className="mb-2 text-xs font-semibold text-zinc-500">
+                縣市 <span className="font-medium text-zinc-400">可複選</span>
+              </p>
               <div className="flex flex-wrap gap-2">
                 {cities.map((city) => (
                   <Chip
@@ -1601,42 +1652,48 @@ export function LineLiffRentForm({
 
         {step === "listings" ? (
           <>
-            <Section
-              title={
-                directMode === "similar" && directListing?.listingIds.length
-                  ? `推薦物件（${matched.length}）`
-                  : `配對物件（${matched.length}）`
-              }
-              className="rounded-none border-x-0 px-2 py-3"
-            >
-              <p className="px-1 text-sm text-zinc-500">
-                {directMode === "similar"
-                  ? directListing?.listingIds.length
-                    ? "你問的這間已幫你選好；下方還有類似物件可一起勾選（最多 3 間），再填資料與看屋時間。"
-                    : "已依你傳的物件條件推薦類似的房子；點選想看（最多 3 間），再填資料與看屋時間。"
-                  : "點照片查看照片與資訊；點文字可複選想看，一次最多 3 間。"}
-                {matchedRelaxed.length ? `（已放寬：${matchedRelaxed.join("、")}）` : ""}
-              </p>
+            <div className="border-y border-zinc-200 bg-white">
+              <div className="flex items-end justify-between gap-2 border-b border-zinc-100 px-3 py-2.5">
+                <div>
+                  <p className="text-[15px] font-bold text-zinc-900">
+                    {directMode === "similar" && directListing?.listingIds.length
+                      ? `推薦物件 ${matched.length}`
+                      : `配對物件 ${matched.length}`}
+                  </p>
+                  {matchedRelaxed.length ? (
+                    <p className="mt-0.5 text-[11px] text-amber-700">
+                      已放寬：{matchedRelaxed.join("、")}
+                    </p>
+                  ) : directMode === "similar" ? (
+                    <p className="mt-0.5 text-[11px] text-zinc-500">
+                      {directListing?.listingIds.length
+                        ? "你問的這間已選好，下方還可加選類似物件"
+                        : "依你傳的條件推薦類似物件"}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+
               {matched.length === 0 ? (
-                <div className="space-y-3 rounded-xl bg-zinc-50 px-3 py-4">
+                <div className="space-y-3 px-3 py-5">
                   <p className="text-sm text-zinc-600">
-                    目前沒有完全符合條件的物件。
+                    目前沒有完全符合的物件。
                     {watchSaved
-                      ? " 已幫你記住這組條件，之後有符合的新案會再通知。"
-                      : " 系統會盡量記住你的條件；若之後有符合的新案會再通知。"}
+                      ? " 已記住這組條件，之後有新案再通知。"
+                      : " 條件會盡量保留；有新案再通知。"}
                   </p>
                   {skipCriteria ? null : (
-                  <button
-                    type="button"
-                    onClick={reselectCriteria}
-                    className="touch-manipulation w-full rounded-full border border-zinc-300 bg-white py-2.5 text-sm font-semibold text-zinc-800"
-                  >
-                    重新挑選條件
-                  </button>
+                    <button
+                      type="button"
+                      onClick={reselectCriteria}
+                      className="touch-manipulation w-full rounded-full border border-zinc-300 bg-zinc-50 py-2.5 text-sm font-semibold text-zinc-800"
+                    >
+                      重新挑選條件
+                    </button>
                   )}
                 </div>
               ) : (
-                <div className="divide-y divide-zinc-300">
+                <div className="divide-y divide-zinc-100">
                   {matched.map((item) => (
                     <ListingPickRow
                       key={item.id}
@@ -1653,20 +1710,17 @@ export function LineLiffRentForm({
                   ))}
                 </div>
               )}
-            </Section>
+            </div>
 
             {skipCriteria && similar.length > 0 ? (
-              <Section
-                title={`類似物件（${similar.length}）`}
-                className="rounded-none border-x-0 px-2 py-3"
-              >
-                <p className="text-xs text-zinc-500">
-                  {directMode === "similar"
-                    ? "同區、房型或租金相近的物件，可一併勾選想看，一次最多 3 間。"
-                    : "符合你條件的相近物件，可一併勾選想看，一次最多 3 間。"}
-                  {similarNotes[0] ? `（${similarNotes[0]}）` : ""}
-                </p>
-                <div className="divide-y divide-zinc-300">
+              <div className="border-y border-zinc-200 bg-white">
+                <div className="border-b border-zinc-100 px-3 py-2.5">
+                  <p className="text-[15px] font-bold text-zinc-900">類似物件 {similar.length}</p>
+                  <p className="mt-0.5 text-[11px] text-zinc-500">
+                    {similarNotes[0] || "同區／房型／租金相近，可一併想看"}
+                  </p>
+                </div>
+                <div className="divide-y divide-zinc-100">
                   {similar.map((item) => (
                     <ListingPickRow
                       key={item.id}
@@ -1677,12 +1731,12 @@ export function LineLiffRentForm({
                     />
                   ))}
                 </div>
-              </Section>
+              </div>
             ) : null}
 
             {matched.length === 0 && similar.length === 0 ? (
-              <p className="px-1 text-center text-xs text-zinc-500">
-                也可先關閉表單；條件已登記的話，有新案再推給你。
+              <p className="px-3 text-center text-xs text-zinc-500">
+                也可先關閉；條件已登記的話，有新案再推給你。
               </p>
             ) : null}
           </>
@@ -1906,14 +1960,18 @@ export function LineLiffRentForm({
         ) : null}
       </div>
 
-      <footer className="sticky bottom-0 z-20 shrink-0 border-t border-zinc-200 bg-white px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+      <footer className="sticky bottom-0 z-20 shrink-0 border-t border-zinc-200 bg-white/95 px-3 pt-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm">
         <div className={step === "listings" ? "w-full" : "mx-auto max-w-md"}>
-          {error ? <p className="mb-2 text-center text-sm text-red-600">{error}</p> : null}
+          {error ? (
+            <p className="mb-2 text-center text-sm font-medium text-red-600" role="alert">
+              {error}
+            </p>
+          ) : null}
           <button
             type="button"
             disabled={submitting}
             onClick={onPrimary}
-            className="touch-manipulation w-full rounded-full bg-[#06c755] py-3 text-sm font-bold text-white disabled:opacity-50"
+            className="touch-manipulation w-full rounded-full bg-[#06c755] py-3.5 text-sm font-bold text-white shadow-[0_1px_0_rgba(0,0,0,0.04)] transition-opacity active:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#067a36] disabled:opacity-50"
           >
             {primaryLabel}
           </button>
