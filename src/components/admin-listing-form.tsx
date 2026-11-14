@@ -455,8 +455,11 @@ export function AdminListingForm({
       if (!res.ok || !result.ok || !result.urls) {
         const fallback = kind === "video"
           ? "影片上傳失敗。正式網站需設定 Supabase Storage；單檔也請勿超過平台限制（約 4MB）。"
-          : "圖片上傳失敗。正式網站請在 Vercel 設定 SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY；本機請確認已登入後台。";
-        const message = result.message || fallback;
+          : "圖片上傳失敗。請改一次少選幾張，或單張壓到較小再傳；正式站也需已設定雲端儲存。";
+        let message = result.message || fallback;
+        if (res.status === 413) {
+          message = "檔案太大或一次選太多張（平台請求上限約 4.5MB），請一次少傳幾張或先壓縮。";
+        }
         setMediaStatus(message);
         if (res.status === 401) {
           setMediaStatus(`${message}（登入可能已過期，請重新登入後台）`);

@@ -10,6 +10,10 @@ import {
   resolveUploadContentType,
 } from "@/lib/upload-media";
 
+export const runtime = "nodejs";
+/** 多張圖＋美化可能超過預設時限 */
+export const maxDuration = 60;
+
 export async function POST(request: NextRequest) {
   const authError = await requireAdminSession();
   if (authError) return authError;
@@ -53,6 +57,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (kind === "image" && file.size > 25 * 1024 * 1024) {
+      return NextResponse.json(
+        { ok: false, message: "單張圖片不得大於 25MB，請壓縮後再傳" },
+        { status: 400 },
+      );
+    }
     if (kind === "video" && file.size > 100 * 1024 * 1024) {
       return NextResponse.json(
         { ok: false, message: "影片檔案不得大於 100MB" },
@@ -70,12 +80,18 @@ export async function POST(request: NextRequest) {
     let buffer = Buffer.from(await file.arrayBuffer());
     let contentType = resolveUploadContentType(file, kind);
 
+    // 美化失敗不能擋上傳：保留原圖繼續存
     if (enhanceListingPhotos && kind === "image") {
-      const enhanced = await enhanceListingPhoto(buffer);
-      buffer = Buffer.from(enhanced.buffer);
-      contentType = enhanced.contentType;
-      ext = enhanced.extension;
-      enhance.push({ tier: enhanced.tier, reason: enhanced.reason });
+      try {
+        const enhanced = await enhanceListingPhoto(buffer);
+        buffer = Buffer.from(enhanced.buffer);
+        contentType = enhanced.contentType;
+        ext = enhanced.extension;
+        enhance.push({ tier: enhanced.tier, reason: enhanced.reason });
+      } catch (error) {
+        console.error("[admin/upload] listing photo enhance failed, using original", error);
+        enhance.push({ tier: "skip", reason: "美化略過，已用原圖" });
+      }
     }
 
     const subdir = kind === "image" ? "images" : kind === "video" ? "videos" : "docs";

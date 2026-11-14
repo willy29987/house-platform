@@ -187,7 +187,18 @@ function buildPipeline(
  * 物件廣告照美化。非圖片／讀取失敗時原樣返回（仍盡力轉正）。
  */
 export async function enhanceListingPhoto(input: Buffer): Promise<ListingPhotoEnhanceResult> {
-  const sharp = await loadSharp();
+  let sharp: Awaited<ReturnType<typeof loadSharp>>;
+  try {
+    sharp = await loadSharp();
+  } catch {
+    return {
+      buffer: input,
+      contentType: "image/jpeg",
+      extension: "jpg",
+      tier: "skip",
+      reason: "美化模組不可用，保留原圖",
+    };
+  }
   let working = input;
 
   try {
