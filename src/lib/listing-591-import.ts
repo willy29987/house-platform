@@ -264,11 +264,34 @@ function remarkPlain(data: Record<string, unknown>): string {
   return html.replace(/<[^>]+>/g, " ").replace(/&nbsp;/gi, " ").replace(/\s+/g, " ").trim();
 }
 
-/** 備註手打只往「可」加分，不因沒寫就標不可。 */
-function remarkYes(text: string, patterns: RegExp[]): "" | "yes" {
+/** 標題／備註／租金文案只往「可」加分，不因沒寫就標不可。 */
+function textYes(text: string, patterns: RegExp[]): "" | "yes" {
   if (!text) return "";
   return patterns.some((re) => re.test(text)) ? "yes" : "";
 }
+
+function priceAssistText(data: Record<string, unknown>): string {
+  const calc = asRecord(data.rent_calculation_data) ?? {};
+  const cost = asRecord(data.costData);
+  const costRows = Array.isArray(asRecord(cost)?.data) ? (asRecord(cost)?.data as unknown[]) : [];
+  const costValues = costRows
+    .map((row) => textOf(asRecord(row)?.value))
+    .filter(Boolean)
+    .join(" ");
+  return [textOf(calc.rent_price_text), textOf(data.priceCacheTxt), costValues]
+    .filter(Boolean)
+    .join(" ");
+}
+
+// 「可申請租補」中間有「申請」，不能只寫「可租補」
+const SUBSIDY_YES = [
+  /租金補貼/,
+  /租屋補助/,
+  /可(?:申請)?\s*租(?:金)?補(?:貼|助)?/,
+  /(?<![不未無禁])可補助/,
+];
+const TAX_YES = [/可報稅/, /可申請報稅/, /願意報稅/];
+const REGISTER_YES = [/可入籍/, /可設籍/, /可入戶籍/, /可登記戶籍/, /可辦戶籍/];
 
 function depositText(raw: string): string {
   if (/兩|二|2\s*個/.test(raw)) return "2個月";
@@ -539,19 +562,22 @@ function mapRentPayload(
   };
   const tags = tagValues(data);
   const remark = remarkPlain(data);
+  const titleText = title;
+  const assistText = `${titleText} ${remark} ${priceAssistText(data)}`;
   const petsFromDesc = yesNo(descValue("寵物"));
   const petsFromTag = tagYesNo(tags, [/^可養寵物$/, /可養寵物/]);
+  // 標籤有勾＝可；沒勾先當否。標題／備註／租金旁「可申請…」可再加成「可」。
   const rentSubsidy = firstYes(
-    tagYesNo(tags, [/租金補貼/, /租屋補助/, /^可租補$/, /可申請.*租補/]),
-    remarkYes(remark, [/可申請?\s*租金?補[貼助]/, /可租補/, /租金補貼/, /租屋補助/]),
+    tagYesNo(tags, [/租金補貼/, /租屋補助/, /^可租補$/]),
+    textYes(assistText, SUBSIDY_YES),
   );
   const taxDeductible = firstYes(
     tagYesNo(tags, [/^可報稅$/, /可報稅/]),
-    remarkYes(remark, [/可報稅/, /可申請報稅/, /願意報稅/]),
+    textYes(assistText, TAX_YES),
   );
   const canRegisterAddress = firstYes(
     tagYesNo(tags, [/^可入籍$/, /可入籍/, /可設籍/, /可登記戶籍/, /可入戶籍/]),
-    remarkYes(remark, [/可入籍/, /可設籍/, /可入戶籍/, /可登記戶籍/]),
+    textYes(assistText, REGISTER_YES),
   );
   const mrt = nearestMrt(collectSubway(position));
   const community = textOf(position.communityName);

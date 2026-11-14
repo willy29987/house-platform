@@ -143,15 +143,10 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
           rentConditionValue(listing.petsAllowed)
             ? { label: "養寵物", value: rentConditionValue(listing.petsAllowed)! }
             : null,
-          rentConditionValue(listing.taxDeductible)
-            ? { label: "報稅", value: rentConditionValue(listing.taxDeductible)! }
-            : null,
-          rentConditionValue(listing.rentSubsidy)
-            ? { label: "租屋補助", value: rentConditionValue(listing.rentSubsidy)! }
-            : null,
-          rentConditionValue(listing.canRegisterAddress)
-            ? { label: "入戶籍", value: rentConditionValue(listing.canRegisterAddress)! }
-            : null,
+          // 僅在已確認可協助時顯示；不對外寫「不可」（避免誤導／法務風險）
+          listing.taxDeductible === true ? { label: "報稅", value: "可協助申請" } : null,
+          listing.rentSubsidy === true ? { label: "租屋補助", value: "可協助申請" } : null,
+          listing.canRegisterAddress === true ? { label: "入戶籍", value: "可協助申請" } : null,
           listing.viewingMethod
             ? {
                 label: "看屋方式",

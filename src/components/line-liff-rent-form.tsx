@@ -377,11 +377,10 @@ function ListingDetailSheet({
       rentConditionValue(listing.petsAllowed)
         ? { label: "養寵物", value: rentConditionValue(listing.petsAllowed)! }
         : null,
-      listing.taxDeductible === true ? { label: "報稅", value: "可以" } : null,
-      listing.rentSubsidy === true ? { label: "租補", value: "可以" } : null,
-      rentConditionValue(listing.canRegisterAddress)
-        ? { label: "入戶籍", value: rentConditionValue(listing.canRegisterAddress)! }
-        : null,
+      // 僅在已確認可協助時顯示；不對外寫「不可」
+      listing.taxDeductible === true ? { label: "報稅", value: "可協助申請" } : null,
+      listing.rentSubsidy === true ? { label: "租補", value: "可協助申請" } : null,
+      listing.canRegisterAddress === true ? { label: "入戶籍", value: "可協助申請" } : null,
       listing.securityDeposit?.trim()
         ? { label: "押金", value: listing.securityDeposit.trim() }
         : null,
