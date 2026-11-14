@@ -41,6 +41,9 @@ export type Listing591ImportDraft = {
   securityDeposit: string;
   availableFrom: string;
   petsAllowed: "" | "yes" | "no";
+  rentSubsidy: "" | "yes" | "no";
+  taxDeductible: "" | "yes" | "no";
+  canRegisterAddress: "" | "yes" | "no";
   /** 特殊事項先不帶入 */
   specialMatters: string;
   images: string[];
@@ -234,6 +237,39 @@ function yesNo(raw: string): "" | "yes" | "no" {
   return "";
 }
 
+function tagValues(data: Record<string, unknown>): string[] {
+  if (!Array.isArray(data.tags)) return [];
+  return data.tags
+    .map((item) => textOf(asRecord(item)?.value))
+    .filter(Boolean);
+}
+
+/** 591 標題下方標籤：有勾才會出現；沒出現視為未勾。 */
+function tagYesNo(tags: string[], patterns: RegExp[]): "" | "yes" | "no" {
+  if (!tags.length) return "";
+  if (tags.some((tag) => patterns.some((re) => re.test(tag)))) return "yes";
+  return "no";
+}
+
+function firstYes(...values: Array<"" | "yes" | "no">): "" | "yes" | "no" {
+  if (values.includes("yes")) return "yes";
+  if (values.includes("no")) return "no";
+  return "";
+}
+
+function remarkPlain(data: Record<string, unknown>): string {
+  const remark = asRecord(data.remark);
+  const html = textOf(remark?.content);
+  if (!html) return "";
+  return html.replace(/<[^>]+>/g, " ").replace(/&nbsp;/gi, " ").replace(/\s+/g, " ").trim();
+}
+
+/** 備註手打只往「可」加分，不因沒寫就標不可。 */
+function remarkYes(text: string, patterns: RegExp[]): "" | "yes" {
+  if (!text) return "";
+  return patterns.some((re) => re.test(text)) ? "yes" : "";
+}
+
 function depositText(raw: string): string {
   if (/兩|二|2\s*個/.test(raw)) return "2個月";
   return raw.replace(/租金/g, "").trim();
@@ -399,6 +435,9 @@ function emptyDraft(listingType: "RENT" | "SALE", source591Url: string, images: 
     securityDeposit: "",
     availableFrom: "",
     petsAllowed: "",
+    rentSubsidy: "",
+    taxDeductible: "",
+    canRegisterAddress: "",
     specialMatters: "",
     images,
     coverImage: images[0] ?? "",
@@ -498,6 +537,22 @@ function mapRentPayload(
     const row = desc.map(asRecord).find((item) => textOf(item?.label).includes(label));
     return textOf(row?.value);
   };
+  const tags = tagValues(data);
+  const remark = remarkPlain(data);
+  const petsFromDesc = yesNo(descValue("寵物"));
+  const petsFromTag = tagYesNo(tags, [/^可養寵物$/, /可養寵物/]);
+  const rentSubsidy = firstYes(
+    tagYesNo(tags, [/租金補貼/, /租屋補助/, /^可租補$/, /可申請.*租補/]),
+    remarkYes(remark, [/可申請?\s*租金?補[貼助]/, /可租補/, /租金補貼/, /租屋補助/]),
+  );
+  const taxDeductible = firstYes(
+    tagYesNo(tags, [/^可報稅$/, /可報稅/]),
+    remarkYes(remark, [/可報稅/, /可申請報稅/, /願意報稅/]),
+  );
+  const canRegisterAddress = firstYes(
+    tagYesNo(tags, [/^可入籍$/, /可入籍/, /可設籍/, /可登記戶籍/, /可入戶籍/]),
+    remarkYes(remark, [/可入籍/, /可設籍/, /可入戶籍/, /可登記戶籍/]),
+  );
   const mrt = nearestMrt(collectSubway(position));
   const community = textOf(position.communityName);
   const draft = emptyDraft(listingType, source591Url, images);
@@ -522,7 +577,10 @@ function mapRentPayload(
     managementFeeSet: management.set,
     securityDeposit: depositText(textOf(data.deposit) || textOf(calc.deposit)),
     availableFrom: availableText(descValue("遷入")),
-    petsAllowed: yesNo(descValue("寵物")),
+    petsAllowed: firstYes(petsFromDesc, petsFromTag === "yes" ? "yes" : ""),
+    rentSubsidy,
+    taxDeductible,
+    canRegisterAddress,
     furnitureItems: facilities.furnitureItems,
     equipmentItems: facilities.equipmentItems,
     facilitiesKnown: facilities.known,

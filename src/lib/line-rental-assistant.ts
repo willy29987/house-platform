@@ -320,7 +320,11 @@ function priceInBand(price: number, key: string) {
   return price >= band.min && price <= band.max;
 }
 
-export function listingMatchesCriteria(listing: RentalMatchListing, criteria: RentalMatchCriteria) {
+export function listingMatchesCriteria(
+  listing: RentalMatchListing,
+  criteria: RentalMatchCriteria,
+  options?: { wantsPet?: boolean },
+) {
   if (criteria.cities.length && !criteria.cities.includes(listing.city)) return false;
   if (criteria.districts.length && !criteria.districts.includes(listing.district)) return false;
   if (criteria.rooms.length) {
@@ -356,28 +360,36 @@ export function listingMatchesCriteria(listing: RentalMatchListing, criteria: Re
   if (criteria.extras.includes("subsidy") && listing.rentSubsidy !== true) return false;
   if (criteria.extras.includes("tax") && listing.taxDeductible !== true) return false;
   if (criteria.extras.includes("household") && listing.canRegisterAddress !== true) return false;
+  // 有養寵物：排除明確不可寵；未標示（null）仍可出現
+  if (options?.wantsPet && listing.petsAllowed === false) return false;
   return true;
 }
 
-export function matchRentals(listings: RentalMatchListing[], criteria: RentalMatchCriteria) {
+export function matchRentals(
+  listings: RentalMatchListing[],
+  criteria: RentalMatchCriteria,
+  options?: { wantsPet?: boolean },
+) {
   const relaxed: string[] = [];
   let current = criteria;
-  let items = listings.filter((listing) => listingMatchesCriteria(listing, current));
+  const match = (next: RentalMatchCriteria) =>
+    listings.filter((listing) => listingMatchesCriteria(listing, next, options));
+  let items = match(current);
 
   if (items.length === 0 && current.extras.length) {
     current = { ...current, extras: [] };
     relaxed.push("補助／報稅／戶籍");
-    items = listings.filter((listing) => listingMatchesCriteria(listing, current));
+    items = match(current);
   }
   if (items.length === 0 && current.bathrooms.length) {
     current = { ...current, bathrooms: [] };
     relaxed.push("衛浴");
-    items = listings.filter((listing) => listingMatchesCriteria(listing, current));
+    items = match(current);
   }
   if (items.length === 0 && current.parking.length) {
     current = { ...current, parking: [] };
     relaxed.push("車位");
-    items = listings.filter((listing) => listingMatchesCriteria(listing, current));
+    items = match(current);
   }
 
   return { items, relaxed };

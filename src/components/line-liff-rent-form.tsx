@@ -706,16 +706,23 @@ export function LineLiffRentForm({
       const focusSet = new Set(focusIds);
       const min = directListing.priceMin ?? 0;
       const max = directListing.priceMax ?? Number.POSITIVE_INFINITY;
-      const result = matchRentals(listings, directListing.criteria);
+      const wantsPet = Boolean(directListing.petNote && directListing.petNote !== "沒有");
+      const result = matchRentals(listings, directListing.criteria, { wantsPet });
       const filtered = result.items.filter((item) => {
         if (directListing.priceMin != null && item.price < min) return false;
         if (directListing.priceMax != null && item.price > max) return false;
         return true;
       });
-      const focus = listings.filter((item) => focusSet.has(item.id));
+      const focus = listings.filter((item) => {
+        if (!focusSet.has(item.id)) return false;
+        if (wantsPet && item.petsAllowed === false) return false;
+        return true;
+      });
       const rest = filtered.filter((item) => !focusSet.has(item.id));
       if (!focus.length && !rest.length) {
-        return similarRentals(listings, directListing.criteria, [], 8).items;
+        return similarRentals(listings, directListing.criteria, [], 8).items.filter((item) =>
+          wantsPet ? item.petsAllowed !== false : true,
+        );
       }
       return [...focus, ...rest];
     }
@@ -1104,7 +1111,8 @@ export function LineLiffRentForm({
       }
     }
 
-    const result = matchRentals(listings, criteria);
+    const wantsPet = petHas === "yes";
+    const result = matchRentals(listings, criteria, { wantsPet });
     const items = applyBudgetFilter(result.items, minRaw, maxRaw, min, max);
 
     setMatched(items);

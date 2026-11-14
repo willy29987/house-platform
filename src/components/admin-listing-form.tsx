@@ -301,6 +301,9 @@ export function AdminListingForm({
           securityDeposit: string;
           availableFrom: string;
           petsAllowed: "" | "yes" | "no";
+          rentSubsidy?: "" | "yes" | "no";
+          taxDeductible?: "" | "yes" | "no";
+          canRegisterAddress?: "" | "yes" | "no";
           images: string[];
           coverImage: string;
           furnitureItems: string[];
@@ -354,6 +357,9 @@ export function AdminListingForm({
         securityDeposit: draft.securityDeposit || prev.securityDeposit,
         availableFrom: draft.availableFrom || prev.availableFrom,
         petsAllowed: draft.petsAllowed || prev.petsAllowed,
+        rentSubsidy: draft.rentSubsidy || prev.rentSubsidy,
+        taxDeductible: draft.taxDeductible || prev.taxDeductible,
+        canRegisterAddress: draft.canRegisterAddress || prev.canRegisterAddress,
         areaParkingSpace: draft.areaParkingSpace || prev.areaParkingSpace,
         images: draft.images.length > 0 ? draft.images : prev.images,
         coverImage: draft.coverImage || prev.coverImage,

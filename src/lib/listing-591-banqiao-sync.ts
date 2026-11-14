@@ -271,9 +271,9 @@ export function draftToListingInput(draft: Listing591ImportDraft): ListingInput 
     parkingType: draft.parkingType || undefined,
     managementFee: draft.managementFeeSet ? optionalNumber(draft.managementFee) : undefined,
     petsAllowed: yesNoBool(draft.petsAllowed),
-    taxDeductible: undefined,
-    rentSubsidy: undefined,
-    canRegisterAddress: undefined,
+    taxDeductible: yesNoBool(draft.taxDeductible),
+    rentSubsidy: yesNoBool(draft.rentSubsidy),
+    canRegisterAddress: yesNoBool(draft.canRegisterAddress),
     viewingMethod: undefined,
     community: draft.community || undefined,
     buildingAge: undefined,
@@ -342,6 +342,10 @@ function syncFingerprint(data: ListingInput): string {
     houseCondition: data.houseCondition ?? "",
     mrtLine: data.mrtLine ?? "",
     mrtStation: data.mrtStation ?? "",
+    petsAllowed: data.petsAllowed ?? null,
+    taxDeductible: data.taxDeductible ?? null,
+    rentSubsidy: data.rentSubsidy ?? null,
+    canRegisterAddress: data.canRegisterAddress ?? null,
   });
 }
 
@@ -363,6 +367,10 @@ function existingFingerprint(row: {
   managementFee: number | null;
   mrtLine: string | null;
   mrtStation: string | null;
+  petsAllowed: boolean | null;
+  taxDeductible: boolean | null;
+  rentSubsidy: boolean | null;
+  canRegisterAddress: boolean | null;
   description: string;
 }): string {
   const meta = parseListingInternalMeta(row.description);
@@ -387,6 +395,10 @@ function existingFingerprint(row: {
     houseCondition: meta.houseCondition ?? "",
     mrtLine: row.mrtLine ?? "",
     mrtStation: row.mrtStation ?? "",
+    petsAllowed: row.petsAllowed ?? null,
+    taxDeductible: row.taxDeductible ?? null,
+    rentSubsidy: row.rentSubsidy ?? null,
+    canRegisterAddress: row.canRegisterAddress ?? null,
   });
 }
 
