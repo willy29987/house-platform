@@ -1,7 +1,8 @@
 /**
  * 新上架的出租物件若符合客人已存條件：
  * - 立即換他的圖文選單提醒（免費；看過改溫和「繼續看屋」）
- * - 每天中午 12:00 彙整推播（算額度）：成功推播才算 1 天，最多 4 天
+ * - 每天中午 12:00 彙整推播（算額度）：成功推播才算 1 天，每位客人終身最多 4 天
+ *   （重存找房條件也不重置）
  * - 每次推播濃縮成一則訊息（多間用物件卡左右滑）
  */
 
@@ -25,7 +26,7 @@ type SentStore = {
   byUser: Record<string, string[]>;
   pending: Record<string, string[]>;
   lastPushDay: Record<string, string>;
-  /** 已成功推播次數；客人從找房表單重存條件會重置 */
+  /** 已成功推播次數（終身累計，重存條件也不重置） */
   pushCount: Record<string, number>;
 };
 
@@ -92,16 +93,6 @@ async function readSent() {
 
 async function writeSent(store: SentStore) {
   await writeAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.lineGuestWatchPushes, store);
-}
-
-/** 客人重存找房條件時，推播天數重新起算。 */
-export async function resetGuestRecommendationQuota(lineUserId: string) {
-  const uid = lineUserId.trim();
-  if (!uid) return;
-  const sent = await readSent();
-  delete sent.pushCount[uid];
-  delete sent.lastPushDay[uid];
-  await writeSent(sent);
 }
 
 /** 這間剛變成上架中的出租物件：符合條件的客人立即換選單；未滿 4 次推播則排入中午彙整。 */

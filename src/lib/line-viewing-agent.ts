@@ -99,36 +99,125 @@ function listingTitles(caseRecord: LineRentalCase): string {
   return caseRecord.picked.map((p) => p.title).join("、");
 }
 
-function agentAskText(caseRecord: LineRentalCase): string {
-  const titles = listingTitles(caseRecord);
-  const when = caseRecord.requestedWhen;
-  const phone = caseRecord.phone ? `電話 ${caseRecord.phone}` : "";
-  const name = caseRecord.displayName || "客人";
-  return truncateLineTemplateText(
-    `${name} 想看「${titles}」\n希望時段：${when}${phone ? `\n${phone}` : ""}\n這個時間可以嗎？`,
-  );
+function agentProfileLines(caseRecord: LineRentalCase): string[] {
+  const lines: string[] = [];
+  if (caseRecord.phone) lines.push(`電話 ${caseRecord.phone}`);
+  if (caseRecord.peopleCount > 0) lines.push(`入住 ${caseRecord.peopleCount} 人`);
+  if (caseRecord.occupation) lines.push(`職業 ${caseRecord.occupation}`);
+  if (caseRecord.nationality) lines.push(`國籍 ${caseRecord.nationality}`);
+  if (caseRecord.moveInDate) lines.push(`預計入住 ${caseRecord.moveInDate}`);
+  if (caseRecord.petNote) lines.push(`寵物 ${caseRecord.petNote}`);
+  return lines;
 }
 
-export function buildAgentConfirmMessage(caseRecord: LineRentalCase): LineMessage {
+function flexRow(label: string, value: string) {
   return {
-    type: "template",
-    altText: `約看確認：${caseRecord.requestedWhen}`,
-    template: {
-      type: "confirm",
-      text: agentAskText(caseRecord),
-      actions: [
-        {
-          type: "postback",
-          label: "可以",
-          data: viewingPostbackData("approve", caseRecord.id),
-          displayText: "可以",
-        },
-        {
-          type: "uri",
-          label: "改時間",
-          uri: buildAgentRescheduleUrl(caseRecord.id),
-        },
+    type: "box",
+    layout: "baseline",
+    spacing: "sm",
+    contents: [
+      {
+        type: "text",
+        text: label,
+        size: "sm",
+        color: "#6B7280",
+        flex: 3,
+        wrap: true,
+      },
+      {
+        type: "text",
+        text: value.slice(0, 200) || "—",
+        size: "sm",
+        color: "#111827",
+        flex: 7,
+        wrap: true,
+        weight: label === "時段" || label === "物件" ? "bold" : "regular",
+      },
+    ],
+  };
+}
+
+/** 業務約看通知：時間＋物件＋個資濃縮成一則 Flex（含可以／改時間）。 */
+export function buildAgentConfirmMessage(caseRecord: LineRentalCase): LineMessage {
+  const name = caseRecord.displayName || "客人";
+  const when = caseRecord.requestedWhen || "未填時段";
+  const titles = listingTitles(caseRecord);
+  const profile = agentProfileLines(caseRecord);
+  const bodyContents: Record<string, unknown>[] = [
+    {
+      type: "text",
+      text: "新約看待確認",
+      weight: "bold",
+      size: "md",
+      color: "#111827",
+    },
+    {
+      type: "text",
+      text: name,
+      weight: "bold",
+      size: "lg",
+      color: "#2563EB",
+      wrap: true,
+      margin: "sm",
+    },
+    { type: "separator", margin: "md" },
+    {
+      type: "box",
+      layout: "vertical",
+      margin: "md",
+      spacing: "sm",
+      contents: [
+        flexRow("時段", when),
+        flexRow("物件", titles),
+        ...profile.map((line) => {
+          const space = line.indexOf(" ");
+          const label = space > 0 ? line.slice(0, space) : "資料";
+          const value = space > 0 ? line.slice(space + 1) : line;
+          return flexRow(label, value);
+        }),
       ],
+    },
+  ];
+
+  return {
+    type: "flex",
+    altText: `約看確認：${name}／${when}／${titles}`.slice(0, 400),
+    contents: {
+      type: "bubble",
+      body: {
+        type: "box",
+        layout: "vertical",
+        contents: bodyContents,
+      },
+      footer: {
+        type: "box",
+        layout: "vertical",
+        spacing: "sm",
+        contents: [
+          {
+            type: "button",
+            style: "primary",
+            color: "#2563EB",
+            height: "sm",
+            action: {
+              type: "postback",
+              label: "可以這個時間",
+              data: viewingPostbackData("approve", caseRecord.id),
+              displayText: "可以",
+            },
+          },
+          {
+            type: "button",
+            style: "secondary",
+            height: "sm",
+            action: {
+              type: "uri",
+              label: "改時間",
+              uri: buildAgentRescheduleUrl(caseRecord.id),
+            },
+          },
+        ],
+      },
     },
   };
 }
