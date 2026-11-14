@@ -546,13 +546,19 @@ export async function scrub591TransferPhones(): Promise<{
     }
   }
 
-  const raw = await readAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.ownerTracking);
-  const store = normalizeOwnerTrackingStore(
-    (raw as OwnerTrackingStore | null) ?? { cases: [], followUps: [] },
-  );
+  // 先看原始 payload：normalize 會先把轉接號清成空，若先 normalize 會誤判「沒得清」而不寫回雲端
+  const raw = (await readAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.ownerTracking)) as OwnerTrackingStore | null;
+  const store = normalizeOwnerTrackingStore(raw ?? { cases: [], followUps: [] });
+  const rawPhones = new Map<string, string>();
+  for (const row of raw?.cases ?? []) {
+    if (row?.id) rawPhones.set(String(row.id), String(row.phone ?? ""));
+  }
   let changed = false;
   const cases = store.cases.map((ownerCase) => {
-    if (!is591TransferPhone(ownerCase.phone)) return ownerCase;
+    const rawPhone = rawPhones.get(ownerCase.id) ?? ownerCase.phone;
+    if (!is591TransferPhone(rawPhone) && !is591TransferPhone(ownerCase.phone)) {
+      return ownerCase;
+    }
     casesCleared += 1;
     changed = true;
     return { ...ownerCase, phone: "" };

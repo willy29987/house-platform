@@ -276,7 +276,12 @@ export async function addPublishedListingToViewableOwnerCase(input: {
       ? overwriteNonEmptyFields(base, incoming)
       : fillEmptyFields(base, incoming);
     if (input.suppressNotes) {
-      merged = { ...merged, caseNote: "" };
+      merged = {
+        ...merged,
+        caseNote: "",
+        // overwriteNonEmpty 清不掉舊電話；自抓以物件電話為準（轉接會是空）
+        phone: normalizeOwnerContactPhone(incoming.phone),
+      };
     }
     const filled = updateOwnerCase(store, existing.id, merged);
     next = filled ?? store;
@@ -284,7 +289,14 @@ export async function addPublishedListingToViewableOwnerCase(input: {
       next = {
         ...next,
         cases: next.cases.map((row) =>
-          row.id === existing.id ? { ...row, assignee, caseNote: "" } : row,
+          row.id === existing.id
+            ? {
+                ...row,
+                assignee,
+                caseNote: "",
+                phone: normalizeOwnerContactPhone(row.phone),
+              }
+            : row,
         ),
         followUps: next.followUps.map((row) => {
           if (row.caseId !== existing.id) return row;

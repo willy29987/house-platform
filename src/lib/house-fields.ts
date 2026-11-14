@@ -110,6 +110,7 @@ export function formatOwnerPersonName(raw: string): string {
 /** 591 常見轉接門號（只比對數字）。抓到視為沒電話。 */
 const KNOWN_591_TRANSFER_PHONE_DIGITS = new Set([
   "0972528577", // 0972-528-577
+  "0972528589", // 0972-528-589（同系列轉接，常黏分機）
 ]);
 
 export function phoneDigitsOnly(raw: string): string {
@@ -121,7 +122,20 @@ export function is591TransferPhone(raw: string): boolean {
   const text = raw.trim();
   if (!text) return false;
   if (text.includes("轉接")) return true;
-  return KNOWN_591_TRANSFER_PHONE_DIGITS.has(phoneDigitsOnly(text));
+  let digits = phoneDigitsOnly(text);
+  if (!digits) return false;
+  // +886-972-528-577 → 0972528577
+  if (digits.startsWith("886") && digits.length >= 12) {
+    digits = `0${digits.slice(3)}`;
+  }
+  if (KNOWN_591_TRANSFER_PHONE_DIGITS.has(digits)) return true;
+  // 轉接號後面黏分機／多餘數字
+  for (const known of KNOWN_591_TRANSFER_PHONE_DIGITS) {
+    if (digits.startsWith(known)) return true;
+  }
+  // 0972-528-xxx + 分機（總長 > 10）→ 591 轉接型
+  if (/^0972528\d{3}/.test(digits) && digits.length > 10) return true;
+  return false;
 }
 
 /** 寫入用：轉接號清空；其餘只留數字與連字號 */

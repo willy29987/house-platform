@@ -1,5 +1,6 @@
 /** 屋主追蹤預覽版：型別、狀態選項、localStorage（正式版可改 Postgres）。 */
 
+import { normalizeOwnerContactPhone } from "@/lib/house-fields";
 import { extract591ListingId } from "@/lib/listing-591-id";
 import { parseTaiwanAddress } from "@/lib/taiwan-address";
 import { normalizeNextContactDate } from "@/lib/owner-tracking-next-contact";
@@ -154,7 +155,8 @@ export function normalizeCase(raw: Record<string, unknown>, fallbackAssignee = "
     houseCondition: String(raw.houseCondition ?? ""),
     community: String(raw.community ?? ""),
     ownerName: String(raw.ownerName ?? ""),
-    phone: String(raw.phone ?? ""),
+    // 591 轉接號讀寫時一律清空，避免本機快取／雲端合併又蓋回來
+    phone: normalizeOwnerContactPhone(String(raw.phone ?? "")),
     listingUrl: String(raw.listingUrl ?? raw.listingTitle ?? ""),
     rent: String(raw.rent ?? ""),
     layout: String(raw.layout ?? ""),
