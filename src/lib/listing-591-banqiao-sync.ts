@@ -35,20 +35,19 @@ const BROWSER_UA =
 
 /** 新北市 */
 const REGION_ID = 3;
-/** 板橋／中和（積穗）／土城（亞東・國慶） */
+/** 板橋／中和（積穗）／土城（亞東・國慶）／新莊（輔大～先嗇宮、北至中原路） */
 const SECTION_SPECS = [
-  { sectionId: 26, name: "板橋區", mode: "all" as const },
-  { sectionId: 38, name: "中和區", mode: "fringe" as const },
-  { sectionId: 39, name: "土城區", mode: "fringe" as const },
-];
+  { sectionId: 26, name: "板橋區", mode: "all" as const, rentMin: 10000, rentMax: 20000 },
+  { sectionId: 38, name: "中和區", mode: "fringe" as const, rentMin: 10000, rentMax: 20000 },
+  { sectionId: 39, name: "土城區", mode: "fringe" as const, rentMin: 10000, rentMax: 20000 },
+  { sectionId: 44, name: "新莊區", mode: "fringe" as const, rentMin: 13000, rentMax: 40000 },
+] as const;
 
 const KIND_SPECS = [
   { kind: 2, label: "獨立套房" },
   { kind: 3, label: "分租套房" },
 ] as const;
 
-const RENT_MIN = 10000;
-const RENT_MAX = 20000;
 const PAGE_SIZE = 30;
 /** 單次 cron 最多打詳情筆數（控時間／用量） */
 const MAX_DETAIL_PER_RUN = 35;
@@ -57,6 +56,15 @@ const DETAIL_CONCURRENCY = 3;
 
 const ZHONGHE_ALLOW = /積穗|員山|新生街/;
 const TUCHENG_ALLOW = /亞東|國慶/;
+/**
+ * 新莊服務範圍（路名／地標近似）：
+ * 西至輔大再往西約 500 公尺、北至中原路、東至先嗇宮；排除迴龍／丹鳳等更西側。
+ */
+const XINZHUANG_ALLOW =
+  /輔大|輔仁|先嗇宮|頭前|中原路|建國一|中山路|新莊路|化成路|復興路|中正路|中誠|中平路|中和街|昌平|昌隆|思源路|新泰路|民安|公園路|瓊林|西盛|富國路|重新路/;
+const XINZHUANG_DENY = /迴龍|萬壽|景德|丹鳳|龍華|林口|泰山|五股/;
+/** 輔大中正路 510；再往西約 500m 後視為超出（迴龍側門牌偏大） */
+const XINZHUANG_ZHONGZHENG_WEST_MAX = 620;
 
 export type Banqiao591ListItem = {
   id: string;
@@ -99,11 +107,23 @@ function rentUrl(id: string): string {
   return `https://rent.591.com.tw/rent-detail-${id}.html`;
 }
 
+export function matchesXinzhuangServiceArea(address: string): boolean {
+  const a = address.replace(/\s+/g, "");
+  if (XINZHUANG_DENY.test(a)) return false;
+  const zhongzheng = a.match(/中正路(\d+)/);
+  if (zhongzheng) {
+    const n = Number(zhongzheng[1]);
+    if (Number.isFinite(n) && n > XINZHUANG_ZHONGZHENG_WEST_MAX) return false;
+  }
+  return XINZHUANG_ALLOW.test(a);
+}
+
 export function matchesBanqiaoServiceArea(address: string, sectionId: number): boolean {
   const a = address.replace(/\s+/g, "");
   if (sectionId === 26) return true;
   if (sectionId === 38) return ZHONGHE_ALLOW.test(a);
   if (sectionId === 39) return TUCHENG_ALLOW.test(a);
+  if (sectionId === 44) return matchesXinzhuangServiceArea(a);
   return false;
 }
 
@@ -111,11 +131,13 @@ async function readListPage(opts: {
   sectionId: number;
   kind: number;
   firstRow: number;
+  rentMin: number;
+  rentMax: number;
 }): Promise<{ total: number; items: Banqiao591ListItem[] }> {
   const url =
     `https://bff-house.591.com.tw/v3/web/rent/list` +
     `?regionid=${REGION_ID}&sectionid=${opts.sectionId}&kind=${opts.kind}` +
-    `&rentprice=${RENT_MIN},${RENT_MAX}&role=1&type=1&firstRow=${opts.firstRow}`;
+    `&rentprice=${opts.rentMin},${opts.rentMax}&role=1&type=1&firstRow=${opts.firstRow}`;
   const res = await fetch(url, {
     headers: {
       "User-Agent": BROWSER_UA,
@@ -139,7 +161,7 @@ async function readListPage(opts: {
     const id = text(raw.id);
     if (!/^\d+$/.test(id)) continue;
     const price = parsePrice(raw.price);
-    if (price < RENT_MIN || price > RENT_MAX) continue;
+    if (price < opts.rentMin || price > opts.rentMax) continue;
     const roleName = text(raw.role_name);
     if (roleName && !roleName.includes("屋主")) continue;
     items.push({
@@ -157,24 +179,29 @@ async function readListPage(opts: {
   return { total, items };
 }
 
-async function listSectionKind(sectionId: number, kind: number): Promise<Banqiao591ListItem[]> {
-  const first = await readListPage({ sectionId, kind, firstRow: 0 });
+async function listSectionKind(
+  sectionId: number,
+  kind: number,
+  rentMin: number,
+  rentMax: number,
+): Promise<Banqiao591ListItem[]> {
+  const first = await readListPage({ sectionId, kind, firstRow: 0, rentMin, rentMax });
   const out = [...first.items];
   const total = Math.min(first.total || out.length, 300);
   for (let firstRow = PAGE_SIZE; firstRow < total; firstRow += PAGE_SIZE) {
-    const page = await readListPage({ sectionId, kind, firstRow });
+    const page = await readListPage({ sectionId, kind, firstRow, rentMin, rentMax });
     out.push(...page.items);
     if (page.items.length === 0) break;
   }
   return out;
 }
 
-/** 列出板橋服務範圍內、屋主套房候選（尚未打詳情） */
+/** 列出服務範圍內、屋主套房候選（尚未打詳情） */
 export async function listBanqiaoSuiteCandidates(): Promise<Banqiao591ListItem[]> {
   const jobs: Array<Promise<Banqiao591ListItem[]>> = [];
   for (const section of SECTION_SPECS) {
     for (const kind of KIND_SPECS) {
-      jobs.push(listSectionKind(section.sectionId, kind.kind));
+      jobs.push(listSectionKind(section.sectionId, kind.kind, section.rentMin, section.rentMax));
     }
   }
 
@@ -785,7 +812,7 @@ export async function purgeGoneCompany591WithoutPhone(opts?: {
 }
 
 /**
- * 同步板橋服務範圍屋主套房 → 本站未刊登物件 + 屋主追蹤。
+ * 同步板橋／中和／土城／新莊服務範圍屋主套房 → 本站未刊登物件 + 屋主追蹤。
  * 同一 source591Id 不重建；內容有差異才更新。
  * Company 自抓案若 591 連結已消失且沒有真正電話，連廣告一起刪。
  */
