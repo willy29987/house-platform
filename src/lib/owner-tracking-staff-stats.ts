@@ -22,8 +22,9 @@ export function normalizeStaffOpsDate(raw: string | null | undefined, now = new 
 }
 
 /**
- * 電訪＝屋主追蹤在「當天」寫入的追蹤（含首次建檔空備註、591 自抓建檔、後續追蹤）。
+ * 電訪＝屋主追蹤在「當天」寫入的追蹤（含首次建檔空備註、591 自抓新建／內容變更補筆、後續追蹤）。
  * 只排除 591 下架／釋出／帶入上架文案與無效案；自抓空備註要算。
+ * 自抓內容未變的心跳同步不再寫追蹤，故不會進今日電訪。
  */
 export function isFollowUpExcludedFromDailyCalls(
   f: Pick<OwnerFollowUpPreview, "note" | "status" | "createdBy">,

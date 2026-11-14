@@ -26,7 +26,7 @@ function followUpTaipeiYmd(iso: string, now = new Date()): string {
   return d.toLocaleDateString("en-CA", { timeZone: "Asia/Taipei" }) || taipeiTodayYmd(now);
 }
 
-/** 自抓同一案件當天只記一筆電訪，避免每 2 小時同步灌水 */
+/** 內容有變的自抓更新：同一案件當天只記一筆電訪，避免同日多次同步灌水 */
 function ensureSameDaySyncFollowUp(
   store: OwnerTrackingStore,
   caseId: string,
