@@ -316,6 +316,8 @@ async function finishCase(session: GuestSession) {
     summaryText: summary,
   });
   await notifyAgentsOfNewViewing(created);
+  const { clearGuestRecommendationAfterBooking } = await import("@/lib/line-guest-watch-notify");
+  await clearGuestRecommendationAfterBooking(session.lineUserId).catch(() => undefined);
   session.step = "done";
   await saveGuestSession(session);
   return {

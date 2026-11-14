@@ -127,6 +127,10 @@ async function adoptBooking(input: {
       await notifyAgentsOfNewViewing(created).catch((error) => {
         console.warn("[line-booking-sync] notify agents failed", error);
       });
+      const { clearGuestRecommendationAfterBooking } = await import(
+        "@/lib/line-guest-watch-notify"
+      );
+      await clearGuestRecommendationAfterBooking(lineUserId).catch(() => undefined);
     }
   }
 

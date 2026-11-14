@@ -25,11 +25,19 @@ function normalizeStore(payload: unknown): Store {
   return { menus: next };
 }
 
-async function lineImage(newListingsCount?: number) {
-  if (newListingsCount) {
+type MenuLook =
+  | { kind: "default" }
+  | { kind: "alert"; count: number }
+  | { kind: "continue" };
+
+async function lineImage(look: MenuLook = { kind: "default" }) {
+  if (look.kind === "alert") {
     return readFile(
-      path.join(process.cwd(), "public/line/new-listings", `${newListingsCount}.png`),
+      path.join(process.cwd(), "public/line/new-listings", `${look.count}.png`),
     );
+  }
+  if (look.kind === "continue") {
+    return readFile(path.join(process.cwd(), "public/line/new-listings", "continue.png"));
   }
   return readFile(path.join(process.cwd(), "public/line/guest-rich-menu.png"));
 }
@@ -37,7 +45,11 @@ async function lineImage(newListingsCount?: number) {
 async function createFindHomeMenu(
   token: string,
   uri: string,
-  look: { newListingsCount?: number; chatBarText?: string; name?: string } = {},
+  look: {
+    menuLook?: MenuLook;
+    chatBarText?: string;
+    name?: string;
+  } = {},
 ): Promise<string | null> {
   const created = await fetch("https://api.line.me/v2/bot/richmenu", {
     method: "POST",
@@ -62,7 +74,7 @@ async function createFindHomeMenu(
   const richMenuId = createdBody?.richMenuId;
   if (!created.ok || !richMenuId) return null;
 
-  const image = await lineImage(look.newListingsCount);
+  const image = await lineImage(look.menuLook);
   const uploaded = await fetch(
     `https://api-data.line.me/v2/bot/richmenu/${richMenuId}/content`,
     {
@@ -86,6 +98,14 @@ async function deleteRichMenu(token: string, richMenuId: string) {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },
   }).catch(() => null);
+}
+
+async function linkUserMenu(token: string, userId: string, richMenuId: string) {
+  const linked = await fetch(
+    `https://api.line.me/v2/bot/user/${encodeURIComponent(userId)}/richmenu/${richMenuId}`,
+    { method: "POST", headers: { Authorization: `Bearer ${token}` } },
+  );
+  return linked.ok;
 }
 
 /** 預設圖文選單：點下去直接開 LIFF（無個人 uid）。 */
@@ -127,14 +147,10 @@ export async function ensureGuestFindHomeMenu(
   );
   if (!richMenuId) return;
 
-  // 正在顯示「新物件」選單時先不蓋掉，等客人看過再換回這張
+  // 正在顯示「新物件／繼續看屋」選單時先不蓋掉
   const showingNewListings = Boolean((await readNewListings()).byUser[userId]);
   if (!showingNewListings) {
-    const linked = await fetch(
-      `https://api.line.me/v2/bot/user/${encodeURIComponent(userId)}/richmenu/${richMenuId}`,
-      { method: "POST", headers: { Authorization: `Bearer ${token}` } },
-    );
-    if (!linked.ok) {
+    if (!(await linkUserMenu(token, userId, richMenuId))) {
       await deleteRichMenu(token, richMenuId);
       return;
     }
@@ -151,7 +167,13 @@ export async function ensureGuestFindHomeMenu(
   await writeAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.lineGuestRichMenus, latest);
 }
 
-type NewListingsEntry = { listingIds: string[]; menuId: string; updatedAt: string };
+type NewListingsMode = "alert" | "continue";
+type NewListingsEntry = {
+  listingIds: string[];
+  menuId: string;
+  mode: NewListingsMode;
+  updatedAt: string;
+};
 type NewListingsStore = { byUser: Record<string, NewListingsEntry> };
 
 const MAX_NEW_LISTINGS = 20;
@@ -167,6 +189,7 @@ function normalizeNewListings(payload: unknown): NewListingsStore {
     byUser[userId] = {
       listingIds: entry.listingIds.filter((id) => typeof id === "string" && id),
       menuId: entry.menuId,
+      mode: entry.mode === "continue" ? "continue" : "alert",
       updatedAt: typeof entry.updatedAt === "string" ? entry.updatedAt : new Date().toISOString(),
     };
   }
@@ -179,14 +202,14 @@ async function readNewListings() {
   );
 }
 
-/** 客人還沒看過的新物件（開 LIFF「新物件」時用） */
+/** 客人還沒清掉的新物件（開 LIFF「新物件」時用） */
 export async function getGuestNewListingIds(lineUserId: string): Promise<string[]> {
   const store = await readNewListings();
   return store.byUser[lineUserId.trim()]?.listingIds ?? [];
 }
 
 /**
- * 有新物件符合客人條件：把他的圖文選單換成「N 間新物件」版。
+ * 有新物件符合客人條件：把他的圖文選單換成紅色「N 間新物件」版。
  * 換選單不是訊息，不算 LINE 月額度。
  */
 export async function flagGuestNewListing(lineUserId: string, listingId: string) {
@@ -205,25 +228,26 @@ export async function flagGuestNewListing(lineUserId: string, listingId: string)
     token,
     buildLiffRentAssistantUrl({ uid: userId, fresh: "1" }),
     {
-      newListingsCount: count,
+      menuLook: { kind: "alert", count },
       chatBarText: `🔴 ${count >= 9 ? "9+" : count} 間新物件`,
       name: "新物件提醒",
     },
   );
   if (!richMenuId) return false;
 
-  const linked = await fetch(
-    `https://api.line.me/v2/bot/user/${encodeURIComponent(userId)}/richmenu/${richMenuId}`,
-    { method: "POST", headers: { Authorization: `Bearer ${token}` } },
-  );
-  if (!linked.ok) {
+  if (!(await linkUserMenu(token, userId, richMenuId))) {
     await deleteRichMenu(token, richMenuId);
     return false;
   }
 
   const latest = await readNewListings();
   const previousMenuId = latest.byUser[userId]?.menuId;
-  latest.byUser[userId] = { listingIds, menuId: richMenuId, updatedAt: new Date().toISOString() };
+  latest.byUser[userId] = {
+    listingIds,
+    menuId: richMenuId,
+    mode: "alert",
+    updatedAt: new Date().toISOString(),
+  };
   await writeAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.lineGuestNewListings, latest);
   if (previousMenuId && previousMenuId !== richMenuId) {
     await deleteRichMenu(token, previousMenuId);
@@ -231,7 +255,54 @@ export async function flagGuestNewListing(lineUserId: string, listingId: string)
   return true;
 }
 
-/** 客人點進來看過新物件：換回原本的「開始找房」選單。 */
+/**
+ * 客人點進來看過：改成溫和「繼續看屋」選單（仍可開同一批），不換回開始找房。
+ */
+export async function softenGuestNewListings(lineUserId: string) {
+  const userId = lineUserId.trim();
+  const store = await readNewListings();
+  const entry = store.byUser[userId];
+  if (!entry || !entry.listingIds.length) return;
+  if (entry.mode === "continue") return;
+
+  const token = await getLineChannelAccessToken();
+  if (!token) return;
+
+  const richMenuId = await createFindHomeMenu(
+    token,
+    buildLiffRentAssistantUrl({ uid: userId, fresh: "1" }),
+    {
+      menuLook: { kind: "continue" },
+      chatBarText: "繼續看屋",
+      name: "繼續看屋",
+    },
+  );
+  if (!richMenuId) return;
+  if (!(await linkUserMenu(token, userId, richMenuId))) {
+    await deleteRichMenu(token, richMenuId);
+    return;
+  }
+
+  const latest = await readNewListings();
+  const current = latest.byUser[userId];
+  if (!current) {
+    await deleteRichMenu(token, richMenuId);
+    return;
+  }
+  const previousMenuId = current.menuId;
+  latest.byUser[userId] = {
+    ...current,
+    menuId: richMenuId,
+    mode: "continue",
+    updatedAt: new Date().toISOString(),
+  };
+  await writeAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.lineGuestNewListings, latest);
+  if (previousMenuId && previousMenuId !== richMenuId) {
+    await deleteRichMenu(token, previousMenuId);
+  }
+}
+
+/** 約看送出／推薦結束／物件清空：換回原本的「開始找房」選單。 */
 export async function clearGuestNewListings(lineUserId: string) {
   const userId = lineUserId.trim();
   const store = await readNewListings();

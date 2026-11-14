@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import { clearGuestNewListings } from "@/lib/line-guest-rich-menu";
+import { softenGuestNewListings } from "@/lib/line-guest-rich-menu";
+import { clearGuestRecommendationPending } from "@/lib/line-guest-watch-notify";
 
 export const dynamic = "force-dynamic";
 
-/** 客人在 LIFF 看過新物件後呼叫：圖文選單換回「開始找房」。 */
+/** 客人在 LIFF 看過新物件：選單改「繼續看屋」，並略過這批中午推播。 */
 export async function POST(request: Request) {
   let body: { uid?: string } = {};
   try {
@@ -16,7 +17,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false }, { status: 400 });
   }
   try {
-    await clearGuestNewListings(uid);
+    await softenGuestNewListings(uid);
+    await clearGuestRecommendationPending(uid);
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("[api/line/new-listings/seen]", error);

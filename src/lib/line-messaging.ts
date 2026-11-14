@@ -133,6 +133,11 @@ export type LineMessage =
       quickReply?: {
         items: Array<{ type: "action"; action: LineMessageAction }>;
       };
+    }
+  | {
+      type: "flex";
+      altText: string;
+      contents: Record<string, unknown>;
     };
 
 export async function pushLineTextMessage(lineUserId: string, text: string) {

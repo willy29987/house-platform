@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { emptyCriteria, type RentalMatchCriteria } from "@/lib/line-rental-assistant";
 import { upsertGuestWatchCriteria } from "@/lib/line-guest-watch";
+import { resetGuestRecommendationQuota } from "@/lib/line-guest-watch-notify";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +52,7 @@ export async function POST(request: Request) {
       petNote: typeof body.petNote === "string" ? body.petNote : "",
       active: body.active !== false,
     });
+    await resetGuestRecommendationQuota(lineUserId).catch(() => undefined);
     return NextResponse.json({ ok: true, watch });
   } catch (error) {
     const message = error instanceof Error ? error.message : "儲存失敗";

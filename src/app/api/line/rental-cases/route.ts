@@ -238,6 +238,12 @@ export async function POST(request: Request) {
     }
 
     const notify = await notifyAgentsOfNewViewing(created);
+    if (created.lineUserId) {
+      const { clearGuestRecommendationAfterBooking } = await import(
+        "@/lib/line-guest-watch-notify"
+      );
+      await clearGuestRecommendationAfterBooking(created.lineUserId).catch(() => undefined);
+    }
 
     return NextResponse.json({
       id: created.id,

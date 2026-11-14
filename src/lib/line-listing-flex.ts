@@ -74,13 +74,16 @@ function listingBubble(listing: RentalMatchListing) {
   };
 }
 
-export function buildListingCardsFlex(listings: RentalMatchListing[]) {
+export function buildListingCardsFlex(
+  listings: RentalMatchListing[],
+  altPrefix = "想看的物件：",
+) {
   const bubbles = listings.slice(0, 10).map(listingBubble);
   if (!bubbles.length) return null;
   const titles = listings.map((item) => item.title).join("、");
   return {
     type: "flex" as const,
-    altText: `想看的物件：${titles}`.slice(0, 400),
+    altText: `${altPrefix}${titles}`.slice(0, 400),
     contents: bubbles.length === 1 ? bubbles[0] : { type: "carousel", contents: bubbles },
   };
 }
