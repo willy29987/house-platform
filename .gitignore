@@ -71,3 +71,9 @@ next-env.d.ts
 /vendor/impeccable-hooks.json
 /vendor/impeccable-main/
 # impeccable-ignore-end
+
+# local-only (machine transfer / runtime)
+tmp/
+.cursor/*.log
+.cursor/debug-*.log
+.cursor/line-last-userid.txt
