@@ -15,6 +15,7 @@ export async function GET(request: Request) {
       uid: url.searchParams.get("uid") ?? undefined,
       listingId: url.searchParams.getAll("listingId"),
       similar: url.searchParams.get("similar") ?? undefined,
+      fresh: url.searchParams.get("fresh") ?? undefined,
       "liff.state": url.searchParams.get("liff.state") ?? undefined,
     });
     return NextResponse.json({ ok: true, ...payload }, { headers: NO_STORE });

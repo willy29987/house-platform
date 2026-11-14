@@ -11,6 +11,7 @@ export default async function LiffRentAssistantPage({
     uid?: string;
     listingId?: string | string[];
     similar?: string | string[];
+    fresh?: string | string[];
     "liff.state"?: string;
   }>;
 }) {

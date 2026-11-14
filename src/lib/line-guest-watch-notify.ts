@@ -1,4 +1,4 @@
-/** 新上架的出租物件若符合客人已存條件，推到該客人的 LINE。 */
+/** 新上架的出租物件若符合客人已存條件：換他的圖文選單提醒（免費），並嘗試推播（算額度）。 */
 
 import { ADMIN_CLOUD_DATA_KEYS } from "@/lib/admin-cloud-data-keys";
 import { readAdminCloudPayload, writeAdminCloudPayload } from "@/lib/admin-cloud-data-server";
@@ -8,6 +8,7 @@ import {
   loadPublishedRentalMatchListing,
   type RentalMatchListing,
 } from "@/lib/line-rental-assistant";
+import { flagGuestNewListing } from "@/lib/line-guest-rich-menu";
 import { buildLiffRentAssistantUrl, pushLineMessages } from "@/lib/line-messaging";
 
 type SentStore = { byUser: Record<string, string[]> };
@@ -78,12 +79,16 @@ export async function notifyMatchingGuestsOfRental(listingId: string) {
     const already = sent.byUser[watch.lineUserId] ?? [];
     if (already.includes(listing.id)) continue;
     if (!watchAccepts(watch, listing)) continue;
+    const flagged = await flagGuestNewListing(watch.lineUserId, listing.id).catch((error) => {
+      console.warn("[line-guest-watch-notify] new-listing menu failed", error);
+      return false;
+    });
     const result = await pushLineMessages(
       watch.lineUserId,
       recommendationMessages(listing, watch.lineUserId),
       { force: true, logAs: "bot" },
     );
-    if (!result.sent) continue;
+    if (!flagged && !result.sent) continue;
     sent.byUser[watch.lineUserId] = [listing.id, ...already].slice(0, 300);
     notified += 1;
     changed = true;

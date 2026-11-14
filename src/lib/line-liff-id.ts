@@ -30,9 +30,13 @@ function truthyParam(raw: string | string[] | undefined) {
 export function resolveLiffBootstrapHint(input: {
   listingId?: string | string[];
   similar?: string | string[];
+  fresh?: string | string[];
   "liff.state"?: string;
 }): LiffBootstrapHint {
   const stateParams = liffStateParams(input["liff.state"]);
+  if (truthyParam(input.fresh ?? stateParams.get("fresh") ?? undefined)) {
+    return { mode: "similar", listingIds: [] };
+  }
   const listingIds = listingIdsFromParam(
     input.listingId ??
       (stateParams.getAll("listingId").length ? stateParams.getAll("listingId") : undefined),

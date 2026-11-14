@@ -205,7 +205,8 @@ export type LiffDirectListingEntry = {
   priceMin: number | null;
   priceMax: number | null;
   petNote: string;
-  mode?: "book" | "similar";
+  /** fresh＝從「新物件」圖文選單進來，listingIds 是新上架的 */
+  mode?: "book" | "similar" | "fresh";
 };
 
 export const ROOM_TYPE_OPTIONS = [

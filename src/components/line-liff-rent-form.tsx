@@ -679,8 +679,15 @@ export function LineLiffRentForm({
   onSubmitted?: (caseId: string) => void;
 }) {
   const today = useMemo(() => taipeiTodayYmd(), []);
-  const directMode = directListing?.mode === "similar" ? "similar" : directListing ? "book" : null;
-  const skipCriteria = Boolean(directListing?.listingIds.length || directMode === "similar");
+  const directMode =
+    directListing?.mode === "similar" || directListing?.mode === "fresh"
+      ? directListing.mode
+      : directListing
+        ? "book"
+        : null;
+  /** similar／fresh 都是「推薦清單」：指定的物件排最前、其餘依條件 */
+  const listMode = directMode === "similar" || directMode === "fresh";
+  const skipCriteria = Boolean(directListing?.listingIds.length || listMode);
   const [step, setStep] = useState<Step>(skipCriteria ? "listings" : "criteria");
   const [criteria, setCriteria] = useState<RentalMatchCriteria>(
     directListing?.criteria ?? emptyCriteria(),
@@ -694,7 +701,7 @@ export function LineLiffRentForm({
   );
   const [matched, setMatched] = useState<RentalMatchListing[]>(() => {
     if (!directListing) return [];
-    if (directMode === "similar") {
+    if (listMode) {
       const focusIds = directListing.listingIds;
       const focusSet = new Set(focusIds);
       const min = directListing.priceMin ?? 0;
@@ -885,10 +892,25 @@ export function LineLiffRentForm({
     };
   }, [lineUserId]);
 
+  const freshSeenRef = useRef(false);
+  useEffect(() => {
+    if (freshSeenRef.current || directMode !== "fresh" || !lineUserId) return;
+    if (!directListing?.listingIds.length) return;
+    freshSeenRef.current = true;
+    void fetch("/api/line/new-listings/seen", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ uid: lineUserId }),
+      keepalive: true,
+    }).catch(() => {
+      /* 換回選單失敗不影響看物件 */
+    });
+  }, [directMode, directListing, lineUserId]);
+
   useEffect(() => {
     if (listingBootRef.current || !listings.length) return;
-    // similar 模式已用放寬條件初始化列表，不要被舊的直開 boot 覆寫
-    if (directMode === "similar") {
+    // similar／fresh 模式已初始化列表，不要被舊的直開 boot 覆寫
+    if (listMode) {
       listingBootRef.current = true;
       return;
     }
@@ -918,7 +940,7 @@ export function LineLiffRentForm({
     setPickedIds(found.map((item) => item.id).slice(0, MAX_WANTED_LISTINGS));
     if (skipCriteria) setDetailId(found[0]?.id ?? null);
     setStep("listings");
-  }, [listings, skipCriteria, directMode]);
+  }, [listings, skipCriteria, listMode]);
 
   const cities = useMemo(
     () => [...new Set(listings.map((item) => item.city).filter(Boolean))].sort(),
@@ -1436,7 +1458,9 @@ export function LineLiffRentForm({
               {step === "criteria"
                 ? "先選條件，再看推薦"
                 : step === "listings"
-                  ? skipCriteria
+                  ? directMode === "fresh"
+                    ? "有新上架的物件符合你的條件"
+                    : skipCriteria
                     ? "看完這間可直接約時間"
                     : "點照片看詳情；右側按鈕選想看"
                   : showSavedProfile
@@ -1656,13 +1680,21 @@ export function LineLiffRentForm({
               <div className="flex items-end justify-between gap-2 border-b border-zinc-100 px-3 py-2.5">
                 <div>
                   <p className="text-[15px] font-bold text-zinc-900">
-                    {directMode === "similar" && directListing?.listingIds.length
-                      ? `推薦物件 ${matched.length}`
-                      : `配對物件 ${matched.length}`}
+                    {directMode === "fresh"
+                      ? `新物件 ${directListing?.listingIds.length ?? 0}`
+                      : directMode === "similar" && directListing?.listingIds.length
+                        ? `推薦物件 ${matched.length}`
+                        : `配對物件 ${matched.length}`}
                   </p>
                   {matchedRelaxed.length ? (
                     <p className="mt-0.5 text-[11px] text-amber-700">
                       已放寬：{matchedRelaxed.join("、")}
+                    </p>
+                  ) : directMode === "fresh" ? (
+                    <p className="mt-0.5 text-[11px] text-zinc-500">
+                      {directListing?.listingIds.length
+                        ? "符合你條件的新上架物件排在最前面，勾選想看的"
+                        : "新物件已看過，下方是符合你條件的物件"}
                     </p>
                   ) : directMode === "similar" ? (
                     <p className="mt-0.5 text-[11px] text-zinc-500">
@@ -1701,7 +1733,9 @@ export function LineLiffRentForm({
                       badge={
                         directMode === "similar" && item.id === directListing?.listingIds[0]
                           ? "你問的物件"
-                          : undefined
+                          : directMode === "fresh" && directListing?.listingIds.includes(item.id)
+                            ? "新上架"
+                            : undefined
                       }
                       selected={pickedIds.includes(item.id)}
                       onOpen={() => setDetailId(item.id)}
