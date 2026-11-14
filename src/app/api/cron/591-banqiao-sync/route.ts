@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   runBanqiao591SuiteSync,
+  scrub591TransferPhones,
   scrubBanqiaoSyncedOwnerTrackingNotes,
 } from "@/lib/listing-591-banqiao-sync";
 
@@ -24,8 +25,9 @@ async function handle(request: Request) {
   try {
     const scrubOnly = new URL(request.url).searchParams.get("scrubOnly") === "1";
     if (scrubOnly) {
+      const transferPhones = await scrub591TransferPhones();
       const scrub = await scrubBanqiaoSyncedOwnerTrackingNotes();
-      return NextResponse.json({ ok: true, scrub });
+      return NextResponse.json({ ok: true, transferPhones, scrub });
     }
     const summary = await runBanqiao591SuiteSync();
     return NextResponse.json({ ok: true, summary });

@@ -16,6 +16,7 @@ import {
   type OwnerCaseInput,
   type OwnerTrackingStore,
 } from "@/lib/owner-tracking-preview";
+import { normalizeOwnerContactPhone } from "@/lib/house-fields";
 import { taipeiTodayYmd } from "@/lib/owner-tracking-next-contact";
 
 const VIEWABLE_STATUS = "只可帶看" as const;
@@ -159,7 +160,7 @@ export function listingInputToOwnerCase(data: ListingInput): OwnerCaseInput {
     houseCondition: data.houseCondition ?? "",
     community: text(data.community),
     ownerName: data.contactName,
-    phone: data.contactPhone,
+    phone: normalizeOwnerContactPhone(data.contactPhone),
     listingUrl: text(data.source591Url) || text(data.source591Id),
     rent: rentText(data),
     layout: layoutText(data),

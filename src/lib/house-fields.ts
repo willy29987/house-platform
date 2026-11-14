@@ -107,15 +107,40 @@ export function formatOwnerPersonName(raw: string): string {
   return name || raw.trim();
 }
 
+/** 591 常見轉接門號（只比對數字）。抓到視為沒電話。 */
+const KNOWN_591_TRANSFER_PHONE_DIGITS = new Set([
+  "0972528577", // 0972-528-577
+]);
+
+export function phoneDigitsOnly(raw: string): string {
+  return raw.replace(/\D/g, "");
+}
+
+/** 591 轉接號／字面「轉接」→ 當作沒電話 */
+export function is591TransferPhone(raw: string): boolean {
+  const text = raw.trim();
+  if (!text) return false;
+  if (text.includes("轉接")) return true;
+  return KNOWN_591_TRANSFER_PHONE_DIGITS.has(phoneDigitsOnly(text));
+}
+
+/** 寫入用：轉接號清空；其餘只留數字與連字號 */
+export function normalizeOwnerContactPhone(raw: string): string {
+  const text = raw.trim();
+  if (!text || text === "無" || text === "—" || text === "-") return "";
+  if (is591TransferPhone(text)) return "";
+  return text.replace(/[^\d-]/g, "");
+}
+
 /**
- * 有真正可聯絡的電話。空的、「無」、字面上有「轉接」，
- * 或把分機黏在手機後面的長號碼，都算沒有電話。
+ * 有真正可聯絡的電話。空的、「無」、字面上有「轉接」、
+ * 已知 591 轉接門號，或把分機黏在手機後面的長號碼，都算沒有電話。
  */
 export function isRealOwnerPhone(raw: string): boolean {
   const text = raw.trim();
   if (!text || text === "無" || text === "—" || text === "-") return false;
-  if (text.includes("轉接")) return false;
-  const digits = text.replace(/\D/g, "");
+  if (is591TransferPhone(text)) return false;
+  const digits = phoneDigitsOnly(text);
   return digits.length >= 8 && digits.length <= 10;
 }
 
@@ -123,6 +148,6 @@ export function ownerContactFromTexts(nameRaw: string, imNameRaw: string, phoneR
   const fromName = formatOwnerPersonName(nameRaw);
   const fromIm = formatOwnerPersonName(imNameRaw);
   const name = fromName || fromIm;
-  const phone = phoneRaw.replace(/[^\d-]/g, "");
+  const phone = normalizeOwnerContactPhone(phoneRaw);
   return { name, phone };
 }

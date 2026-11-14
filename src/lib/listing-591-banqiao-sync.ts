@@ -12,7 +12,12 @@ import {
 } from "@/lib/listing-to-owner-tracking";
 import type { ListingInput } from "@/lib/listing-validation";
 import { extract591ListingId } from "@/lib/listing-591-id";
-import { formatOwnerPersonName, isRealOwnerPhone } from "@/lib/house-fields";
+import {
+  formatOwnerPersonName,
+  is591TransferPhone,
+  isRealOwnerPhone,
+  normalizeOwnerContactPhone,
+} from "@/lib/house-fields";
 import { check591ListingUrl } from "@/lib/listing-591-check";
 import { ADMIN_CLOUD_DATA_KEYS } from "@/lib/admin-cloud-data-keys";
 import { readAdminCloudPayload, writeAdminCloudPayload } from "@/lib/admin-cloud-data-server";
@@ -205,7 +210,10 @@ export function draftToListingInput(draft: Listing591ImportDraft): ListingInput 
   if (!Number.isFinite(price) || price <= 0) return null;
   if (!Number.isFinite(areaPing) || areaPing <= 0) return null;
   if (!draft.city.trim() || !draft.district.trim() || draft.address.trim().length < 3) return null;
-  if (!draft.contactName.trim() || draft.contactPhone.trim().length < 8) return null;
+  if (!draft.contactName.trim()) return null;
+  const contactPhone = normalizeOwnerContactPhone(draft.contactPhone);
+  // 591 轉接號當沒電話可進；其餘若有填仍需至少 8 碼
+  if (contactPhone && contactPhone.replace(/\D/g, "").length < 8) return null;
   if (!draft.title.trim() || draft.title.trim().length < 2) return null;
 
   const propertyType = draft.propertyType || "APARTMENT";
@@ -264,7 +272,7 @@ export function draftToListingInput(draft: Listing591ImportDraft): ListingInput 
     coverImage: draft.coverImage || draft.images[0] || undefined,
     images: draft.images,
     contactName: draft.contactName.trim(),
-    contactPhone: draft.contactPhone.trim(),
+    contactPhone,
     ownerIdCardUrl: undefined,
     source591Id: undefined,
     source591Url: draft.source591Url,
@@ -482,6 +490,54 @@ async function upsertOne(candidate: Banqiao591ListItem): Promise<"created" | "up
     console.error("[591-banqiao-sync] owner tracking create failed", source591Id, error);
   }
   return "created";
+}
+
+/**
+ * 把已知 591 轉接門號（如 0972-528-577）從物件與屋主追蹤清成沒電話。
+ */
+export async function scrub591TransferPhones(): Promise<{
+  listingsCleared: number;
+  casesCleared: number;
+}> {
+  let listingsCleared = 0;
+  let casesCleared = 0;
+
+  if (process.env.DATABASE_URL) {
+    const listings = await prisma.listing.findMany({
+      where: { contactPhone: { not: "" } },
+      select: { id: true, contactPhone: true },
+    });
+    const clearIds = listings
+      .filter((row) => is591TransferPhone(row.contactPhone))
+      .map((row) => row.id);
+    if (clearIds.length > 0) {
+      await prisma.listing.updateMany({
+        where: { id: { in: clearIds } },
+        data: { contactPhone: "" },
+      });
+      listingsCleared = clearIds.length;
+    }
+  }
+
+  const raw = await readAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.ownerTracking);
+  const store = normalizeOwnerTrackingStore(
+    (raw as OwnerTrackingStore | null) ?? { cases: [], followUps: [] },
+  );
+  let changed = false;
+  const cases = store.cases.map((ownerCase) => {
+    if (!is591TransferPhone(ownerCase.phone)) return ownerCase;
+    casesCleared += 1;
+    changed = true;
+    return { ...ownerCase, phone: "" };
+  });
+  if (changed) {
+    await writeAdminCloudPayload(
+      ADMIN_CLOUD_DATA_KEYS.ownerTracking,
+      { cases, followUps: store.followUps },
+      { replace: true },
+    );
+  }
+  return { listingsCleared, casesCleared };
 }
 
 /**
@@ -754,6 +810,13 @@ export async function runBanqiao591SuiteSync(
   if (!process.env.DATABASE_URL) {
     summary.errors.push("缺少 DATABASE_URL");
     return summary;
+  }
+
+  try {
+    await scrub591TransferPhones();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    summary.errors.push(`scrub transfer phones: ${message.slice(0, 160)}`);
   }
 
   try {
