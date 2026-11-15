@@ -109,6 +109,43 @@ function guestFacingAddress(address: string) {
   return text.replace(/\d*號.*$/, "").trim();
 }
 
+/** 客人端列表／詳情：不顯示行銷標題；區位精簡成「行政區 · 路段」 */
+function guestListingPlaceLine(item: RentalMatchListing): string {
+  const area = (item.district || item.city || "").trim();
+  const street = guestFacingAddress(item.address) || "";
+  return [area, street].filter(Boolean).join(" · ");
+}
+
+function guestListingMetaLine(item: RentalMatchListing): string {
+  return [layoutLabel(item), `${item.areaPing} 坪`].filter(Boolean).join(" · ");
+}
+
+/** 價格下方：租補／報稅 */
+function guestListingPriceSideTags(item: RentalMatchListing): string[] {
+  const tags: string[] = [];
+  if (item.rentSubsidy === true) tags.push("租補");
+  if (item.taxDeductible === true) tags.push("報稅");
+  return tags;
+}
+
+/** 可寵欄：入籍／可寵／不可寵／車位 */
+function guestListingPerkTags(item: RentalMatchListing): string[] {
+  const tags: string[] = [];
+  if (item.canRegisterAddress === true) tags.push("入籍");
+  if (item.petsAllowed === true) tags.push("可寵");
+  else if (item.petsAllowed === false) tags.push("不可寵");
+  if ((item.parkingType || "").trim()) tags.push("車位");
+  return tags;
+}
+
+function PerkTag({ tag }: { tag: string }) {
+  return (
+    <span className="inline-flex rounded bg-zinc-100 px-1.5 py-0.5 text-[13px] font-semibold leading-none text-zinc-600">
+      {tag}
+    </span>
+  );
+}
+
 function ListingPickRow({
   item,
   selected,
@@ -125,27 +162,27 @@ function ListingPickRow({
   badge?: string;
 }) {
   const photo = listingPhotos(item)[0];
-  const selectLabel = selected ? "取消想看" : "想看";
-  const areaText = [
-    `${item.city}${item.district}`,
-    guestFacingAddress(item.address) || null,
-    layoutLabel(item),
-    `${item.areaPing} 坪`,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const place = guestListingPlaceLine(item);
+  const layout = layoutLabel(item);
+  const pingText = `${item.areaPing} 坪`;
+  const leftPerks = guestListingPerkTags(item);
+  const pricePerks = guestListingPriceSideTags(item);
+  const openLabel = `查看${place || "物件"}的照片與資訊`;
+  const selectLabel = selected ? `取消想看 ${place || "物件"}` : `想看 ${place || "物件"}`;
+  const rentMain = item.price.toLocaleString("zh-TW");
+  const showSelected = !hideToggle && selected;
 
   return (
     <article
-      className={`flex gap-3 px-3 py-3.5 transition-colors ${
-        !hideToggle && selected ? "bg-[#e8f8ef]" : "bg-white"
+      className={`flex items-center gap-3 px-3 py-3 transition-colors ${
+        showSelected ? "bg-[#e8f8ef]" : "bg-white"
       }`}
     >
       <button
         type="button"
         onClick={onOpen}
-        aria-label={`查看${item.title}的照片與資訊`}
-        className="relative h-[6.75rem] w-[6.75rem] shrink-0 overflow-hidden rounded-2xl bg-zinc-100 ring-1 ring-zinc-200/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#06c755]"
+        aria-label={openLabel}
+        className="relative h-[6.25rem] w-[6.25rem] shrink-0 overflow-hidden rounded-xl bg-zinc-100 ring-1 ring-zinc-200/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#06c755]"
       >
         {photo ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -153,9 +190,9 @@ function ListingPickRow({
         ) : (
           <span className="flex h-full items-center justify-center text-[11px] text-zinc-400">無圖</span>
         )}
-        {!hideToggle && selected ? (
-          <span className="absolute left-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-[#06c755] text-white shadow-sm">
-            <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" fill="none" aria-hidden>
+        {showSelected ? (
+          <span className="absolute left-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#06c755] text-white">
+            <svg viewBox="0 0 20 20" className="h-3 w-3" fill="none" aria-hidden>
               <path
                 d="M4.5 10.5 8 14l7.5-8"
                 stroke="currentColor"
@@ -168,42 +205,51 @@ function ListingPickRow({
         ) : null}
       </button>
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        {badge ? (
-          <span className="mb-1 inline-flex w-fit rounded-full bg-[#06c755] px-2 py-0.5 text-[10px] font-bold tracking-wide text-white">
-            {badge}
-          </span>
-        ) : null}
-        <button
-          type="button"
-          onClick={onOpen}
-          className="text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#06c755]"
-        >
-          <h3 className="line-clamp-2 text-[15px] font-bold leading-snug text-zinc-900">{item.title}</h3>
-          <p className="mt-1 line-clamp-1 text-[11px] leading-snug text-zinc-500">{areaText}</p>
-          <p className="mt-1.5 text-[17px] font-bold tabular-nums leading-none text-red-600">
-            {formatRent(item.price)}
+      <button
+        type="button"
+        onClick={hideToggle ? onOpen : onToggle}
+        aria-pressed={hideToggle ? undefined : selected}
+        aria-label={hideToggle ? openLabel : selectLabel}
+        className="flex h-[6.25rem] min-w-0 flex-1 flex-col justify-between text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#06c755]"
+      >
+        <div className="flex items-baseline justify-between gap-2">
+          <p className="min-w-0 flex-1 truncate text-[15px] font-bold leading-none text-zinc-900">
+            {place || "物件位置"}
           </p>
-        </button>
+          {badge ? (
+            <span className="shrink-0 rounded-full bg-[#06c755] px-2 py-0.5 text-[10px] font-bold leading-none tracking-wide text-white">
+              {badge}
+            </span>
+          ) : null}
+        </div>
 
-        {!hideToggle ? (
-          <div className="mt-auto flex items-center justify-end pt-2.5">
-            <button
-              type="button"
-              onClick={onToggle}
-              aria-pressed={selected}
-              aria-label={selectLabel}
-              className={`inline-flex min-h-9 touch-manipulation items-center gap-1 rounded-full px-3 text-xs font-bold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#06c755] ${
-                selected
-                  ? "bg-[#06c755] text-white"
-                  : "border border-zinc-300 bg-white text-zinc-800"
-              }`}
-            >
-              {selected ? "已選想看" : "想看這間"}
-            </button>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
+            <p className="truncate text-[14px] font-semibold leading-none text-zinc-800">{layout}</p>
+            <p className="truncate text-[14px] font-medium leading-none text-zinc-500">{pingText}</p>
           </div>
-        ) : null}
-      </div>
+          <p className="shrink-0 text-right text-[15px] font-bold tabular-nums leading-none text-red-600">
+            {rentMain}
+            <span className="ml-0.5 text-[11px] font-semibold text-red-600/80">元/月</span>
+          </p>
+        </div>
+
+        <div className="flex min-h-[1.125rem] items-center justify-between gap-2">
+          <p className="flex min-w-0 flex-1 flex-wrap gap-1">
+            {leftPerks.map((tag) => (
+              <PerkTag key={tag} tag={tag} />
+            ))}
+          </p>
+          <div className="flex shrink-0 items-center gap-1">
+            {pricePerks.map((tag) => (
+              <PerkTag key={tag} tag={tag} />
+            ))}
+            {showSelected ? (
+              <span className="text-[11px] font-bold leading-none text-[#067a36]">已選</span>
+            ) : null}
+          </div>
+        </div>
+      </button>
     </article>
   );
 }
@@ -422,7 +468,9 @@ function ListingDetailSheet({
     <div className="fixed inset-0 z-30 flex flex-col bg-black/40 p-3">
       <div className="mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col overflow-hidden rounded-2xl bg-white shadow-lg">
         <div className="flex items-center justify-between gap-2 border-b border-zinc-100 px-3 py-2.5">
-          <p className="truncate text-sm font-bold text-zinc-900">{listing.title}</p>
+          <p className="min-w-0 truncate text-sm font-bold text-zinc-900">
+            {guestListingPlaceLine(listing) || "物件詳情"}
+          </p>
           <button
             type="button"
             onClick={onClose}
@@ -483,11 +531,7 @@ function ListingDetailSheet({
 
           <div className="space-y-5 px-3 py-4">
             <div>
-              <span className="inline-block rounded bg-emerald-600 px-2 py-0.5 text-xs font-bold text-white">
-                出租
-              </span>
-              <h3 className="mt-2 text-lg font-extrabold leading-snug text-zinc-900">{listing.title}</h3>
-              <div className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                 <span className="text-3xl font-extrabold tabular-nums tracking-tight text-red-600">
                   {listing.price.toLocaleString("zh-TW")}
                 </span>
@@ -496,6 +540,10 @@ function ListingDetailSheet({
                   <span className="text-sm text-zinc-500">押金 {listing.securityDeposit.trim()}</span>
                 ) : null}
               </div>
+              <p className="mt-2 text-[15px] font-bold leading-snug text-zinc-900">
+                {guestListingPlaceLine(listing) || "物件位置"}
+              </p>
+              <p className="mt-1 text-[13px] leading-snug text-zinc-500">{guestListingMetaLine(listing)}</p>
             </div>
 
             <div>
@@ -773,7 +821,7 @@ export function LineLiffRentForm({
   );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [done, setDone] = useState<{ when: string; titles: string[] } | null>(null);
+  const [done, setDone] = useState<{ when: string; lines: string[] } | null>(null);
   /** 已有完整個資：選完物件後只問時間 */
   const [profileReady, setProfileReady] = useState(false);
   const [openViewing, setOpenViewing] = useState<{
@@ -1353,7 +1401,14 @@ export function LineLiffRentForm({
         throw new Error(data?.error || "送出失敗");
       }
 
-      setDone({ when, titles: picked.map((item) => item.title) });
+      setDone({
+        when,
+        lines: picked.map((item) => {
+          const place = guestListingPlaceLine(item);
+          const meta = guestListingMetaLine(item);
+          return [place, meta, formatRent(item.price)].filter(Boolean).join(" · ");
+        }),
+      });
       if (clientSent && liff?.isInClient()) {
         try {
           liff.closeWindow();
@@ -1386,9 +1441,9 @@ export function LineLiffRentForm({
           <p className="mt-0.5 font-semibold text-zinc-900">{done.when}</p>
           <p className="mt-3 text-xs font-medium text-zinc-500">想看的物件</p>
           <ul className="mt-1 space-y-1.5">
-            {done.titles.map((title) => (
-              <li key={title} className="font-medium text-zinc-900">
-                · {title}
+            {done.lines.map((line) => (
+              <li key={line} className="font-medium leading-snug text-zinc-900">
+                · {line}
               </li>
             ))}
           </ul>
@@ -1469,7 +1524,7 @@ export function LineLiffRentForm({
                     ? "有新上架的物件符合你的條件"
                     : skipCriteria
                     ? "看完這間可直接約時間"
-                    : "點照片看詳情；右側按鈕選想看"
+                    : "點照片看詳情；點文字選想看"
                   : showSavedProfile
                     ? "已有資料，只要選看屋時間"
                     : "填資料與看屋時間後送出"}
@@ -1700,7 +1755,7 @@ export function LineLiffRentForm({
                   ) : directMode === "fresh" ? (
                     <p className="mt-0.5 text-[11px] text-zinc-500">
                       {directListing?.listingIds.length
-                        ? "符合你條件的新上架物件排在最前面，勾選想看的"
+                        ? "符合你條件的新上架物件排在最前面，點文字選想看"
                         : "新物件已看過，下方是符合你條件的物件"}
                     </p>
                   ) : directMode === "similar" ? (
@@ -1928,11 +1983,11 @@ export function LineLiffRentForm({
                       return (
                         <div
                           key={item.id || item.title}
-                          className="rounded-2xl border border-zinc-200 bg-white px-3 py-3"
+                          className="flex items-end justify-between gap-3 rounded-2xl border border-zinc-200 bg-white px-3 py-3"
                         >
-                          <p className="text-sm font-bold text-zinc-900">{item.title}</p>
+                          <p className="min-w-0 text-sm font-bold text-zinc-900">已選物件</p>
                           {item.price > 0 ? (
-                            <p className="mt-1 text-sm font-semibold text-red-600">
+                            <p className="shrink-0 text-[15px] font-bold tabular-nums text-red-600">
                               {formatRent(item.price)}
                             </p>
                           ) : null}

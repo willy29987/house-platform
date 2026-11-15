@@ -46,12 +46,21 @@ function InstantShell({ mode }: { mode: LiffBootstrapHint["mode"] }) {
         ) : (
           <div className="divide-y divide-zinc-200 border-y border-zinc-200 bg-white">
             {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="flex gap-2.5 px-3 py-3">
-                <div className="h-[7.25rem] w-[7.25rem] shrink-0 animate-pulse rounded-xl bg-zinc-200" />
-                <div className="min-w-0 flex-1 space-y-2 py-1">
-                  <div className="h-4 w-4/5 animate-pulse rounded bg-zinc-200" />
-                  <div className="h-3 w-3/5 animate-pulse rounded bg-zinc-100" />
-                  <div className="h-4 w-2/5 animate-pulse rounded bg-zinc-200" />
+              <div key={i} className="flex items-center gap-3 px-3 py-3">
+                <div className="h-[6.25rem] w-[6.25rem] shrink-0 animate-pulse rounded-xl bg-zinc-200" />
+                <div className="flex h-[6.25rem] min-w-0 flex-1 flex-col justify-between">
+                  <div className="h-4 w-3/5 animate-pulse rounded bg-zinc-200" />
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex flex-col gap-2">
+                      <div className="h-3.5 w-24 animate-pulse rounded bg-zinc-200" />
+                      <div className="h-3.5 w-14 animate-pulse rounded bg-zinc-100" />
+                    </div>
+                    <div className="h-4 w-16 animate-pulse rounded bg-zinc-200" />
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="h-3 w-1/4 animate-pulse rounded bg-zinc-100" />
+                    <div className="h-3 w-12 animate-pulse rounded bg-zinc-100" />
+                  </div>
                 </div>
               </div>
             ))}
