@@ -1,11 +1,7 @@
 import { ListingType } from "@prisma/client";
 import { extract591ListingId, find591UrlInText } from "@/lib/listing-591-id";
 import { appendLineRentalCase, type LineRentalCase } from "@/lib/line-rental-cases";
-import {
-  buildLiffRentAssistantUrl,
-  truncateLineTemplateText,
-  type LineMessage,
-} from "@/lib/line-messaging";
+import { buildLiffRentAssistantUrl, type LineMessage } from "@/lib/line-messaging";
 import {
   describeExternalListing,
   enrichInfoFromScreenshotText,
@@ -66,10 +62,10 @@ function liffUrlForGuest(input: {
 }
 
 const PICK_VIEWING_LABEL = "挑選看屋時間";
-/** 系統讀不到物件時給客人的固定文案 */
-const CANNOT_READ_LISTING_TEXT = "這間目前無法安排看屋。要找類似條件嗎？";
+/** 不動產實踐家品牌色 */
+const BRAND_NAVY = "#0b2545";
 
-/** 已讀到客戶傳的物件：只回一顆按鈕，不要說明文字。 */
+/** 只回一顆「挑選看屋時間」按鈕（讀得到／讀不到都用同一樣）。寬度約原 mega 的 2/3。 */
 function pickViewingTimeButtonOnly(uri: string): LineMessage[] {
   return [
     {
@@ -80,16 +76,25 @@ function pickViewingTimeButtonOnly(uri: string): LineMessage[] {
         size: "mega",
         body: {
           type: "box",
-          layout: "vertical",
-          paddingAll: "16px",
+          layout: "horizontal",
+          paddingAll: "12px",
           contents: [
+            { type: "filler", flex: 1 },
             {
-              type: "button",
-              style: "primary",
-              height: "md",
-              color: "#06C755",
-              action: { type: "uri", label: PICK_VIEWING_LABEL, uri },
+              type: "box",
+              layout: "vertical",
+              flex: 4,
+              contents: [
+                {
+                  type: "button",
+                  style: "primary",
+                  height: "md",
+                  color: BRAND_NAVY,
+                  action: { type: "uri", label: PICK_VIEWING_LABEL, uri },
+                },
+              ],
             },
+            { type: "filler", flex: 1 },
           ],
         },
       },
@@ -97,19 +102,9 @@ function pickViewingTimeButtonOnly(uri: string): LineMessage[] {
   ];
 }
 
-/** 系統讀不到物件：固定文案 +「挑選看屋時間」。 */
+/** 系統讀不到物件：與讀得到相同，只回按鈕。 */
 function cannotReadListingActions(uri: string): LineMessage[] {
-  return [
-    {
-      type: "template",
-      altText: CANNOT_READ_LISTING_TEXT,
-      template: {
-        type: "buttons",
-        text: truncateLineTemplateText(CANNOT_READ_LISTING_TEXT, 60),
-        actions: [{ type: "uri", label: PICK_VIEWING_LABEL, uri }],
-      },
-    },
-  ];
+  return pickViewingTimeButtonOnly(uri);
 }
 
 /** 判定是官網哪一間：不論連結、截圖或照片，只回「挑選看屋時間」。 */
