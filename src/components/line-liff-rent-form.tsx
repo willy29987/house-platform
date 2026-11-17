@@ -1822,9 +1822,6 @@ export function LineLiffRentForm({
               <div className="border-y border-zinc-200 bg-white">
                 <div className="border-b border-zinc-100 px-3 py-2.5">
                   <p className="text-[15px] font-bold text-zinc-900">類似物件 {similar.length}</p>
-                  <p className="mt-0.5 text-[11px] text-zinc-500">
-                    {similarNotes[0] || "同區優先、租金相差 5,000 元內，可一併想看"}
-                  </p>
                 </div>
                 <div className="divide-y divide-zinc-100">
                   {similar.map((item) => (
