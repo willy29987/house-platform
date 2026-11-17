@@ -77,12 +77,12 @@ function pickViewingTimeImageUrl() {
     process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
     "https://house-platform.vercel.app";
   // query 避免 LINE 快取舊圖
-  return `${base}/line/pick-viewing-time.png?v=3`;
+  return `${base}/line/pick-viewing-time.png?v=6`;
 }
 
 /**
- * 圖文選單同款圖片卡片（字體與版型一致）：英文 PICK VIEWING TIME + 中文挑選看屋時間。
- * 整張可點，無白邊／無其他文案。
+ * LINE 氣泡本身是圓角：圖內金框也用圓弧雙線，貼齊氣泡裁切。
+ * 放 body（padding 0）整張可點，無白邊／無其他文案。
  */
 function pickViewingTimeButtonOnly(uri: string): LineMessage[] {
   return [
@@ -95,13 +95,21 @@ function pickViewingTimeButtonOnly(uri: string): LineMessage[] {
         styles: {
           body: { backgroundColor: BRAND_NAVY },
         },
-        hero: {
-          type: "image",
-          url: pickViewingTimeImageUrl(),
-          size: "full",
-          aspectRatio: "2500:843",
-          aspectMode: "cover",
-          action: { type: "uri", label: PICK_VIEWING_LABEL, uri },
+        body: {
+          type: "box",
+          layout: "vertical",
+          paddingAll: "0px",
+          backgroundColor: BRAND_NAVY,
+          contents: [
+            {
+              type: "image",
+              url: pickViewingTimeImageUrl(),
+              size: "full",
+              aspectRatio: "2500:843",
+              aspectMode: "cover",
+              action: { type: "uri", label: PICK_VIEWING_LABEL, uri },
+            },
+          ],
         },
       },
     },
