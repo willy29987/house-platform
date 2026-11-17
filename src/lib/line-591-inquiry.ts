@@ -1,7 +1,11 @@
 import { ListingType } from "@prisma/client";
 import { extract591ListingId, find591UrlInText } from "@/lib/listing-591-id";
 import { appendLineRentalCase, type LineRentalCase } from "@/lib/line-rental-cases";
-import { buildLiffRentAssistantUrl, type LineMessage } from "@/lib/line-messaging";
+import {
+  buildLiffRentAssistantUrl,
+  buildPublicBaseUrl,
+  type LineMessage,
+} from "@/lib/line-messaging";
 import {
   describeExternalListing,
   enrichInfoFromScreenshotText,
@@ -65,13 +69,19 @@ function liffUrlForGuest(input: {
 }
 
 const PICK_VIEWING_LABEL = "挑選看屋時間";
-/** 不動產實踐家品牌色（與圖文選單一致） */
 const BRAND_NAVY = "#0b2545";
-const BRAND_GOLD = "#c9a24b";
+
+function pickViewingTimeImageUrl() {
+  const base =
+    buildPublicBaseUrl() ||
+    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
+    "https://house-platform.vercel.app";
+  return `${base}/line/pick-viewing-time.png`;
+}
 
 /**
- * 圖文選單同款卡片：深藍底＋金框，整張可點。
- * 氣泡本身就是深藍，不再留白邊。
+ * 圖文選單同款圖片卡片（字體與版型一致）：英文 PICK VIEWING TIME + 中文挑選看屋時間。
+ * 整張可點，無白邊／無其他文案。
  */
 function pickViewingTimeButtonOnly(uri: string): LineMessage[] {
   return [
@@ -84,75 +94,13 @@ function pickViewingTimeButtonOnly(uri: string): LineMessage[] {
         styles: {
           body: { backgroundColor: BRAND_NAVY },
         },
-        body: {
-          type: "box",
-          layout: "vertical",
-          backgroundColor: BRAND_NAVY,
-          paddingAll: "10px",
+        hero: {
+          type: "image",
+          url: pickViewingTimeImageUrl(),
+          size: "full",
+          aspectRatio: "2500:843",
+          aspectMode: "cover",
           action: { type: "uri", label: PICK_VIEWING_LABEL, uri },
-          contents: [
-            {
-              type: "box",
-              layout: "vertical",
-              backgroundColor: BRAND_GOLD,
-              cornerRadius: "8px",
-              paddingAll: "2px",
-              contents: [
-                {
-                  type: "box",
-                  layout: "vertical",
-                  backgroundColor: BRAND_NAVY,
-                  cornerRadius: "6px",
-                  paddingAll: "16px",
-                  contents: [
-                    {
-                      type: "text",
-                      text: "FIND YOUR HOME",
-                      size: "xxs",
-                      color: BRAND_GOLD,
-                      align: "center",
-                      weight: "bold",
-                    },
-                    {
-                      type: "text",
-                      text: PICK_VIEWING_LABEL,
-                      size: "xl",
-                      color: "#FFFFFF",
-                      align: "center",
-                      weight: "bold",
-                      margin: "md",
-                    },
-                    {
-                      type: "box",
-                      layout: "horizontal",
-                      margin: "md",
-                      contents: [
-                        { type: "filler" },
-                        {
-                          type: "box",
-                          layout: "vertical",
-                          width: "48px",
-                          height: "2px",
-                          backgroundColor: BRAND_GOLD,
-                          contents: [],
-                        },
-                        { type: "filler" },
-                      ],
-                    },
-                    {
-                      type: "text",
-                      text: "依您的需求，精選合適房源",
-                      size: "xs",
-                      color: "#FFFFFF",
-                      align: "center",
-                      margin: "md",
-                      wrap: true,
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
         },
       },
     },
