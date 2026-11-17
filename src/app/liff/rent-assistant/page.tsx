@@ -1,5 +1,9 @@
 import { LineLiffRentAssistant } from "@/components/line-liff-rent-assistant";
-import { LINE_LIFF_RENT_ASSISTANT_ID, resolveLiffBootstrapHint } from "@/lib/line-liff-id";
+import {
+  LINE_LIFF_RENT_ASSISTANT_ID,
+  liffStateParams,
+  resolveLiffBootstrapHint,
+} from "@/lib/line-liff-id";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +16,7 @@ export default async function LiffRentAssistantPage({
     listingId?: string | string[];
     similar?: string | string[];
     fresh?: string | string[];
+    notice?: string | string[];
     "liff.state"?: string;
   }>;
 }) {
@@ -21,6 +26,10 @@ export default async function LiffRentAssistantPage({
   const listingBaseUrl =
     process.env.NEXT_PUBLIC_LISTING_BASE_URL?.replace(/\/$/, "") ||
     "https://house-platform.vercel.app";
+  const noticeRaw = Array.isArray(params.notice) ? params.notice[0] : params.notice;
+  const noticeFromState = liffStateParams(params["liff.state"]).get("notice");
+  const entryNotice =
+    (noticeRaw?.trim() || noticeFromState?.trim()) === "unmatched" ? "unmatched" : null;
 
   const bootstrapQuery = new URLSearchParams();
   if (params.uid) bootstrapQuery.set("uid", params.uid);
@@ -29,6 +38,7 @@ export default async function LiffRentAssistantPage({
     const similar = Array.isArray(params.similar) ? params.similar[0] : params.similar;
     if (similar) bootstrapQuery.set("similar", similar);
   }
+  if (entryNotice) bootstrapQuery.set("notice", entryNotice);
   const listingIds = Array.isArray(params.listingId)
     ? params.listingId
     : params.listingId
@@ -50,7 +60,12 @@ export default async function LiffRentAssistantPage({
         as="fetch"
         crossOrigin="anonymous"
       />
-      <LineLiffRentAssistant liffId={liffId} listingBaseUrl={listingBaseUrl} hint={hint} />
+      <LineLiffRentAssistant
+        liffId={liffId}
+        listingBaseUrl={listingBaseUrl}
+        hint={hint}
+        entryNotice={entryNotice}
+      />
     </>
   );
 }

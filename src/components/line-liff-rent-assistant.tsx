@@ -76,10 +76,13 @@ export function LineLiffRentAssistant({
   liffId,
   listingBaseUrl,
   hint,
+  entryNotice = null,
 }: {
   liffId: string;
   listingBaseUrl: string;
   hint: LiffBootstrapHint;
+  /** 截圖讀不到時進條件頁的頂部提示 */
+  entryNotice?: "unmatched" | null;
 }) {
   const [payload, setPayload] = useState<{
     listings: RentalMatchListing[];
@@ -197,6 +200,7 @@ export function LineLiffRentAssistant({
       displayName={payload.displayName}
       listingBaseUrl={listingBaseUrl}
       directListing={payload.directListing}
+      entryNotice={entryNotice}
       onSubmitted={async () => {
         if (!liffId) return;
         try {

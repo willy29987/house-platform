@@ -74,8 +74,9 @@ export async function buildLiffBootstrap(input: {
   ]);
   const priorListingIds = openViewing?.picked.map((item) => item.id) ?? [];
 
-  // 限制筆數，避免一次撈全庫拖慢 LIFF
-  const cards = await loadRentalMatchListings(80, [
+  // 類似物件要「有幾間列幾間」，對中物件時改撈全部已上架；其餘仍限筆數保速
+  const needFullCatalog = similarMode && pushedListingIds.length > 0;
+  const cards = await loadRentalMatchListings(needFullCatalog ? null : 80, [
     ...pushedListingIds,
     ...priorListingIds,
     ...freshIds,

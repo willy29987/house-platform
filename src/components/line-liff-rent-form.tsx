@@ -714,6 +714,7 @@ export function LineLiffRentForm({
   lineUserId,
   displayName,
   directListing = null,
+  entryNotice = null,
   onSubmitted,
 }: {
   listings: RentalMatchListing[];
@@ -723,6 +724,8 @@ export function LineLiffRentForm({
   /** 舊呼叫端仍會傳；客人端不再連到官網 */
   listingBaseUrl?: string;
   directListing?: LiffDirectListingEntry | null;
+  /** 截圖／連結讀不到時，條件頁頂部提示 */
+  entryNotice?: "unmatched" | null;
   onSubmitted?: (caseId: string) => void;
 }) {
   const today = useMemo(() => taipeiTodayYmd(), []);
@@ -1540,7 +1543,16 @@ export function LineLiffRentForm({
         }`}
       >
         {step === "criteria" ? (
-          <Section title="找房條件" className="space-y-4">
+          <>
+            {entryNotice === "unmatched" ? (
+              <div
+                className="rounded-2xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-[13px] leading-relaxed text-amber-950"
+                role="status"
+              >
+                沒有搜尋到這一間，可以挑選您要的條件搜索適合的物件。
+              </div>
+            ) : null}
+            <Section title="找房條件" className="space-y-4">
             <div>
               <p className="mb-2 text-xs font-semibold text-zinc-500">
                 縣市 <span className="font-medium text-zinc-400">可複選</span>
@@ -1734,6 +1746,7 @@ export function LineLiffRentForm({
               </div>
             </div>
           </Section>
+          </>
         ) : null}
 
         {step === "listings" ? (
@@ -1813,7 +1826,7 @@ export function LineLiffRentForm({
                 <div className="border-b border-zinc-100 px-3 py-2.5">
                   <p className="text-[15px] font-bold text-zinc-900">類似物件 {similar.length}</p>
                   <p className="mt-0.5 text-[11px] text-zinc-500">
-                    {similarNotes[0] || "同區／房型／租金相近，可一併想看"}
+                    {similarNotes[0] || "同區優先、租金相差 5,000 元內，可一併想看"}
                   </p>
                 </div>
                 <div className="divide-y divide-zinc-100">

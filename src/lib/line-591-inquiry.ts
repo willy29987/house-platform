@@ -53,11 +53,14 @@ function liffUrlForGuest(input: {
   lineUserId?: string | null;
   listingId?: string;
   similar?: boolean;
+  /** 截圖／連結讀不到官網物件時，進條件頁並顯示提示 */
+  notice?: "unmatched";
 }) {
   const query: Record<string, string> = {};
   if (input.lineUserId?.startsWith("U")) query.uid = input.lineUserId;
   if (input.listingId) query.listingId = input.listingId;
   if (input.similar) query.similar = "1";
+  if (input.notice) query.notice = input.notice;
   return buildLiffRentAssistantUrl(Object.keys(query).length ? query : undefined);
 }
 
@@ -354,7 +357,9 @@ export async function handle591LinkInquiry(input: {
 
   return {
     caseRecord: created,
-    messages: cannotReadListingActions(liffHome),
+    messages: cannotReadListingActions(
+      liffUrlForGuest({ lineUserId: input.lineUserId, notice: "unmatched" }),
+    ),
   };
 }
 
@@ -536,6 +541,8 @@ export async function handleImageInquiry(input: {
 
   return {
     caseRecord: created,
-    messages: cannotReadListingActions(liffUrlForGuest({ lineUserId: input.lineUserId })),
+    messages: cannotReadListingActions(
+      liffUrlForGuest({ lineUserId: input.lineUserId, notice: "unmatched" }),
+    ),
   };
 }
