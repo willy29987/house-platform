@@ -76,7 +76,8 @@ function pickViewingTimeImageUrl() {
     buildPublicBaseUrl() ||
     process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
     "https://house-platform.vercel.app";
-  return `${base}/line/pick-viewing-time.png`;
+  // query 避免 LINE 快取舊圖
+  return `${base}/line/pick-viewing-time.png?v=3`;
 }
 
 /**
