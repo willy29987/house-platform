@@ -25,6 +25,7 @@ import {
   normalizeOwnerTrackingStore,
   type OwnerTrackingStore,
 } from "@/lib/owner-tracking-preview";
+import { purgeCompanySyncContentUpdateFollowUps } from "@/lib/owner-tracking-staff-stats";
 import { prisma } from "@/lib/prisma";
 
 /** 591 自抓固定負責人；不吃會變成 system 的錯誤 env */
@@ -644,7 +645,7 @@ async function upsertOne(candidate: Banqiao591ListItem): Promise<"created" | "up
         // 已存在者不改刊登狀態（新建才保持未刊登）
       },
     });
-    // 僅內容有變才覆寫屋主追蹤並補當天電訪；沒變不碰追蹤日／次數
+    // 僅內容有變才覆寫屋主追蹤欄位；不補電訪（電訪只記全新案件）
     try {
       await addPublishedListingToViewableOwnerCase({
         listingId: existing.id,
@@ -741,6 +742,7 @@ export async function scrubBanqiaoSyncedOwnerTrackingNotes(): Promise<{
   casesFixed: number;
   notesCleared: number;
   systemActorsFixed: number;
+  contentUpdateFollowUpsRemoved: number;
 }> {
   const listings = await prisma.listing.findMany({
     where: { source591Id: { not: null }, isPublished: false },
@@ -789,7 +791,7 @@ export async function scrubBanqiaoSyncedOwnerTrackingNotes(): Promise<{
     return next;
   });
 
-  const followUps = store.followUps.map((row) => {
+  const followUpsMapped = store.followUps.map((row) => {
     let next = row;
     const by = (row.createdBy || "").trim();
     const isSystem = by.toLowerCase() === "system";
@@ -807,12 +809,23 @@ export async function scrubBanqiaoSyncedOwnerTrackingNotes(): Promise<{
     return next;
   });
 
+  // 自抓內容更新灌的空備註電訪拿掉；只留每案第一筆（全新物件）
+  const purged = purgeCompanySyncContentUpdateFollowUps({
+    cases,
+    followUps: followUpsMapped,
+  });
+
   await writeAdminCloudPayload(
     ADMIN_CLOUD_DATA_KEYS.ownerTracking,
-    { cases, followUps },
+    purged.store,
     { replace: true },
   );
-  return { casesFixed, notesCleared, systemActorsFixed };
+  return {
+    casesFixed,
+    notesCleared,
+    systemActorsFixed,
+    contentUpdateFollowUpsRemoved: purged.removed,
+  };
 }
 
 function isCompanySyncActor(username: string | null | undefined): boolean {

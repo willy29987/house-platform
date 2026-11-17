@@ -21,22 +21,54 @@ export function normalizeStaffOpsDate(raw: string | null | undefined, now = new 
   return taipeiTodayYmd(now);
 }
 
+/** R001／system＝板橋自抓（畫面顯示 company） */
+export function isCompanySyncCallActor(username: string | null | undefined): boolean {
+  const value = (username ?? "").trim().toLowerCase();
+  return value === "r001" || value === "system";
+}
+
 /**
- * 電訪＝屋主追蹤在「當天」寫入的追蹤（含首次建檔空備註、591 自抓新建／內容變更補筆、後續追蹤）。
- * 只排除 591 下架／釋出／帶入上架文案與無效案；自抓空備註要算。
- * 自抓內容未變的心跳同步不再寫追蹤，故不會進今日電訪。
+ * 電訪＝當天追蹤筆。自抓只算「全新案件」的第一筆；內容有變的更新補筆不算。
+ * 另排除 591 下架／釋出／帶入上架文案與無效案。
  */
 export function isFollowUpExcludedFromDailyCalls(
   f: Pick<OwnerFollowUpPreview, "note" | "status" | "createdBy">,
 ): boolean {
   const note = f.note.trim();
-  // 注意：不因 createdBy=system 排除——舊自抓曾寫成 system，仍應算電訪
   if (note.includes("591") && note.includes("下架")) return true;
   if (note.includes("可再開發") && note.includes("591")) return true;
   if (note.includes("下架") && (note.includes("連結") || note.includes("釋出"))) return true;
-  // 「自動同步」舊文案若只是同步標記且無下架語意，仍算自抓電訪；僅排除帶入上架類
   if (note.includes("591 帶入") || note.includes("帶入上架")) return true;
   return f.status.trim() === "無效／重複";
+}
+
+/**
+ * 自抓「內容更新」灌的空備註：同一案件若已有更早追蹤，這筆不算／可刪。
+ * 全新案件的第一筆空備註要保留並計入電訪。
+ */
+export function isCompanySyncContentUpdateFollowUp(
+  f: Pick<OwnerFollowUpPreview, "id" | "caseId" | "note" | "createdBy" | "createdAt">,
+  store: Pick<OwnerTrackingStore, "followUps">,
+): boolean {
+  if (!isCompanySyncCallActor(f.createdBy)) return false;
+  if (f.note.trim()) return false;
+  return store.followUps.some((other) => {
+    if (other.caseId !== f.caseId || other.id === f.id) return false;
+    if (other.createdAt < f.createdAt) return true;
+    if (other.createdAt === f.createdAt && other.id.localeCompare(f.id) < 0) return true;
+    return false;
+  });
+}
+
+/** 刪除自抓內容更新灌進去的空備註電訪（保留每案第一筆＝新建）。 */
+export function purgeCompanySyncContentUpdateFollowUps(
+  store: OwnerTrackingStore,
+): { store: OwnerTrackingStore; removed: number } {
+  const followUps = store.followUps.filter((f) => !isCompanySyncContentUpdateFollowUp(f, store));
+  return {
+    store: { ...store, followUps },
+    removed: store.followUps.length - followUps.length,
+  };
 }
 
 function bump(map: Record<string, number>, key: string, by = 1) {
@@ -45,7 +77,7 @@ function bump(map: Record<string, number>, key: string, by = 1) {
   map[k] = (map[k] ?? 0) + by;
 }
 
-/** 指定台北日的追蹤筆數（電訪代理指標）：依 followUp.createdBy；排除 591 下架類 */
+/** 指定台北日的追蹤筆數（電訪代理指標）：依 followUp.createdBy；排除 591 下架類與自抓內容更新補筆 */
 export function countFollowUpsByStaffOnDate(
   store: OwnerTrackingStore,
   dayYmd: string,
@@ -56,7 +88,9 @@ export function countFollowUpsByStaffOnDate(
   for (const f of store.followUps) {
     if (isoToTaipeiYmd(f.createdAt, now) !== day) continue;
     if (isFollowUpExcludedFromDailyCalls(f)) continue;
-    bump(out, f.createdBy);
+    if (isCompanySyncContentUpdateFollowUp(f, store)) continue;
+    const actor = isCompanySyncCallActor(f.createdBy) ? "R001" : f.createdBy;
+    bump(out, actor);
   }
   return out;
 }
@@ -151,13 +185,19 @@ export function listFollowUpsOnDate(
   const day = normalizeStaffOpsDate(dayYmd, now);
   const caseById = new Map(store.cases.map((c) => [c.id, c]));
   return store.followUps
-    .filter((f) => isoToTaipeiYmd(f.createdAt, now) === day && !isFollowUpExcludedFromDailyCalls(f))
+    .filter(
+      (f) =>
+        isoToTaipeiYmd(f.createdAt, now) === day &&
+        !isFollowUpExcludedFromDailyCalls(f) &&
+        !isCompanySyncContentUpdateFollowUp(f, store),
+    )
     .slice()
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))
     .map((f) => {
       const ownerCase = caseById.get(f.caseId);
       return {
         ...f,
+        createdBy: isCompanySyncCallActor(f.createdBy) ? "R001" : f.createdBy,
         caseAddress: ownerCase
           ? [ownerCase.city, ownerCase.district, ownerCase.address].filter(Boolean).join("")
           : "",
