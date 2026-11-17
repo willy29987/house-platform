@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ListingAmenityGrid } from "@/components/listing-amenity-grid";
 import { ListingHistoryBack } from "@/components/listing-history-back";
 import { ListingPhotoMosaic } from "@/components/listing-photo-mosaic";
+import { customerListingLabel } from "@/lib/customer-listing-label";
 import { EQUIPMENT_ITEMS, FURNITURE_ITEMS } from "@/lib/furniture-appliance-value";
 import { getListingById, maskAddress } from "@/lib/listings";
 import { getMrtBadgeClass, shortMrtLine } from "@/lib/mrt";
@@ -172,7 +173,11 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
 
       {/* ============== 照片 ============== */}
       <section className="mb-6">
-        <ListingPhotoMosaic title={listing.title} coverImage={listing.coverImage} images={listing.images ?? []} />
+        <ListingPhotoMosaic
+          title={customerListingLabel(listing)}
+          coverImage={listing.coverImage}
+          images={listing.images ?? []}
+        />
       </section>
 
       <div className="min-w-0">
@@ -186,7 +191,7 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
               {isRent ? "出租" : "出售"}
             </span>
             <h1 className="mt-2 text-2xl font-extrabold leading-snug tracking-tight text-zinc-900 sm:text-[1.75rem]">
-              {listing.title}
+              {customerListingLabel(listing)}
             </h1>
 
             <div className="mt-5 flex flex-wrap items-baseline gap-x-3 gap-y-1">

@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import { FavoriteButton } from "@/components/favorite-button";
+import { customerListingLabel } from "@/lib/customer-listing-label";
 
 type Listing = {
   id: string;
@@ -29,7 +30,7 @@ function formatPrice(price: number) {
 
 function getCoverImage(listing: Listing) {
   if (listing.coverImage) return listing.coverImage;
-  const seed = encodeURIComponent(listing.title);
+  const seed = encodeURIComponent(listing.id);
   return `https://picsum.photos/seed/${seed}/600/400`;
 }
 
@@ -92,7 +93,7 @@ export function ListingTabs({ listings, hasFilter }: ListingTabsProps) {
                 <div className="relative h-48 w-full">
                   <Image
                     src={getCoverImage(listing)}
-                    alt={listing.title}
+                    alt={customerListingLabel(listing)}
                     fill
                     className="object-cover"
                     sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
@@ -113,7 +114,7 @@ export function ListingTabs({ listings, hasFilter }: ListingTabsProps) {
                     {listing.district}
                   </p>
                   <h2 className="mt-1 line-clamp-2 text-base font-semibold text-zinc-900">
-                    {listing.title}
+                    {customerListingLabel(listing)}
                   </h2>
                   <p className="mt-1 text-xs text-zinc-500">
                     {listing.rooms} 房 {listing.bathrooms} 衛 ・ {listing.areaPing} 坪

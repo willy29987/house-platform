@@ -8,6 +8,7 @@ import {
 } from "@/lib/line-messaging";
 import {
   describeExternalListing,
+  enrichInfoFromScreenshotText,
   fetch591ListingInfo,
   findOwnListingByFeatures,
   type ExternalListingInfo,
@@ -70,14 +71,15 @@ function matchedListingActions(input: {
   listingId: string;
   title: string;
 }): LineMessage[] {
+  void input.title;
   return [
     {
       type: "template",
-      altText: `找到你問的物件：${input.title}`.slice(0, 400),
+      altText: "找到你問的物件了",
       template: {
         type: "buttons",
         text: truncateLineTemplateText(
-          `找到你問的這間了：「${truncateLineTemplateText(input.title, 26)}」。點下方預約看屋，也幫你挑了類似的一起比較。`,
+          "找到你問的這間了。點下方預約看屋，也幫你挑了類似的一起比較。",
           60,
         ),
         actions: [
@@ -313,10 +315,7 @@ export async function handle591LinkInquiry(input: {
           altText: "這間目前無法安排看屋",
           template: {
             type: "buttons",
-            text: truncateLineTemplateText(
-              `「${listing.title}」目前無法安排看屋。要找類似條件嗎？`,
-              60,
-            ),
+            text: truncateLineTemplateText("這間目前無法安排看屋。要找類似條件嗎？", 60),
             actions: [{ type: "uri", label: "開始找房", uri: liffHome }],
           },
         },
@@ -409,6 +408,7 @@ async function identifyImageMessage(
   const { readListingFromImage } = await import("@/lib/line-listing-vision");
   let info = await readListingFromImage(buffer, notes);
   if (!info) return null;
+  info = enrichInfoFromScreenshotText(info);
 
   if (info.source591Id) {
     const byId = await findListingBy591Id(info.source591Id);
@@ -419,12 +419,15 @@ async function identifyImageMessage(
     }
     if (!info.district || !info.price) {
       const fetched = await fetch591ListingInfo(info.source591Id, null, 5000);
-      if (fetched) info = { ...info, ...fetched };
+      if (fetched) info = enrichInfoFromScreenshotText({ ...info, ...fetched });
     }
   }
 
   const own = findOwnListingByFeatures(info, await loadAllPublishedRentals());
-  if (own) return { kind: "own", listing: own, how: `截圖文字「${info.title ?? ""}」` };
+  if (own) {
+    const howLabel = (info.title ?? "").trim() || describeExternalListing(info);
+    return { kind: "own", listing: own, how: `截圖文字「${howLabel}」` };
+  }
   if (info.district || info.city) return { kind: "external", info };
   notes.push(`AI 讀到「${info.title ?? ""}」但缺地區`);
   return null;

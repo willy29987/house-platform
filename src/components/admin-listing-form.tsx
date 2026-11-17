@@ -757,10 +757,13 @@ export function AdminListingForm({
         <h3 className={sectionTitle}>基本資訊</h3>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="sm:col-span-2">
-            <label className={labelCls}>標題</label>
-            <input required value={formData.title}
+            <label className={labelCls}>標題（選填，客人看不到）</label>
+            <input
+              value={formData.title}
               onChange={(e) => setFormData((p) => ({ ...p, title: e.target.value }))}
-              className={`w-full ${field}`} />
+              placeholder="內部辨識用，可不填"
+              className={`w-full ${field}`}
+            />
           </div>
           <div className="sm:col-span-2">
             <label className={labelCls}>591 物件網址（選填）</label>

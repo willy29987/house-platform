@@ -7,6 +7,7 @@ import {
   ViewingSchedulePicker,
   type ViewingScheduleValue,
 } from "@/components/viewing-schedule-picker";
+import { customerListingLabel } from "@/lib/customer-listing-label";
 import { formatViewingRange, type RentalMatchListing } from "@/lib/line-rental-assistant";
 import { taipeiTodayYmd } from "@/lib/owner-tracking-next-contact";
 
@@ -88,7 +89,17 @@ export function LineLiffRentPick({
           console.warn("[liff-rent-pick] sendMessages failed", sendError);
         }
       }
-      setDoneSummary({ when, titles: picked.map((item) => item.title) });
+      setDoneSummary({
+        when,
+        titles: picked.map((item) => {
+          const full = listings.find((listing) => listing.id === item.id);
+          return full
+            ? customerListingLabel(full, { withPrice: true })
+            : item.price > 0
+              ? `${item.price.toLocaleString("zh-TW")} 元/月`
+              : "已選物件";
+        }),
+      });
       setDone(true);
       window.setTimeout(() => {
         try {
@@ -176,7 +187,9 @@ export function LineLiffRentPick({
                   ) : null}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-bold text-zinc-900">{item.title}</span>
+                  <span className="block truncate text-sm font-bold text-zinc-900">
+                    {customerListingLabel(item)}
+                  </span>
                   <span className="mt-0.5 block text-xs text-zinc-500">
                     {item.city}
                     {item.district} · {item.rooms} 房 · {formatRent(item.price)}

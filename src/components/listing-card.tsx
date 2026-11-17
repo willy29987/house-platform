@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ListingCardFavorite } from "@/components/listing-card-favorite";
+import { customerListingLabel } from "@/lib/customer-listing-label";
 import { maskAddress, type ListingCard as ListingCardType } from "@/lib/listings";
 import { getMrtBadgeClass, shortMrtLine } from "@/lib/mrt";
 import { propertyTypeLabel } from "@/lib/property-type-label";
@@ -64,6 +65,12 @@ export function ListingCardItem({ listing, className = "" }: Props) {
   const mrtStation = listing.mrtStation?.trim();
   const mrtLine = shortMrtLine(listing.mrtLine);
   const mrtBadgeClass = getMrtBadgeClass(listing.mrtLine);
+  const publicLabel = customerListingLabel(listing);
+  const heading =
+    `${listing.city}${listing.district}`.trim() ||
+    listing.community?.trim() ||
+    listing.mrtStation?.trim() ||
+    publicLabel;
 
   return (
     <Link
@@ -74,7 +81,7 @@ export function ListingCardItem({ listing, className = "" }: Props) {
       <div className="relative aspect-[16/9] w-full overflow-hidden bg-zinc-100">
         <Image
           src={getCoverImage(listing)}
-          alt={listing.title}
+          alt={publicLabel}
           fill
           className="object-cover object-center"
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
@@ -85,7 +92,7 @@ export function ListingCardItem({ listing, className = "" }: Props) {
       {/* 內容：不 stretch，避免輪播等高時底部留白 */}
       <div className="flex flex-col px-3.5 pb-3 pt-3">
         <h3 className="line-clamp-1 text-lg font-bold leading-snug text-zinc-900 sm:text-xl">
-          {listing.title}
+          {heading}
         </h3>
 
         {/* 捷運列；有車位時車位標籤固定在最右 */}

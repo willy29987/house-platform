@@ -1,5 +1,6 @@
 /** 客人送出預約時，用 liff.sendMessages 代客人送出的物件卡（Flex）。 */
 
+import { customerListingLabel } from "@/lib/customer-listing-label";
 import { LINE_LIFF_RENT_ASSISTANT_ID } from "@/lib/line-liff-id";
 import type { RentalMatchListing } from "@/lib/line-rental-assistant";
 
@@ -13,8 +14,8 @@ function listingUrl(id: string) {
 function listingBubble(listing: RentalMatchListing) {
   const uri = listingUrl(listing.id);
   const image = listing.images[0] || listing.coverImage || "";
+  const label = customerListingLabel(listing).slice(0, 80) || "出租物件";
   const meta = [
-    listing.district,
     listing.rooms > 0 ? `${listing.rooms}房` : "",
     listing.areaPing > 0 ? `${listing.areaPing}坪` : "",
   ]
@@ -24,7 +25,7 @@ function listingBubble(listing: RentalMatchListing) {
   const body: Record<string, unknown>[] = [
     {
       type: "text",
-      text: listing.title.slice(0, 80) || "出租物件",
+      text: label,
       weight: "bold",
       size: "sm",
       wrap: true,
@@ -80,10 +81,10 @@ export function buildListingCardsFlex(
 ) {
   const bubbles = listings.slice(0, 10).map(listingBubble);
   if (!bubbles.length) return null;
-  const titles = listings.map((item) => item.title).join("、");
+  const labels = listings.map((item) => customerListingLabel(item, { withPrice: true })).join("、");
   return {
     type: "flex" as const,
-    altText: `${altPrefix}${titles}`.slice(0, 400),
+    altText: `${altPrefix}${labels}`.slice(0, 400),
     contents: bubbles.length === 1 ? bubbles[0] : { type: "carousel", contents: bubbles },
   };
 }

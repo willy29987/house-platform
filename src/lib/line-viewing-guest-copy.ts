@@ -18,7 +18,7 @@ export type ViewingConfirmListing = {
 
 /**
  * 客服／業務點「可以這個時間」後傳給客人。
- * 開頭確認句 → 感謝句 → 每個物件：標題 → 地圖連結（不給官網網址，避免客人逛到其他物件）
+ * 開頭確認句 → 感謝句 → 每個物件：地圖連結（不給案件標題／官網網址）
  */
 export function buildViewingConfirmedGuestText(
   when: string,
@@ -29,10 +29,8 @@ export function buildViewingConfirmedGuestText(
     "直接到這邊就可以嘍～感謝您。",
   ];
   for (const item of listings) {
-    const title = item.title.trim();
-    if (title) parts.push("", title);
     const address = item.address?.trim();
-    if (address) parts.push(buildGoogleMapsSearchUrl(address));
+    if (address) parts.push("", buildGoogleMapsSearchUrl(address));
   }
   return parts.join("\n");
 }

@@ -1,5 +1,6 @@
 /** 把客人給的 591 連結／截圖內容對到官網物件；對不到時保留它的條件做推薦。 */
 
+import { customerListingLabel } from "@/lib/customer-listing-label";
 import type { RentalMatchListing } from "@/lib/line-rental-assistant";
 
 export type ExternalListingInfo = {
@@ -91,39 +92,175 @@ function streetName(address: string, city: string, district: string) {
   return match?.[1] ?? "";
 }
 
+/** 與 LIFF 公開地址一致：只到巷／弄，或去掉門牌號。 */
+function guestFacingAddress(address: string) {
+  const text = address.replace(/\s+/g, "").trim();
+  if (!text) return "";
+  const alley = text.match(/^(.*弄)/);
+  if (alley?.[1]) return alley[1];
+  const lane = text.match(/^(.*巷)/);
+  if (lane?.[1]) return lane[1];
+  return text.replace(/\d*號.*$/, "").trim();
+}
+
+/** 比對用：去掉縣市區後的公開地址，避免截圖沒寫「新北市」就對不上。 */
+function guestAddressKey(address: string, city: string, district: string) {
+  let plain = normalizeText(guestFacingAddress(address));
+  if (!plain) return "";
+  const cityKey = normalizeText(city);
+  const districtKey = normalizeText(district);
+  if (cityKey) plain = plain.replace(cityKey, "");
+  if (districtKey) plain = plain.replace(districtKey, "");
+  return plain;
+}
+
+function sameCityName(a: string, b: string) {
+  return a.replace(/臺/g, "台") === b.replace(/臺/g, "台");
+}
+
+/**
+ * 從 AI 讀到的標籤字串補齊欄位（自家 LIFF 標題常是「板橋區 · 2房1衛 · 12坪 · 12,000 元/月」）。
+ */
+export function enrichInfoFromScreenshotText(
+  info: Partial<ExternalListingInfo>,
+): Partial<ExternalListingInfo> {
+  const blob = `${info.title ?? ""} ${info.address ?? ""} ${info.district ?? ""} ${info.city ?? ""}`;
+  const next: Partial<ExternalListingInfo> = { ...info };
+
+  if (!next.district) {
+    const district = blob.match(/([\u4e00-\u9fff]{1,3}[縣市])?([\u4e00-\u9fff]{1,4}[區市鄉鎮])/)?.[2];
+    if (district) next.district = district;
+  }
+  if (!next.city) {
+    const city = blob.match(/(台北市|臺北市|新北市|桃園市|台中市|臺中市|台南市|臺南市|高雄市|基隆市|新竹市|嘉義市)/)?.[1];
+    if (city) next.city = city.replace(/^臺/, "台");
+  }
+  if (!next.rooms) {
+    const rooms = blob.match(/(\d+)\s*房/);
+    if (rooms) next.rooms = Number(rooms[1]);
+  }
+  if (next.areaPing == null || next.areaPing <= 0) {
+    const area = blob.match(/(\d+(?:\.\d+)?)\s*坪/);
+    if (area) next.areaPing = Number(area[1]);
+  }
+  if (!next.price) {
+    const price = blob.match(/(\d{1,3}(?:,\d{3})+|\d{4,})\s*元/);
+    if (price) next.price = toNumber(price[1]);
+  }
+  if (!next.address) {
+    const addr = blob.match(/([\u4e00-\u9fff0-9]+(?:路|街|道|大道)[\u4e00-\u9fff0-9]*(?:巷[\u4e00-\u9fff0-9]*)?(?:弄[\u4e00-\u9fff0-9]*)?)/);
+    if (addr?.[1]) next.address = addr[1];
+  }
+  if (!next.houseCondition) {
+    if (blob.includes("獨立套房")) next.houseCondition = "STUDIO";
+    else if (blob.includes("分租套房") || blob.includes("雅房")) next.houseCondition = "SUITE";
+  }
+
+  return next;
+}
+
 /**
  * 591 上別的編號／截圖，其實是官網同一間（重刊、換編號）時找出來。
+ * 自家 LIFF／官網截圖則用客人可見標籤（區／房／坪／價）與公開地址對。
  * 只在同縣市行政區內比，避免誤配。
  */
 export function findOwnListingByFeatures(
   info: Partial<ExternalListingInfo>,
   listings: RentalMatchListing[],
 ): RentalMatchListing | null {
-  const title = info.title?.trim() ?? "";
-  const price = info.price ?? 0;
-  let best: { listing: RentalMatchListing; score: number } | null = null;
+  const filled = enrichInfoFromScreenshotText(info);
+  const title = filled.title?.trim() ?? "";
+  const price = filled.price ?? 0;
 
-  const sameCity = (a: string, b: string) => a.replace(/臺/g, "台") === b.replace(/臺/g, "台");
+  const labelSoftHits = new Set<string>();
+  if (title) {
+    for (const listing of listings) {
+      const guestLabel = customerListingLabel(
+        { ...listing, listingType: "RENT" },
+        { withPrice: true },
+      );
+      const guestLabelPlain = customerListingLabel({ ...listing, listingType: "RENT" });
+      const soft = Math.max(titleSimilarity(title, guestLabel), titleSimilarity(title, guestLabelPlain));
+      if (soft >= 0.75) labelSoftHits.add(listing.id);
+    }
+  }
+  const uniqueGuestLabel = labelSoftHits.size === 1;
+
+  const scored: { listing: RentalMatchListing; score: number }[] = [];
+
   for (const listing of listings) {
-    if (info.city && listing.city && !sameCity(info.city, listing.city)) continue;
-    if (info.district && listing.district && info.district !== listing.district) continue;
+    if (filled.city && listing.city && !sameCityName(filled.city, listing.city)) continue;
+    if (filled.district && listing.district && filled.district !== listing.district) continue;
 
-    const similarity = title ? titleSimilarity(title, listing.title) : 0;
+    const guestLabel = customerListingLabel(
+      { ...listing, listingType: "RENT" },
+      { withPrice: true },
+    );
+    const guestLabelPlain = customerListingLabel({ ...listing, listingType: "RENT" });
+    const backendTitleSim = title ? titleSimilarity(title, listing.title) : 0;
+    const guestLabelSim = title
+      ? Math.max(titleSimilarity(title, guestLabel), titleSimilarity(title, guestLabelPlain))
+      : 0;
+    const similarity = Math.max(backendTitleSim, guestLabelSim);
+
     const priceClose = price > 0 && Math.abs(listing.price - price) <= Math.max(500, price * 0.03);
-    const street = info.address ? streetName(info.address, listing.city, listing.district) : "";
+    const street = filled.address ? streetName(filled.address, listing.city, listing.district) : "";
     const sameStreet =
       Boolean(street) && street === streetName(listing.address, listing.city, listing.district);
-    const sameRooms = Boolean(info.rooms) && info.rooms === listing.rooms;
+    const guestAddr = filled.address
+      ? guestAddressKey(filled.address, listing.city, listing.district)
+      : "";
+    const listingGuestAddr = guestAddressKey(listing.address, listing.city, listing.district);
+    const sameGuestAddr = Boolean(guestAddr) && guestAddr === listingGuestAddr;
+    const sameRooms = Boolean(filled.rooms) && filled.rooms === listing.rooms;
     const areaClose =
-      info.areaPing != null && listing.areaPing > 0 && Math.abs(listing.areaPing - info.areaPing) <= 1;
+      filled.areaPing != null &&
+      listing.areaPing > 0 &&
+      Math.abs(listing.areaPing - filled.areaPing) <= 1;
+    const sameCondition =
+      Boolean(filled.houseCondition) &&
+      Boolean(listing.houseCondition) &&
+      filled.houseCondition === listing.houseCondition;
+    const hasPlaceAnchor = sameStreet || sameGuestAddr;
+
+    /** 自家找房卡上常見：區＋租金＋房數＋坪數 */
+    const liffFingerprint =
+      Boolean(filled.district || filled.city) && priceClose && sameRooms && areaClose;
 
     let score = 0;
-    if (similarity >= 0.75) score = 3 + similarity;
-    else if (priceClose && similarity >= 0.5) score = 2 + similarity;
-    else if (priceClose && sameStreet && (sameRooms || areaClose)) score = 2;
-    if (score > 0 && (!best || score > best.score)) best = { listing, score };
+    // 後台案件標題對得上，或客人標籤全場唯一時，才用高相似度直接認定
+    if (backendTitleSim >= 0.75 || (guestLabelSim >= 0.75 && (uniqueGuestLabel || hasPlaceAnchor))) {
+      score = 3 + similarity;
+    } else if (hasPlaceAnchor && priceClose && (sameRooms || areaClose)) {
+      score = 3.2;
+    } else if (hasPlaceAnchor && priceClose) {
+      score = 2.8;
+    } else if (liffFingerprint && (hasPlaceAnchor || sameCondition)) {
+      score = 2.6;
+    } else if (liffFingerprint && uniqueGuestLabel) {
+      score = 2.4;
+    } else if (priceClose && guestLabelSim >= 0.5 && hasPlaceAnchor) {
+      score = 2 + guestLabelSim;
+    } else if (priceClose && sameStreet && (sameRooms || areaClose)) {
+      score = 2;
+    } else if (liffFingerprint) {
+      // 同區同條件可能多間：先記分，後面用領先幅度決定是否採用
+      score = 2.15;
+    }
+
+    if (score > 0) scored.push({ listing, score });
   }
-  return best?.listing ?? null;
+
+  scored.sort((a, b) => b.score - a.score);
+  const best = scored[0];
+  if (!best) return null;
+
+  const second = scored[1];
+  // 僅靠區房坪價、又沒地址錨點時，必須明顯領先第二名
+  if (best.score < 2.6 && second && best.score - second.score < 0.25) return null;
+  if (second && Math.abs(best.score - second.score) < 0.05) return null;
+
+  return best.listing;
 }
 
 export function describeExternalListing(info: Partial<ExternalListingInfo>) {

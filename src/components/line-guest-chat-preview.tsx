@@ -6,6 +6,7 @@ import {
   ViewingSchedulePicker,
   type ViewingScheduleValue,
 } from "@/components/viewing-schedule-picker";
+import { customerListingLabel } from "@/lib/customer-listing-label";
 import {
   EXTRA_OPTIONS,
   MATCH_LIST_LIMIT,
@@ -260,7 +261,7 @@ function ListingDetailSheet({
     <div className="absolute inset-0 z-20 flex flex-col bg-black/40 p-3">
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl bg-white shadow-lg">
         <div className="flex items-center justify-between gap-2 border-b border-zinc-100 px-3 py-2">
-          <p className="truncate text-sm font-bold text-zinc-900">{listing.title}</p>
+          <p className="truncate text-sm font-bold text-zinc-900">{customerListingLabel(listing)}</p>
           <button
             type="button"
             onClick={onClose}
@@ -632,7 +633,7 @@ export function LineGuestChatPreview({
     if (!pickedIds.length) return;
     const titles = matched
       .filter((item) => pickedIds.includes(item.id))
-      .map((item) => item.title)
+      .map((item) => customerListingLabel(item, { withPrice: true }))
       .join("、");
     push("guest", `我想看：${titles}`);
     push("bot", "想哪一天、哪個時段看屋？");
@@ -1094,7 +1095,9 @@ export function LineGuestChatPreview({
                         )}
                       </div>
                       <span className="min-w-0">
-                        <span className="line-clamp-2 text-sm font-semibold text-zinc-900">{item.title}</span>
+                        <span className="line-clamp-2 text-sm font-semibold text-zinc-900">
+                          {customerListingLabel(item)}
+                        </span>
                         <span className="mt-0.5 block text-xs text-zinc-500">
                           {item.district} · {formatRent(item.price)}
                         </span>

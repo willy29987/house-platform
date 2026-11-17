@@ -165,8 +165,8 @@ export async function POST(request: Request) {
 
     const listingLines = created.picked.map((item, index) => {
       const price =
-        item.price > 0 ? `（${item.price.toLocaleString("zh-TW")} 元/月）` : "";
-      return `${index + 1}. ${item.title}${price}`;
+        item.price > 0 ? `${item.price.toLocaleString("zh-TW")} 元/月` : "已選物件";
+      return `${index + 1}. ${price}`;
     });
     const confirmText = mergeTarget
       ? [

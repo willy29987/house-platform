@@ -8,9 +8,14 @@ const VISION_TIMEOUT_MS = 9000;
 const MAX_EDGE_PX = 1100;
 
 const PROMPT = [
-  "這是客人傳來的租屋物件截圖或照片（多半是 591、樂屋網、FB 等）。",
+  "這是客人傳來的租屋物件截圖或照片。來源可能是：",
+  "1) 591／樂屋網／FB 等外站；",
+  "2) 自家 LINE LIFF／官網找房（畫面常顯示「板橋區 · 2房1衛 · 12坪 · 12,000 元/月」，通常沒有 591 編號）。",
   "只回一行 JSON，不要其他字：",
   '{"isListing":true,"source591Id":"","title":"","price":0,"city":"","district":"","address":"","rooms":0,"kind":"","areaPing":0}',
+  "title 填畫面上最醒目的物件標籤全文（含區域／格局／坪數／租金若有）。",
+  "自家找房畫面務必盡量填 city、district、rooms、areaPing、price；地址若只顯示到巷／弄也要填 address。",
+  "沒有 591 編號時 source591Id 留空字串。",
   "kind 只能是 整層住家／獨立套房／分租套房／雅房／其他 或空字串。",
   "city 用「新北市」「台北市」這種全名；district 例如「板橋區」。讀不到的欄位留空字串或 0。",
   "若圖片不是房屋物件，isListing 填 false。",

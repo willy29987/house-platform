@@ -32,7 +32,11 @@ const optionalBooleanOrDiscuss = z.preprocess((val) => {
 }, z.union([z.boolean(), z.literal("DISCUSS")]).optional());
 
 export const listingInputSchema = z.object({
-  title: z.string().min(2, "標題至少需要 2 個字"),
+  /** 選填；客人端不顯示標題 */
+  title: z.preprocess((val) => {
+    if (val === null || val === undefined) return "";
+    return String(val).trim();
+  }, z.string()),
   description: z.string().optional().default(""),
   features: z.array(z.string()).optional().default([]),
   city: z.string().min(1, "請選擇縣市"),

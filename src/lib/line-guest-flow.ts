@@ -276,8 +276,8 @@ function formatPickedListings(session: GuestSession) {
   if (!session.picked.length) return ["（尚未選物件）"];
   return session.picked.map((item, index) => {
     const price =
-      item.price > 0 ? `（${item.price.toLocaleString("zh-TW")} 元/月）` : "";
-    return `${index + 1}. ${item.title}${price}`;
+      item.price > 0 ? `${item.price.toLocaleString("zh-TW")} 元/月` : "已選物件";
+    return `${index + 1}. ${price}`;
   });
 }
 

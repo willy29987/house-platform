@@ -549,7 +549,7 @@ export function AdminListingTable({
                           房號 {l.roomNumber}
                         </span>
                       ) : null}
-                      {l.title}
+                      {l.title.trim() || addressLine || "（未填標題）"}
                     </Link>
                     <p className="mt-1.5 text-sm leading-relaxed text-zinc-600">{addressLine || "—"}</p>
                   </div>
@@ -569,7 +569,7 @@ export function AdminListingTable({
                               房號 {l.roomNumber}
                             </span>
                           ) : null}
-                          {l.title}
+                          {l.title.trim() || addressLine || "（未填標題）"}
                         </Link>
                         <p className="mt-1 text-sm font-medium leading-relaxed text-zinc-600 md:text-[15px]">{addressLine}</p>
                       </div>
