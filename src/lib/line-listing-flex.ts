@@ -12,11 +12,11 @@ const TAG_BG = "#FFEDD5";
 const TAG_FG = "#9A3412";
 
 /** 各欄固定高度，carousel 不會因內容多寡高低不一 */
-const ROW_ADDRESS_H = "22px";
-const ROW_TYPE_H = "24px";
-const ROW_LAYOUT_H = "22px";
-const ROW_PRICE_H = "24px";
-const ROW_TAGS_H = "24px";
+const ROW_ADDRESS_H = "26px";
+const ROW_TYPE_H = "26px";
+const ROW_LAYOUT_H = "24px";
+const ROW_PRICE_H = "36px";
+const ROW_TAGS_H = "26px";
 
 /** 客人可見建物／類別中文（電梯大樓用全稱） */
 const CARD_PROPERTY_TYPE_LABEL: Record<string, string> = {
@@ -116,14 +116,14 @@ function chip(label: string, bg: string, fg: string) {
     flex: 0,
     backgroundColor: bg,
     cornerRadius: "6px",
-    paddingAll: "4px",
-    paddingStart: "6px",
-    paddingEnd: "6px",
+    paddingAll: "5px",
+    paddingStart: "8px",
+    paddingEnd: "8px",
     contents: [
       {
         type: "text",
         text: label,
-        size: "xxs",
+        size: "xs",
         color: fg,
         weight: "bold",
       },
@@ -147,8 +147,8 @@ function typeCommunityRow(listing: RentalMatchListing) {
     contents.push({
       type: "text",
       text: community.slice(0, 20),
-      size: "xs",
-      color: "#4B5563",
+      size: "sm",
+      color: "#374151",
       weight: "bold",
       flex: 1,
       wrap: false,
@@ -189,53 +189,61 @@ function listingBubble(listing: RentalMatchListing) {
   const row2 = [layout, area].filter(Boolean).join(" · ") || "—";
   const tags = featureTags(listing);
 
+  const typeRow = typeCommunityRow(listing);
   const body: Record<string, unknown>[] = [
     fixedRow(ROW_ADDRESS_H, [
       {
         type: "text",
         text: address.slice(0, 80),
         weight: "bold",
-        size: "md",
+        size: "lg",
+        color: "#111111",
         wrap: false,
         maxLines: 1,
       },
     ]),
-    typeCommunityRow(listing),
-    fixedRow(ROW_LAYOUT_H, [
-      {
-        type: "text",
-        text: row2,
-        size: "sm",
-        color: "#4B5563",
-        wrap: false,
-        maxLines: 1,
-      },
-    ]),
+    { ...typeRow, margin: "sm" },
     fixedRow(
-      ROW_PRICE_H,
+      ROW_LAYOUT_H,
       [
         {
           type: "text",
-          text: listing.price > 0 ? `${listing.price.toLocaleString("zh-TW")} 元/月` : "租金另議",
-          weight: "bold",
+          text: row2,
           size: "md",
-          color: BRAND_BLUE,
+          color: "#374151",
+          weight: "bold",
           wrap: false,
           maxLines: 1,
         },
       ],
       { margin: "sm" },
     ),
+    // 剩餘空間留給價格區，標籤貼近底部「物件詳情」
+    { type: "filler" },
+    fixedRow(
+      ROW_PRICE_H,
+      [
+        {
+          type: "text",
+          // LINE Flex 字重只有 regular／bold，無法再加粗 30%；維持 bold、不放大字級
+          text: listing.price > 0 ? `${listing.price.toLocaleString("zh-TW")} 元/月` : "租金另議",
+          weight: "bold",
+          size: "xl",
+          color: BRAND_BLUE,
+          wrap: false,
+          maxLines: 1,
+        },
+      ],
+      { margin: "md" },
+    ),
     {
       type: "box",
       layout: "horizontal",
       spacing: "sm",
-      margin: "sm",
+      margin: "md",
       height: ROW_TAGS_H,
       contents: tags.length ? tags.slice(0, 5).map(tagChip) : [{ type: "filler" }],
     },
-    // 撐滿剩餘高度，footer 按鈕固定在卡片最底
-    { type: "filler" },
   ];
 
   return {
@@ -247,7 +255,8 @@ function listingBubble(listing: RentalMatchListing) {
             type: "image",
             url: image,
             size: "full",
-            aspectRatio: "20:13",
+            // 圖片再高一點，避免裁切太狠
+            aspectRatio: "20:14",
             aspectMode: "cover",
             action: { type: "uri", uri },
           },
@@ -257,11 +266,15 @@ function listingBubble(listing: RentalMatchListing) {
       type: "box",
       layout: "vertical",
       spacing: "sm",
+      paddingAll: "12px",
+      paddingBottom: "8px",
       contents: body,
     },
     footer: {
       type: "box",
       layout: "vertical",
+      paddingAll: "8px",
+      paddingTop: "4px",
       contents: [
         {
           type: "button",
