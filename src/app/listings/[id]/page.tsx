@@ -157,7 +157,7 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
           listing.securityDeposit?.trim() ? { label: "押金", value: listing.securityDeposit.trim() } : null,
           listing.availableFrom?.trim() ? { label: "起租日", value: listing.availableFrom.trim() } : null,
           listing.shortTermRent?.trim() ? { label: "能否短租", value: listing.shortTermRent.trim() } : null,
-          listing.serviceFee?.trim() ? { label: "服務費", value: listing.serviceFee.trim() } : null,
+          // 服務費僅後台／屋主追蹤可見，不對客人顯示
         ] as const
       ).filter((item): item is { label: string; value: string } => item !== null)
     : [];

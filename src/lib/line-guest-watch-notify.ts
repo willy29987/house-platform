@@ -3,7 +3,7 @@
  * - 立即換他的圖文選單提醒（免費；看過改溫和「繼續看屋」）
  * - 每天中午 12:00 彙整推播（算額度）：成功推播才算 1 天，每位客人終身最多 4 天
  *   （重存找房條件也不重置）
- * - 每次推播濃縮成一則訊息（多間用物件卡左右滑）
+ * - 每次推播：一句問候文字＋物件卡輪播（多間左右滑）
  */
 
 import { ADMIN_CLOUD_DATA_KEYS } from "@/lib/admin-cloud-data-keys";
@@ -15,7 +15,7 @@ import {
   type RentalMatchListing,
 } from "@/lib/line-rental-assistant";
 import { clearGuestNewListings, flagGuestNewListing } from "@/lib/line-guest-rich-menu";
-import { buildListingCardsFlex } from "@/lib/line-listing-flex";
+import { buildListingCardsFlex, digestGreetingText } from "@/lib/line-listing-flex";
 import { pushLineMessages, type LineMessage } from "@/lib/line-messaging";
 
 /** 成功推播次數上限（有推出去才算 1 天） */
@@ -77,14 +77,11 @@ function watchAccepts(watch: GuestWatchRecord, listing: RentalMatchListing) {
   return true;
 }
 
-/** 一則訊息：只用 Flex 卡（含多間輪播），不算第二則文字。 */
+/** 問候文字（氣泡貼字寬）＋ Flex 物件卡輪播。 */
 function digestMessages(listings: RentalMatchListing[]): LineMessage[] {
-  const prefix =
-    listings.length === 1
-      ? "有 1 間新物件符合你的條件："
-      : `有 ${listings.length} 間新物件符合你的條件：`;
-  const cards = buildListingCardsFlex(listings, prefix);
-  return cards ? [cards] : [];
+  const text = digestGreetingText(listings.length);
+  const cards = buildListingCardsFlex(listings, text);
+  return cards ? [{ type: "text", text }, cards] : [];
 }
 
 async function readSent() {

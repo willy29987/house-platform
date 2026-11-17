@@ -436,7 +436,7 @@ function ListingDetailSheet({
       listing.shortTermRent?.trim()
         ? { label: "能否短租", value: listing.shortTermRent.trim() }
         : null,
-      listing.serviceFee?.trim() ? { label: "服務費", value: listing.serviceFee.trim() } : null,
+      // 服務費僅後台／屋主追蹤可見，不對客人顯示
     ] as const
   ).filter((item): item is { label: string; value: string } => item !== null);
 
