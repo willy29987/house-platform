@@ -65,37 +65,67 @@ function liffUrlForGuest(input: {
   return buildLiffRentAssistantUrl(Object.keys(query).length ? query : undefined);
 }
 
-/** 判定是官網哪一間：不論連結、截圖或照片，都回同一顆「選看屋時間」，開推薦總覽。 */
+const PICK_VIEWING_LABEL = "挑選看屋時間";
+/** 系統讀不到物件時給客人的固定文案 */
+const CANNOT_READ_LISTING_TEXT = "這間目前無法安排看屋。要找類似條件嗎？";
+
+/** 已讀到客戶傳的物件：只回一顆按鈕，不要說明文字。 */
+function pickViewingTimeButtonOnly(uri: string): LineMessage[] {
+  return [
+    {
+      type: "flex",
+      altText: PICK_VIEWING_LABEL,
+      contents: {
+        type: "bubble",
+        size: "mega",
+        body: {
+          type: "box",
+          layout: "vertical",
+          paddingAll: "16px",
+          contents: [
+            {
+              type: "button",
+              style: "primary",
+              height: "md",
+              color: "#06C755",
+              action: { type: "uri", label: PICK_VIEWING_LABEL, uri },
+            },
+          ],
+        },
+      },
+    },
+  ];
+}
+
+/** 系統讀不到物件：固定文案 +「挑選看屋時間」。 */
+function cannotReadListingActions(uri: string): LineMessage[] {
+  return [
+    {
+      type: "template",
+      altText: CANNOT_READ_LISTING_TEXT,
+      template: {
+        type: "buttons",
+        text: truncateLineTemplateText(CANNOT_READ_LISTING_TEXT, 60),
+        actions: [{ type: "uri", label: PICK_VIEWING_LABEL, uri }],
+      },
+    },
+  ];
+}
+
+/** 判定是官網哪一間：不論連結、截圖或照片，只回「挑選看屋時間」。 */
 function matchedListingActions(input: {
   lineUserId?: string | null;
   listingId: string;
   title: string;
 }): LineMessage[] {
   void input.title;
-  return [
-    {
-      type: "template",
-      altText: "找到你問的物件了",
-      template: {
-        type: "buttons",
-        text: truncateLineTemplateText(
-          "找到你問的這間了。點下方預約看屋，也幫你挑了類似的一起比較。",
-          60,
-        ),
-        actions: [
-          {
-            type: "uri",
-            label: "選看屋時間",
-            uri: liffUrlForGuest({
-              lineUserId: input.lineUserId,
-              listingId: input.listingId,
-              similar: true,
-            }),
-          },
-        ],
-      },
-    },
-  ];
+  return pickViewingTimeButtonOnly(
+    liffUrlForGuest({
+      lineUserId: input.lineUserId,
+      listingId: input.listingId,
+      similar: true,
+    }),
+  );
 }
 
 type WatchSeed = Pick<
@@ -108,7 +138,7 @@ async function loadAllPublishedRentals() {
   return loadRentalMatchListings(null);
 }
 
-/** 非官網物件：依它的條件存找房需求，回「看類似物件」按鈕。 */
+/** 非官網物件：依它的條件存找房需求；已讀到內容 → 只回「挑選看屋時間」。 */
 async function externalListingInquiry(input: {
   kind: "591_link" | "image_inquiry";
   lineUserId: string | null;
@@ -148,7 +178,7 @@ async function externalListingInquiry(input: {
     criteriaText: described || label,
     picked: [],
     requestedWhen: "",
-    summaryText: `客人詢問 ${idNote}${label}（${described || "條件不明"}），不是官網物件，已推類似物件。`,
+    summaryText: `客人詢問 ${idNote}${label}（${described || "條件不明"}），不是官網物件，已推挑選看屋時間。`,
     source591Id: info.source591Id ?? "",
     source591Url: input.sourceUrl,
     guestMessage: input.guestMessage,
@@ -156,28 +186,9 @@ async function externalListingInquiry(input: {
 
   return {
     caseRecord: created,
-    messages: [
-      {
-        type: "template",
-        altText: "幫你找類似的房子",
-        template: {
-          type: "buttons",
-          text: truncateLineTemplateText(
-            described
-              ? `這間不是我們的物件，已依「${described}」挑類似的房子，點下方看看。`
-              : "這間不是我們的物件，點下方看類似的房子。",
-            60,
-          ),
-          actions: [
-            {
-              type: "uri",
-              label: "看類似物件",
-              uri: liffUrlForGuest({ lineUserId: input.lineUserId, similar: true }),
-            },
-          ],
-        },
-      },
-    ],
+    messages: pickViewingTimeButtonOnly(
+      liffUrlForGuest({ lineUserId: input.lineUserId, similar: true }),
+    ),
   };
 }
 
@@ -307,19 +318,10 @@ export async function handle591LinkInquiry(input: {
       guestMessage: input.text.slice(0, 500),
     });
 
+    // 讀到是我們的案，但未上架／非租賃：仍算讀到 → 只回按鈕
     return {
       caseRecord: created,
-      messages: [
-        {
-          type: "template",
-          altText: "這間目前無法安排看屋",
-          template: {
-            type: "buttons",
-            text: truncateLineTemplateText("這間目前無法安排看屋。要找類似條件嗎？", 60),
-            actions: [{ type: "uri", label: "開始找房", uri: liffHome }],
-          },
-        },
-      ],
+      messages: pickViewingTimeButtonOnly(liffHome),
     };
   }
 
@@ -357,17 +359,7 @@ export async function handle591LinkInquiry(input: {
 
   return {
     caseRecord: created,
-    messages: [
-      {
-        type: "template",
-        altText: "收到你的 591 連結",
-        template: {
-          type: "buttons",
-          text: "收到連結了，同事會再確認這間。也可以先點下方選條件，看看其他房子。",
-          actions: [{ type: "uri", label: "開始找房", uri: liffHome }],
-        },
-      },
-    ],
+    messages: cannotReadListingActions(liffHome),
   };
 }
 
@@ -549,22 +541,6 @@ export async function handleImageInquiry(input: {
 
   return {
     caseRecord: created,
-    messages: [
-      {
-        type: "template",
-        altText: "開始找房",
-        template: {
-          type: "buttons",
-          text: "還沒對到官網物件。點下方開始找房，選條件與想看的房子。",
-          actions: [
-            {
-              type: "uri",
-              label: "開始找房",
-              uri: liffUrlForGuest({ lineUserId: input.lineUserId }),
-            },
-          ],
-        },
-      },
-    ],
+    messages: cannotReadListingActions(liffUrlForGuest({ lineUserId: input.lineUserId })),
   };
 }
