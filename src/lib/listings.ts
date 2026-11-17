@@ -751,7 +751,7 @@ async function getAdminListingsImpl(): Promise<AdminListing[]> {
       createdAt: true,
     },
     orderBy: { createdAt: "desc" },
-    take: 100,
+    // 後台物件總覽要看全部；勿再硬切 100
   }).then((rows) =>
     rows.map((row) => {
       const meta = parseListingInternalMeta(row.description);

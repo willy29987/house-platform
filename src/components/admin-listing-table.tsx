@@ -39,6 +39,8 @@ const mobilePublishBtn =
 const mobileDealBtn =
   "whitespace-nowrap rounded-lg border border-[#0b2545] bg-white px-2.5 py-1 text-xs font-semibold text-[#0b2545] hover:bg-[#0b2545]/5 disabled:opacity-60";
 
+const PAGE_SIZE = 50;
+
 type AdminListing = {
   id: string;
   title: string;
@@ -213,6 +215,7 @@ export function AdminListingTable({
   const [furnitureFilter, setFurnitureFilter] = useState<TriFilter>("ALL");
   const [applianceFilter, setApplianceFilter] = useState<TriFilter>("ALL");
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [page, setPage] = useState(1);
 
   const cityOptions = useMemo(() => Array.from(new Set(listings.map((l) => l.city))).sort(), [listings]);
   const districtOptions = useMemo(
@@ -327,6 +330,42 @@ export function AdminListingTable({
     keyword,
   ]);
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageRows = useMemo(() => {
+    const start = (safePage - 1) * PAGE_SIZE;
+    return filtered.slice(start, start + PAGE_SIZE);
+  }, [filtered, safePage]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [
+    listingType,
+    ownerFilter,
+    mineStatusFilter,
+    city,
+    district,
+    minPrice,
+    maxPrice,
+    minRooms,
+    maxRooms,
+    minPing,
+    maxPing,
+    layoutFilter,
+    taxFilter,
+    subsidyFilter,
+    petsFilter,
+    elevatorFilter,
+    furnitureFilter,
+    applianceFilter,
+    parkingFilter,
+    keyword,
+  ]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
   const sectionTitle = listingType === "RENT" ? "租賃物件" : "買賣物件";
 
   return (
@@ -429,6 +468,11 @@ export function AdminListingTable({
             <span className="mr-2 text-xs text-zinc-400">僅顯示你刊登的回租案件</span>
           ) : null}
           符合條件共 <strong className="text-zinc-900">{filtered.length}</strong> 筆
+          {filtered.length > 0 ? (
+            <span className="ml-2 text-xs text-zinc-400">
+              · 第 {safePage}/{totalPages} 頁（每頁 {PAGE_SIZE}）
+            </span>
+          ) : null}
         </span>
       </div>
 
@@ -440,7 +484,7 @@ export function AdminListingTable({
         </p>
       ) : (
         <div className="space-y-3">
-          {filtered.map((l) => {
+          {pageRows.map((l) => {
             const canEdit = isSuperAdmin || l.createdByUsername === currentUsername;
             const imgs = l.images && l.images.length > 0 ? l.images : l.coverImage ? [l.coverImage] : [];
             const currentIndex = imageIndexById[l.id] ?? 0;
@@ -756,6 +800,32 @@ export function AdminListingTable({
               </article>
             );
           })}
+          {totalPages > 1 ? (
+            <nav
+              className="flex flex-wrap items-center justify-center gap-2 border-t border-zinc-100 pt-3"
+              aria-label="物件分頁"
+            >
+              <button
+                type="button"
+                disabled={safePage <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                上一頁
+              </button>
+              <span className="px-2 text-sm text-zinc-600">
+                {safePage} / {totalPages}
+              </span>
+              <button
+                type="button"
+                disabled={safePage >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                下一頁
+              </button>
+            </nav>
+          ) : null}
         </div>
       )}
       {lightboxSrc ? (
