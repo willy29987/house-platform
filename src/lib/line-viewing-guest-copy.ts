@@ -1,7 +1,7 @@
 /** 約看流程對客人的固定文案 */
 
 export const VIEWING_SUBMIT_ACK_TEXT =
-  "好的～稍等確認完帶看人員時間跟您說，請稍等😃";
+  "收到～幫您確認物件是否還在，確認完跟您說～";
 
 export const VIEWING_ASK_OTHER_TIME_TEXT =
   "不好意思，您選的時間沒有辦法安排帶看，請問您其他方便的時間是什麼時候呢？";
