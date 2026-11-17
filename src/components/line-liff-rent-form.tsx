@@ -1403,7 +1403,7 @@ export function LineLiffRentForm({
 
       setDone({
         when,
-        lines: picked.map((item) => {
+        lines: pickedListings.map((item) => {
           const place = guestListingPlaceLine(item);
           const meta = guestListingMetaLine(item);
           return [place, meta, formatRent(item.price)].filter(Boolean).join(" · ");
