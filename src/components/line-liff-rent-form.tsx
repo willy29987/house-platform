@@ -790,7 +790,6 @@ export function LineLiffRentForm({
       matched.map((item) => item.id),
     );
   });
-  const [similarNotes, setSimilarNotes] = useState<string[]>([]);
   const [watchSaved, setWatchSaved] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(
     directMode === "book" ? (directListing?.listingIds[0] ?? null) : null,
@@ -993,7 +992,6 @@ export function LineLiffRentForm({
     );
     setMatched(found);
     setSimilar(similarResult.items);
-    setSimilarNotes(similarResult.notes);
     setPickedIds(found.map((item) => item.id).slice(0, MAX_WANTED_LISTINGS));
     if (skipCriteria) setDetailId(found[0]?.id ?? null);
     setStep("listings");
@@ -1168,7 +1166,6 @@ export function LineLiffRentForm({
     setMatched(items);
     setMatchedRelaxed(result.relaxed);
     setSimilar([]);
-    setSimilarNotes([]);
     setPickedIds([]);
     setDetailId(null);
     setError("");

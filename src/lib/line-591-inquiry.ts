@@ -65,10 +65,14 @@ function liffUrlForGuest(input: {
 }
 
 const PICK_VIEWING_LABEL = "挑選看屋時間";
-/** 不動產實踐家品牌色 */
+/** 不動產實踐家品牌色（與圖文選單一致） */
 const BRAND_NAVY = "#0b2545";
+const BRAND_GOLD = "#c9a24b";
 
-/** 只回一顆「挑選看屋時間」按鈕（讀得到／讀不到都用同一樣）。寬度約原 mega 的 2/3。 */
+/**
+ * 圖文選單同款卡片：深藍底＋金框，整張可點。
+ * 氣泡本身就是深藍，不再留白邊。
+ */
 function pickViewingTimeButtonOnly(uri: string): LineMessage[] {
   return [
     {
@@ -76,28 +80,78 @@ function pickViewingTimeButtonOnly(uri: string): LineMessage[] {
       altText: PICK_VIEWING_LABEL,
       contents: {
         type: "bubble",
-        size: "mega",
+        size: "kilo",
+        styles: {
+          body: { backgroundColor: BRAND_NAVY },
+        },
         body: {
           type: "box",
-          layout: "horizontal",
-          paddingAll: "12px",
+          layout: "vertical",
+          backgroundColor: BRAND_NAVY,
+          paddingAll: "10px",
+          action: { type: "uri", label: PICK_VIEWING_LABEL, uri },
           contents: [
-            { type: "filler", flex: 1 },
             {
               type: "box",
               layout: "vertical",
-              flex: 4,
+              backgroundColor: BRAND_GOLD,
+              cornerRadius: "8px",
+              paddingAll: "2px",
               contents: [
                 {
-                  type: "button",
-                  style: "primary",
-                  height: "md",
-                  color: BRAND_NAVY,
-                  action: { type: "uri", label: PICK_VIEWING_LABEL, uri },
+                  type: "box",
+                  layout: "vertical",
+                  backgroundColor: BRAND_NAVY,
+                  cornerRadius: "6px",
+                  paddingAll: "16px",
+                  contents: [
+                    {
+                      type: "text",
+                      text: "FIND YOUR HOME",
+                      size: "xxs",
+                      color: BRAND_GOLD,
+                      align: "center",
+                      weight: "bold",
+                    },
+                    {
+                      type: "text",
+                      text: PICK_VIEWING_LABEL,
+                      size: "xl",
+                      color: "#FFFFFF",
+                      align: "center",
+                      weight: "bold",
+                      margin: "md",
+                    },
+                    {
+                      type: "box",
+                      layout: "horizontal",
+                      margin: "md",
+                      contents: [
+                        { type: "filler" },
+                        {
+                          type: "box",
+                          layout: "vertical",
+                          width: "48px",
+                          height: "2px",
+                          backgroundColor: BRAND_GOLD,
+                          contents: [],
+                        },
+                        { type: "filler" },
+                      ],
+                    },
+                    {
+                      type: "text",
+                      text: "依您的需求，精選合適房源",
+                      size: "xs",
+                      color: "#FFFFFF",
+                      align: "center",
+                      margin: "md",
+                      wrap: true,
+                    },
+                  ],
                 },
               ],
             },
-            { type: "filler", flex: 1 },
           ],
         },
       },
