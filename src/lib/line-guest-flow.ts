@@ -46,10 +46,13 @@ async function replyGuest(
 }
 
 const WELCOME = [
-  "您好，歡迎加入「不動產實踐家」🏠 我們主要服務租屋，也有買賣物件～",
+  "您好，歡迎加入「不動產實踐家」！",
+  "🏠 我們主要服務租屋，若有買賣需求也可另外詢問～",
   "",
-  "✅ 想找房：點下方「開始找房」，選好條件就會推薦合適的房子，還能直接預約看屋時間！",
-  "✅ 已經看到喜歡的房子：直接傳 591 連結或截圖給我們，系統會幫你找出是哪一間，馬上可以約看！",
+  "✅ 想找房：點下方「開始找房」，選好條件就會推薦合適的房屋，並直接預約看屋時間！",
+  "✅ 已經看到喜歡的房子：直接傳 591 連結或截圖給我們，讓我們知道您想看的是哪一間～再為您安排時間看屋！",
+  "",
+  "填寫完成送出後就能看屋嘍！",
 ].join("\n");
 
 function qr(actions: LineMessageAction[]) {
@@ -338,20 +341,44 @@ async function finishCase(session: GuestSession) {
   };
 }
 
+/** 歡迎文＋「開始找房」按鈕合成一則（不再拆兩則）。 */
 function openFullLiffFormMessages(lineUserId?: string): LineMessage[] {
   const uri = buildLiffRentAssistantUrl(
     lineUserId ? { uid: lineUserId } : undefined,
   );
   return [
-    { type: "text", text: WELCOME },
     {
-      type: "template",
-      altText: "開始找房表單",
-      template: {
-        type: "buttons",
-        title: "開始找房",
-        text: "選條件、看推薦物件，一次約好看屋時間。",
-        actions: [{ type: "uri", label: "開始找房", uri }],
+      type: "flex",
+      altText: "歡迎加入不動產實踐家｜開始找房",
+      contents: {
+        type: "bubble",
+        body: {
+          type: "box",
+          layout: "vertical",
+          spacing: "md",
+          contents: [
+            {
+              type: "text",
+              text: WELCOME,
+              wrap: true,
+              size: "sm",
+              color: "#111111",
+            },
+          ],
+        },
+        footer: {
+          type: "box",
+          layout: "vertical",
+          contents: [
+            {
+              type: "button",
+              style: "primary",
+              color: "#2563EB",
+              height: "sm",
+              action: { type: "uri", label: "開始找房", uri },
+            },
+          ],
+        },
       },
     },
   ];

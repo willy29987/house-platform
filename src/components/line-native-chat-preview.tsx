@@ -4,8 +4,15 @@ import { useState } from "react";
 import { LineGuestChatPreview } from "@/components/line-guest-chat-preview";
 import type { RentalMatchListing } from "@/lib/line-rental-assistant";
 
-const WELCOME =
-  "您好～請問最近有在找房子嗎？如果有需要找房子可以點選「 開始找房 」，點選您要的需求就可以推薦您合適的房源哦！";
+const WELCOME = [
+  "您好，歡迎加入「不動產實踐家」！",
+  "🏠 我們主要服務租屋，若有買賣需求也可另外詢問～",
+  "",
+  "✅ 想找房：點下方「開始找房」，選好條件就會推薦合適的房屋，並直接預約看屋時間！",
+  "✅ 已經看到喜歡的房子：直接傳 591 連結或截圖給我們，讓我們知道您想看的是哪一間～再為您安排時間看屋！",
+  "",
+  "填寫完成送出後就能看屋嘍！",
+].join("\n");
 
 type CtaStyle = "quickReply" | "flexButton" | "richMenu" | "flexAndRich";
 
@@ -100,34 +107,28 @@ export function LineNativeChatPreview({
         </header>
 
         <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-3">
-          <div className="flex justify-start">
-            <p className="w-fit max-w-[85%] whitespace-pre-line rounded-2xl rounded-tl-sm bg-white px-3 py-2 text-sm leading-relaxed text-zinc-900">
-              {WELCOME}
-            </p>
-          </div>
-
           {showFlex ? (
             <div className="flex justify-start">
-              <div className="w-[85%] max-w-[16rem] overflow-hidden rounded-2xl rounded-tl-sm bg-white shadow-sm">
-                <div className="border-b border-zinc-100 px-3 py-2">
-                  <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-400">
-                    {cta === "flexAndRich" ? "歡迎／主動邀約訊息" : "單次訊息卡片"}
-                  </p>
-                  <p className="mt-1 text-sm font-semibold text-zinc-900">開始為你配對房源</p>
-                  <p className="mt-0.5 text-xs text-zinc-500">
-                    給第一次加入，或我們主動詢問有沒有在找房時使用
-                  </p>
-                </div>
+              <div className="w-fit max-w-[85%] overflow-hidden rounded-2xl rounded-tl-sm bg-white shadow-sm">
+                <p className="whitespace-pre-line px-3 py-2 text-sm leading-relaxed text-zinc-900">
+                  {WELCOME}
+                </p>
                 <button
                   type="button"
                   onClick={() => openLiff(false)}
-                  className="w-full bg-[#06c755] py-2.5 text-sm font-bold text-white"
+                  className="w-full bg-[#2563EB] py-2.5 text-sm font-bold text-white"
                 >
                   開始找房
                 </button>
               </div>
             </div>
-          ) : null}
+          ) : (
+            <div className="flex justify-start">
+              <p className="w-fit max-w-[85%] whitespace-pre-line rounded-2xl rounded-tl-sm bg-white px-3 py-2 text-sm leading-relaxed text-zinc-900">
+                {WELCOME}
+              </p>
+            </div>
+          )}
 
           {showQuick && guestSentStart ? (
             <div className="flex justify-end">
@@ -144,7 +145,7 @@ export function LineNativeChatPreview({
             <p className="px-1 text-[11px] text-white/85">可點上方卡片按鈕，或下方圖文選單「開始找房」</p>
           ) : null}
           {showFlex && !showRich ? (
-            <p className="px-1 text-[11px] text-white/85">↑ 點訊息卡片裡的綠色按鈕</p>
+            <p className="px-1 text-[11px] text-white/85">↑ 點歡迎訊息下方「開始找房」</p>
           ) : null}
           {showQuick && !guestSentStart ? (
             <p className="px-1 text-[11px] text-white/85">↓ 點輸入框上方的 Quick Reply</p>
