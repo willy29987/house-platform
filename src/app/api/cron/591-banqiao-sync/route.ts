@@ -23,13 +23,16 @@ async function handle(request: Request) {
   }
 
   try {
-    const scrubOnly = new URL(request.url).searchParams.get("scrubOnly") === "1";
+    const url = new URL(request.url);
+    const scrubOnly = url.searchParams.get("scrubOnly") === "1";
     if (scrubOnly) {
       const transferPhones = await scrub591TransferPhones();
       const scrub = await scrubBanqiaoSyncedOwnerTrackingNotes();
       return NextResponse.json({ ok: true, transferPhones, scrub });
     }
-    const summary = await runBanqiao591SuiteSync();
+    const maxRaw = Number(url.searchParams.get("maxDetails") ?? "");
+    const maxDetails = Number.isFinite(maxRaw) && maxRaw > 0 ? Math.min(Math.round(maxRaw), 80) : undefined;
+    const summary = await runBanqiao591SuiteSync(maxDetails ? { maxDetails } : undefined);
     return NextResponse.json({ ok: true, summary });
   } catch (error) {
     console.error("[cron/591-banqiao-sync]", error);

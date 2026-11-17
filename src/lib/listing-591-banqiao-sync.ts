@@ -33,28 +33,85 @@ export const BANQIAO_SYNC_ASSIGNEE = "R001";
 const BROWSER_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
 
-/** 新北市 */
-const REGION_ID = 3;
-/** 板橋／中和（積穗）／土城（亞東・國慶）／新莊（輔大～先嗇宮、北至中原路） */
-const SECTION_SPECS = [
-  { sectionId: 26, name: "板橋區", mode: "all" as const, rentMin: 10000, rentMax: 20000 },
-  { sectionId: 38, name: "中和區", mode: "fringe" as const, rentMin: 10000, rentMax: 20000 },
-  { sectionId: 39, name: "土城區", mode: "fringe" as const, rentMin: 10000, rentMax: 20000 },
-  { sectionId: 44, name: "新莊區", mode: "fringe" as const, rentMin: 13000, rentMax: 40000 },
+/** 板橋／中和（積穗～中和站）／土城／新莊／三重（至三重國小）／萬華（至西門町） */
+type SectionSpec = {
+  regionId: number;
+  sectionId: number;
+  name: string;
+  mode: "all" | "fringe";
+  /** 屋主套房（獨立／分租）租金；沒設就不抓套房 */
+  suiteRent?: { min: number; max: number };
+  /** 公寓整層住家租金；沒設就不抓整層 */
+  wholeAptRent?: { min: number; max: number };
+};
+
+const SECTION_SPECS: readonly SectionSpec[] = [
+  {
+    regionId: 3,
+    sectionId: 26,
+    name: "板橋區",
+    mode: "all",
+    suiteRent: { min: 10000, max: 20000 },
+    wholeAptRent: { min: 15000, max: 45000 },
+  },
+  {
+    regionId: 3,
+    sectionId: 38,
+    name: "中和區",
+    mode: "fringe",
+    suiteRent: { min: 10000, max: 20000 },
+    wholeAptRent: { min: 15000, max: 45000 },
+  },
+  {
+    regionId: 3,
+    sectionId: 39,
+    name: "土城區",
+    mode: "fringe",
+    suiteRent: { min: 10000, max: 20000 },
+    wholeAptRent: { min: 15000, max: 45000 },
+  },
+  {
+    regionId: 3,
+    sectionId: 44,
+    name: "新莊區",
+    mode: "fringe",
+    suiteRent: { min: 13000, max: 40000 },
+    wholeAptRent: { min: 15000, max: 45000 },
+  },
+  {
+    regionId: 3,
+    sectionId: 43,
+    name: "三重區",
+    mode: "fringe",
+    wholeAptRent: { min: 15000, max: 45000 },
+  },
+  {
+    regionId: 1,
+    sectionId: 6,
+    name: "萬華區",
+    mode: "fringe",
+    wholeAptRent: { min: 15000, max: 50000 },
+  },
 ] as const;
 
-const KIND_SPECS = [
+const SUITE_KIND_SPECS = [
   { kind: 2, label: "獨立套房" },
   { kind: 3, label: "分租套房" },
 ] as const;
 
+/** 591 kind=1 整層住家；shape=1 公寓 */
+const WHOLE_APARTMENT_KIND = 1;
+const APARTMENT_SHAPE = 1;
+
 const PAGE_SIZE = 30;
 /** 單次 cron 最多打詳情筆數（控時間／用量） */
-const MAX_DETAIL_PER_RUN = 35;
+const MAX_DETAIL_PER_RUN = 50;
 const LIST_CONCURRENCY = 2;
 const DETAIL_CONCURRENCY = 3;
 
-const ZHONGHE_ALLOW = /積穗|員山|新生街/;
+/** 中和：積穗／員山，並延伸至中和站（景平／連城／景安一帶） */
+const ZHONGHE_ALLOW =
+  /積穗|員山|新生街|中和路|中和站|景平路|連城路|景安|中安|宜安|南山路|圓通路|華新街|民樂路|莊敬路|勝利路|永和路|景新街|保健路/;
 const TUCHENG_ALLOW = /亞東|國慶/;
 /**
  * 新莊服務範圍（路名／地標近似）：
@@ -66,6 +123,22 @@ const XINZHUANG_DENY = /迴龍|萬壽|景德|丹鳳|龍華|林口|泰山|五股/
 /** 輔大中正路 510；再往西約 500m 後視為超出（迴龍側門牌偏大） */
 const XINZHUANG_ZHONGZHENG_WEST_MAX = 620;
 
+/**
+ * 三重：最遠到三重國小站（含菜寮／台北橋／三重站一帶）；
+ * 排除更北的徐匯中學／三和國中／蘆洲側。
+ */
+const SANCHONG_ALLOW =
+  /三重國小|菜寮|台北橋|三重站|捷運三重|正義|大同[南北]路|重新路|福德|集美|重陽|大智|安和|忠孝路|文化[南北]路|六張|光明|信義街|錦通|貴陽|電信|三民|明德|仁愛|長興|雙園|三和路[二三]段|成功路/;
+const SANCHONG_DENY = /徐匯|三和國中|蘆洲|五股|碧華|五華|溪尾|永安北|後竹圍|三和路四段|三和路五段/;
+
+/**
+ * 萬華：最遠到西門町（含龍山寺～西門）；
+ * 排除更南的東園／青年／華江深區。
+ */
+const WANHUA_ALLOW =
+  /西門|西門町|龍山寺|漢中|昆明|西寧|成都|康定|長沙街|衡陽|武昌|峨眉|寶慶|漢口|洛陽|內江|桂林路|廣州街|和平西路三段|艋舺|西昌|華西|大理街|雅江|中華路/;
+const WANHUA_DENY = /東園|青年路|華江|西藏路|寶興|德昌|雙園|萬大路|環河南路|民和街|長順街/;
+
 export type Banqiao591ListItem = {
   id: string;
   kind: number;
@@ -74,7 +147,11 @@ export type Banqiao591ListItem = {
   price: number;
   address: string;
   roleName: string;
+  regionId: number;
   sectionId: number;
+  surroundingDesc: string;
+  /** 列表是否已帶 shape=公寓；整層案詳情仍會再確認 */
+  requireApartment: boolean;
   url: string;
 };
 
@@ -118,25 +195,49 @@ export function matchesXinzhuangServiceArea(address: string): boolean {
   return XINZHUANG_ALLOW.test(a);
 }
 
-export function matchesBanqiaoServiceArea(address: string, sectionId: number): boolean {
+export function matchesSanchongServiceArea(addressOrBlob: string): boolean {
+  const a = addressOrBlob.replace(/\s+/g, "");
+  if (SANCHONG_DENY.test(a) && !/三重國小|菜寮|台北橋/.test(a)) return false;
+  return SANCHONG_ALLOW.test(a);
+}
+
+export function matchesWanhuaServiceArea(addressOrBlob: string): boolean {
+  const a = addressOrBlob.replace(/\s+/g, "");
+  if (WANHUA_DENY.test(a) && !/西門|西門町|龍山寺/.test(a)) return false;
+  return WANHUA_ALLOW.test(a);
+}
+
+export function matchesBanqiaoServiceArea(
+  address: string,
+  sectionId: number,
+  extra: { title?: string; surroundingDesc?: string } = {},
+): boolean {
   const a = address.replace(/\s+/g, "");
+  const blob = `${a}${extra.title ?? ""}${extra.surroundingDesc ?? ""}`.replace(/\s+/g, "");
   if (sectionId === 26) return true;
-  if (sectionId === 38) return ZHONGHE_ALLOW.test(a);
-  if (sectionId === 39) return TUCHENG_ALLOW.test(a);
+  if (sectionId === 38) return ZHONGHE_ALLOW.test(blob);
+  if (sectionId === 39) return TUCHENG_ALLOW.test(blob);
   if (sectionId === 44) return matchesXinzhuangServiceArea(a);
+  if (sectionId === 43) return matchesSanchongServiceArea(blob);
+  if (sectionId === 6) return matchesWanhuaServiceArea(blob);
   return false;
 }
 
 async function readListPage(opts: {
+  regionId: number;
   sectionId: number;
   kind: number;
+  shape?: number;
   firstRow: number;
   rentMin: number;
   rentMax: number;
+  requireApartment: boolean;
 }): Promise<{ total: number; items: Banqiao591ListItem[] }> {
+  const shapeQs = opts.shape ? `&shape=${opts.shape}` : "";
   const url =
     `https://bff-house.591.com.tw/v3/web/rent/list` +
-    `?regionid=${REGION_ID}&sectionid=${opts.sectionId}&kind=${opts.kind}` +
+    `?regionid=${opts.regionId}&sectionid=${opts.sectionId}&kind=${opts.kind}` +
+    shapeQs +
     `&rentprice=${opts.rentMin},${opts.rentMax}&role=1&type=1&firstRow=${opts.firstRow}`;
   const res = await fetch(url, {
     headers: {
@@ -164,6 +265,11 @@ async function readListPage(opts: {
     if (price < opts.rentMin || price > opts.rentMax) continue;
     const roleName = text(raw.role_name);
     if (roleName && !roleName.includes("屋主")) continue;
+    const surrounding = raw.surrounding;
+    const surroundingDesc =
+      surrounding && typeof surrounding === "object" && !Array.isArray(surrounding)
+        ? text((surrounding as Record<string, unknown>).desc)
+        : "";
     items.push({
       id,
       kind: Number(raw.kind) || opts.kind,
@@ -172,36 +278,66 @@ async function readListPage(opts: {
       price,
       address: text(raw.address),
       roleName,
+      regionId: opts.regionId,
       sectionId: opts.sectionId,
+      surroundingDesc,
+      requireApartment: opts.requireApartment,
       url: rentUrl(id),
     });
   }
   return { total, items };
 }
 
-async function listSectionKind(
-  sectionId: number,
-  kind: number,
-  rentMin: number,
-  rentMax: number,
-): Promise<Banqiao591ListItem[]> {
-  const first = await readListPage({ sectionId, kind, firstRow: 0, rentMin, rentMax });
+async function listSectionKind(opts: {
+  regionId: number;
+  sectionId: number;
+  kind: number;
+  shape?: number;
+  rentMin: number;
+  rentMax: number;
+  requireApartment: boolean;
+}): Promise<Banqiao591ListItem[]> {
+  const first = await readListPage({ ...opts, firstRow: 0 });
   const out = [...first.items];
   const total = Math.min(first.total || out.length, 300);
   for (let firstRow = PAGE_SIZE; firstRow < total; firstRow += PAGE_SIZE) {
-    const page = await readListPage({ sectionId, kind, firstRow, rentMin, rentMax });
+    const page = await readListPage({ ...opts, firstRow });
     out.push(...page.items);
     if (page.items.length === 0) break;
   }
   return out;
 }
 
-/** 列出服務範圍內、屋主套房候選（尚未打詳情） */
+/** 列出服務範圍內、屋主套房＋公寓整層候選（尚未打詳情） */
 export async function listBanqiaoSuiteCandidates(): Promise<Banqiao591ListItem[]> {
   const jobs: Array<Promise<Banqiao591ListItem[]>> = [];
   for (const section of SECTION_SPECS) {
-    for (const kind of KIND_SPECS) {
-      jobs.push(listSectionKind(section.sectionId, kind.kind, section.rentMin, section.rentMax));
+    if (section.suiteRent) {
+      for (const kind of SUITE_KIND_SPECS) {
+        jobs.push(
+          listSectionKind({
+            regionId: section.regionId,
+            sectionId: section.sectionId,
+            kind: kind.kind,
+            rentMin: section.suiteRent.min,
+            rentMax: section.suiteRent.max,
+            requireApartment: false,
+          }),
+        );
+      }
+    }
+    if (section.wholeAptRent) {
+      jobs.push(
+        listSectionKind({
+          regionId: section.regionId,
+          sectionId: section.sectionId,
+          kind: WHOLE_APARTMENT_KIND,
+          shape: APARTMENT_SHAPE,
+          rentMin: section.wholeAptRent.min,
+          rentMax: section.wholeAptRent.max,
+          requireApartment: true,
+        }),
+      );
     }
   }
 
@@ -213,7 +349,14 @@ export async function listBanqiaoSuiteCandidates(): Promise<Banqiao591ListItem[]
 
   const byId = new Map<string, Banqiao591ListItem>();
   for (const item of chunks.flat()) {
-    if (!matchesBanqiaoServiceArea(item.address, item.sectionId)) continue;
+    if (
+      !matchesBanqiaoServiceArea(item.address, item.sectionId, {
+        title: item.title,
+        surroundingDesc: item.surroundingDesc,
+      })
+    ) {
+      continue;
+    }
     byId.set(item.id, item);
   }
   return Array.from(byId.values());
@@ -476,6 +619,11 @@ async function upsertOne(candidate: Banqiao591ListItem): Promise<"created" | "up
   const draft = await import591ListingFromUrl(candidate.url);
   const input = draftToListingInput(draft);
   if (!input) return "skipped";
+  // 整層任務只要公寓；列表 shape 偶發漏網時在詳情再擋一次
+  if (candidate.requireApartment && input.propertyType !== "APARTMENT") return "skipped";
+  if (candidate.requireApartment && input.houseCondition && input.houseCondition !== "WHOLE") {
+    return "skipped";
+  }
 
   const source591Id = candidate.id;
   const source591Url = candidate.url;
@@ -830,7 +978,8 @@ export async function purgeGoneCompany591WithoutPhone(opts?: {
 }
 
 /**
- * 同步板橋／中和／土城／新莊服務範圍屋主套房 → 本站未刊登物件 + 屋主追蹤。
+ * 同步服務範圍屋主套房＋公寓整層住家 → 本站未刊登物件 + 屋主追蹤。
+ * 範圍：板橋／中和（至中和站）／土城／新莊／三重（至三重國小）／萬華（至西門町）。
  * 同一 source591Id 不重建；內容有差異才更新。
  * Company 自抓案若 591 連結已消失且沒有真正電話，連廣告一起刪。
  */
