@@ -426,12 +426,35 @@ export function AdminListingForm({
   async function uploadFiles(files: FileList, kind: "image" | "video") {
     if (!files.length) return;
     if (kind === "image") setUploading(true); else setUploadingVideo(true);
-    setMediaStatus("");
+    setMediaStatus(kind === "image" ? "壓縮中…" : "上傳中…");
     try {
       const { uploadAdminMediaFiles } = await import("@/lib/admin-direct-upload");
       const list = Array.from(files);
       const result = await uploadAdminMediaFiles(list, {
         purpose: kind === "image" ? "listing" : undefined,
+        enhanceMode: kind === "image" ? "background" : "off",
+        onProgress: (p) => {
+          if (kind !== "image") return;
+          if (p.phase === "compress") setMediaStatus(`壓縮中 ${p.done}/${p.total}`);
+          else if (p.phase === "upload") setMediaStatus(`上傳中 ${p.done}/${p.total}`);
+          else if (p.phase === "enhance") setMediaStatus(`背景美化 ${p.done}/${p.total}`);
+        },
+        onUrlReady: (url) => {
+          if (kind !== "image") return;
+          setFormData((prev) => ({
+            ...prev,
+            images: prev.images.includes(url) ? prev.images : [...prev.images, url],
+            coverImage: prev.coverImage || url,
+          }));
+        },
+        onUrlReplaced: (fromUrl, toUrl) => {
+          if (kind !== "image" || fromUrl === toUrl) return;
+          setFormData((prev) => ({
+            ...prev,
+            images: prev.images.map((u) => (u === fromUrl ? toUrl : u)),
+            coverImage: prev.coverImage === fromUrl ? toUrl : prev.coverImage,
+          }));
+        },
       });
 
       if (!result.urls.length) {
@@ -440,19 +463,7 @@ export function AdminListingForm({
       }
 
       if (kind === "image") {
-        setFormData((prev) => ({
-          ...prev,
-          images: [...prev.images, ...result.urls],
-          coverImage: prev.coverImage || result.urls[0] || "",
-        }));
-        const tiers = result.enhance ?? [];
-        const adjusted = tiers.filter((t) => t.tier !== "skip").length;
-        const kept = tiers.filter((t) => t.tier === "skip").length;
-        setMediaStatus(
-          tiers.length
-            ? `已上傳 ${result.urls.length} 張（自動美化 ${adjusted}／原圖感保留 ${kept}）`
-            : `已上傳 ${result.urls.length} 張圖片`,
-        );
+        setMediaStatus(`已上傳 ${result.urls.length} 張（美化背景處理中）`);
       } else {
         setFormData((prev) => ({ ...prev, videoUrl: result.urls[0] ?? prev.videoUrl }));
         setMediaStatus("影片已上傳");
@@ -1490,10 +1501,10 @@ export function AdminListingForm({
               onChange={(e) => { if (e.target.files) uploadFiles(e.target.files, "image"); }} />
             <button type="button" disabled={uploading} onClick={() => fileInputRef.current?.click()}
               className="w-full rounded-lg border border-dashed border-zinc-400 bg-zinc-50 px-2 py-2.5 text-xs text-zinc-600 hover:bg-zinc-100 disabled:opacity-60 sm:px-4 sm:py-3 sm:text-sm">
-              {uploading ? "上傳中（自動美化）..." : "＋ 選擇圖片"}
+              {uploading ? "上傳中…" : "＋ 選擇圖片"}
             </button>
             <p className="mt-1 text-[10px] text-zinc-400 sm:text-xs">
-              JPG、PNG、WEBP、HEIC｜單張最大約 25MB，可一次多選；直傳雲端後不受 4.5MB 限制｜上傳後自動調光
+              JPG、PNG、WEBP、HEIC｜先壓縮再平行直傳｜單張最大約 25MB｜美化背景處理不擋填表
             </p>
           </div>
 
