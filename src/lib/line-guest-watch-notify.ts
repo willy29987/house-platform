@@ -94,7 +94,7 @@ async function writeSent(store: SentStore) {
 
 /** 這間剛變成上架中的出租物件：符合條件的客人立即換選單；未滿 4 次推播則排入中午彙整。 */
 export async function notifyMatchingGuestsOfRental(listingId: string) {
-  const listing = await loadPublishedRentalMatchListing(listingId);
+  const listing = await loadPublishedRentalMatchListing(listingId, { forGuestPush: true });
   if (!listing) return { notified: 0 };
   const watches = await listActiveGuestWatches();
   if (!watches.length) return { notified: 0 };
@@ -119,6 +119,25 @@ export async function notifyMatchingGuestsOfRental(listingId: string) {
 
   if (notified) await writeSent(sent);
   return { notified };
+}
+
+/** 關閉推播時：從所有客人的 pending／新物件選單佇列拿掉這間。 */
+export async function clearListingFromGuestPushQueues(listingId: string) {
+  const id = listingId.trim();
+  if (!id) return;
+  const sent = await readSent();
+  let changed = false;
+  for (const uid of Object.keys(sent.pending)) {
+    const next = (sent.pending[uid] ?? []).filter((item) => item !== id);
+    if (next.length !== (sent.pending[uid] ?? []).length) {
+      changed = true;
+      if (next.length) sent.pending[uid] = next;
+      else delete sent.pending[uid];
+    }
+  }
+  if (changed) await writeSent(sent);
+  const { removeListingFromAllGuestNewListings } = await import("@/lib/line-guest-rich-menu");
+  await removeListingFromAllGuestNewListings(id).catch(() => null);
 }
 
 /** 客人已從圖文選單看過這批：中午就不必再推同一批（選單改溫和版由 rich-menu 處理）。 */
@@ -175,7 +194,9 @@ export async function sendGuestRecommendationDigest() {
       continue;
     }
     const loaded = await Promise.all(
-      (sent.pending[uid] ?? []).map((id) => loadPublishedRentalMatchListing(id).catch(() => null)),
+      (sent.pending[uid] ?? []).map((id) =>
+        loadPublishedRentalMatchListing(id, { forGuestPush: true }).catch(() => null),
+      ),
     );
     const listings = loaded.filter(
       (listing): listing is RentalMatchListing => Boolean(listing && watchAccepts(watch, listing)),

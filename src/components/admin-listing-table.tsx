@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { ListingDealCloseButton } from "@/components/listing-deal-close-button";
+import { ToggleGuestPushButton } from "@/components/toggle-guest-push-button";
 import { ToggleListingButton } from "@/components/toggle-listing-button";
 import { formatParkingTypeLabel } from "@/lib/parking-type-label";
 import type { FurnitureApplianceValue } from "@/lib/furniture-appliance-value";
@@ -94,6 +95,7 @@ type AdminListing = {
   availableFrom?: string | null;
   householdsPerFloor?: string | null;
   isPublished: boolean;
+  guestPushEnabled?: boolean;
   unpublishCategory?: "DEAL" | "PAUSE" | "OTHER" | null;
   unpublishNote?: string | null;
   expectedReleaseDate?: string | null;
@@ -635,6 +637,12 @@ export function AdminListingTable({
                             修改內容
                           </Link>
                         ) : null}
+                        {canEdit && l.listingType === "RENT" ? (
+                          <ToggleGuestPushButton
+                            listingId={l.id}
+                            guestPushEnabled={l.guestPushEnabled !== false}
+                          />
+                        ) : null}
                         {canEdit ? (
                           <ToggleListingButton
                             listingId={l.id}
@@ -703,7 +711,18 @@ export function AdminListingTable({
                         <span className="font-semibold text-zinc-700">{new Intl.DateTimeFormat("zh-TW").format(l.createdAt)}</span>
                       </p>
                       {canEdit ? (
-                        <div className="flex shrink-0 items-center gap-1.5">
+                        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+                          {l.listingType === "RENT" ? (
+                            <ToggleGuestPushButton
+                              listingId={l.id}
+                              guestPushEnabled={l.guestPushEnabled !== false}
+                              buttonClassName={
+                                l.guestPushEnabled !== false
+                                  ? "rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-800"
+                                  : "rounded-md border border-zinc-300 bg-zinc-100 px-2 py-1 text-[11px] font-semibold text-zinc-600"
+                              }
+                            />
+                          ) : null}
                           <ToggleListingButton
                             listingId={l.id}
                             isPublished={l.isPublished}

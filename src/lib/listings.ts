@@ -698,6 +698,7 @@ async function getAdminListingsImpl(): Promise<AdminListing[]> {
       roomNumber: null,
       houseCondition: null,
       isPublished: true,
+      guestPushEnabled: true,
       unpublishCategory: null,
       unpublishNote: null,
       expectedReleaseDate: null,
@@ -748,6 +749,7 @@ async function getAdminListingsImpl(): Promise<AdminListing[]> {
       videoUrl: true,
       description: true,
       isPublished: true,
+      guestPushEnabled: true,
       createdAt: true,
     },
     orderBy: { createdAt: "desc" },
@@ -757,6 +759,7 @@ async function getAdminListingsImpl(): Promise<AdminListing[]> {
       const meta = parseListingInternalMeta(row.description);
       return {
         ...row,
+        guestPushEnabled: row.guestPushEnabled ?? true,
         createdByUsername: meta.createdByUsername ?? null,
         furnitureProvided: normalizeFurnitureApplianceValue(meta.furnitureProvided),
         applianceProvided: normalizeFurnitureApplianceValue(meta.applianceProvided),
@@ -836,6 +839,7 @@ export type AdminListingRecord = {
   images: string[];
   videoUrl: string | null;
   isPublished: boolean;
+  guestPushEnabled: boolean;
   unpublishCategory: "DEAL" | "PAUSE" | "OTHER" | null;
   unpublishNote: string | null;
   expectedReleaseDate: string | null;
@@ -906,6 +910,7 @@ async function getAdminListingRecordsImpl(): Promise<AdminListingRecord[]> {
       ...collectLegacyImages(r.images, r.coverImage),
       videoUrl: r.videoUrl,
       isPublished: r.isPublished,
+      guestPushEnabled: r.guestPushEnabled ?? true,
       unpublishCategory: meta.unpublishCategory ?? null,
       unpublishNote: meta.unpublishNote ?? null,
       expectedReleaseDate: meta.expectedReleaseDate ?? null,

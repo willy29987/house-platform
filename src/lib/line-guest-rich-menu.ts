@@ -302,6 +302,27 @@ export async function softenGuestNewListings(lineUserId: string) {
   }
 }
 
+/** 關閉推播時：從所有客人「新物件」佇列拿掉這間（不重建選單，避免大量 API）。 */
+export async function removeListingFromAllGuestNewListings(listingId: string) {
+  const id = listingId.trim();
+  if (!id) return;
+  const store = await readNewListings();
+  let changed = false;
+  for (const [uid, entry] of Object.entries(store.byUser)) {
+    const nextIds = entry.listingIds.filter((item) => item !== id);
+    if (nextIds.length === entry.listingIds.length) continue;
+    changed = true;
+    if (nextIds.length) {
+      store.byUser[uid] = { ...entry, listingIds: nextIds, updatedAt: new Date().toISOString() };
+    } else {
+      delete store.byUser[uid];
+    }
+  }
+  if (changed) {
+    await writeAdminCloudPayload(ADMIN_CLOUD_DATA_KEYS.lineGuestNewListings, store);
+  }
+}
+
 /** 約看送出／推薦結束／物件清空：換回原本的「開始找房」選單。 */
 export async function clearGuestNewListings(lineUserId: string) {
   const userId = lineUserId.trim();

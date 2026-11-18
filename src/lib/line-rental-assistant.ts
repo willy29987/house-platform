@@ -172,13 +172,21 @@ export async function loadRentalMatchListings(
   }
 }
 
-/** 單筆已上架出租物件，供新案推播配對 */
-export async function loadPublishedRentalMatchListing(id: string): Promise<RentalMatchListing | null> {
+/** 單筆已上架出租物件；forGuestPush 時一併要求允許推播 */
+export async function loadPublishedRentalMatchListing(
+  id: string,
+  opts?: { forGuestPush?: boolean },
+): Promise<RentalMatchListing | null> {
   const listingId = id.trim();
   if (!listingId || !process.env.DATABASE_URL) return null;
   try {
     const row = await prisma.listing.findFirst({
-      where: { id: listingId, listingType: ListingType.RENT, isPublished: true },
+      where: {
+        id: listingId,
+        listingType: ListingType.RENT,
+        isPublished: true,
+        ...(opts?.forGuestPush ? { guestPushEnabled: true } : {}),
+      },
     });
     if (!row) return null;
     const meta = parseListingInternalMeta(row.description);
