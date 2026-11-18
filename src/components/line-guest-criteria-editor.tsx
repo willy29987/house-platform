@@ -12,8 +12,6 @@ import {
   type RentalMatchCriteria,
   type RentalMatchListing,
 } from "@/lib/line-rental-assistant";
-import { TAIWAN_REGIONS } from "@/lib/taiwan-regions";
-
 const BATH_OPTS = [
   { id: "1", label: "1 衛" },
   { id: "2", label: "2 衛以上" },
@@ -23,13 +21,6 @@ const PARK_OPTS = [
   { id: "yes", label: "要車位" },
   { id: "no", label: "不要車位" },
 ] as const;
-
-const TWIN_CITY_NAMES = ["台北市", "新北市"] as const;
-
-const TWIN_CITY_DISTRICTS = TWIN_CITY_NAMES.flatMap((city) => {
-  const region = TAIWAN_REGIONS.find((row) => row.city === city);
-  return (region?.districts ?? []).map((district) => ({ city, district }));
-});
 
 function toggleIn(list: string[], value: string) {
   return list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
@@ -146,7 +137,7 @@ type OpenKey =
 export function LineGuestCriteriaEditor({
   lineUserId,
   displayName,
-  listings: _listings,
+  listings,
   seedProfile,
   onCancel,
   onSaved,
@@ -203,11 +194,8 @@ export function LineGuestCriteriaEditor({
         const watch = data.watch;
         const profile = data.profile;
         if (watch) {
-          const cities = (watch.cities ?? []).filter((city) =>
-            (TWIN_CITY_NAMES as readonly string[]).includes(city),
-          );
           setCriteria({
-            cities,
+            cities: watch.cities ?? [],
             districts: watch.districts ?? [],
             rooms: watch.rooms ?? [],
             bathrooms: watch.bathrooms ?? [],
@@ -275,21 +263,37 @@ export function LineGuestCriteriaEditor({
     seedProfile?.moveInDate,
   ]);
 
+  /** 縣市區只露出公司已上架物件有的 */
+  const cityOptions = useMemo(() => {
+    const fromListings = [
+      ...new Set(listings.map((item) => item.city).filter(Boolean)),
+    ].sort();
+    return [
+      { id: "__unlimited__", label: "不限" },
+      ...fromListings.map((city) => ({ id: city, label: city })),
+    ];
+  }, [listings]);
+
   const districtOptions = useMemo(() => {
-    const selectedCities = criteria.cities;
-    const rows =
-      selectedCities.length === 0
-        ? TWIN_CITY_DISTRICTS
-        : TWIN_CITY_DISTRICTS.filter((row) => selectedCities.includes(row.city));
+    const pool = criteria.cities.length
+      ? listings.filter((item) => criteria.cities.includes(item.city))
+      : listings;
+    const rows = [
+      ...new Map(
+        pool
+          .filter((item) => item.district)
+          .map((item) => [item.district, { city: item.city, district: item.district }]),
+      ).values(),
+    ].sort((a, b) => a.district.localeCompare(b.district, "zh-Hant"));
     return [
       { id: "__unlimited__", label: "不限" },
       ...rows.map((row) => ({
         id: row.district,
         label: row.district,
-        hint: selectedCities.length === 1 ? undefined : row.city,
+        hint: criteria.cities.length === 1 ? undefined : row.city,
       })),
     ];
-  }, [criteria.cities]);
+  }, [listings, criteria.cities]);
 
   const petNote =
     petHas === "no" ? "沒有" : petHas === "yes" ? petDraft.trim() : "";
@@ -398,10 +402,7 @@ export function LineGuestCriteriaEditor({
             open={openKey === "cities"}
             onToggleOpen={() => toggleOpen("cities")}
             multi
-            options={[
-              { id: "__unlimited__", label: "不限" },
-              ...TWIN_CITY_NAMES.map((city) => ({ id: city, label: city })),
-            ]}
+            options={cityOptions}
             selectedIds={criteria.cities}
             onPick={(id) => {
               if (id === "__unlimited__") {
@@ -410,10 +411,12 @@ export function LineGuestCriteriaEditor({
               }
               setCriteria((c) => {
                 const nextCities = toggleIn(c.cities, id);
+                const allowedPool =
+                  nextCities.length === 0
+                    ? listings
+                    : listings.filter((item) => nextCities.includes(item.city));
                 const allowed = new Set(
-                  TWIN_CITY_DISTRICTS.filter((row) =>
-                    nextCities.length === 0 ? true : nextCities.includes(row.city),
-                  ).map((row) => row.district),
+                  allowedPool.map((item) => item.district).filter(Boolean),
                 );
                 return {
                   ...c,

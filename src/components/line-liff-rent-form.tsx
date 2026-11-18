@@ -30,9 +30,6 @@ import {
 import { taipeiTodayYmd } from "@/lib/owner-tracking-next-contact";
 import { PARKING_TYPE_LABELS } from "@/lib/parking-type-label";
 import { propertyTypeLabel } from "@/lib/property-type-label";
-import { TAIWAN_REGIONS } from "@/lib/taiwan-regions";
-
-const LIFF_CITY_NAMES = ["台北市", "新北市"] as const;
 
 export type { LiffDirectListingEntry };
 
@@ -1000,23 +997,16 @@ export function LineLiffRentForm({
     setStep("listings");
   }, [listings, skipCriteria, listMode]);
 
-  const cities = useMemo(() => {
-    const fromListings = listings.map((item) => item.city).filter(Boolean);
-    return [...new Set([...LIFF_CITY_NAMES, ...fromListings])].sort();
-  }, [listings]);
+  /** 縣市區只露出公司已上架物件有的，不要整份雙北清單 */
+  const cities = useMemo(
+    () => [...new Set(listings.map((item) => item.city).filter(Boolean))].sort(),
+    [listings],
+  );
   const districts = useMemo(() => {
-    const selected = criteria.cities.length
-      ? criteria.cities
-      : [...LIFF_CITY_NAMES];
-    const fromRegions = selected.flatMap((city) => {
-      const region = TAIWAN_REGIONS.find((row) => row.city === city);
-      return region?.districts ?? [];
-    });
-    const fromListings = listings
-      .filter((item) => selected.includes(item.city))
-      .map((item) => item.district)
-      .filter(Boolean);
-    return [...new Set([...fromRegions, ...fromListings])].sort();
+    const pool = criteria.cities.length
+      ? listings.filter((item) => criteria.cities.includes(item.city))
+      : listings;
+    return [...new Set(pool.map((item) => item.district).filter(Boolean))].sort();
   }, [listings, criteria.cities]);
 
   const listingPool = useMemo(() => {
