@@ -15,6 +15,6 @@ export async function GET() {
   const denied = await requireSuperAdmin();
   if (denied) return denied;
 
-  const listings = await loadRentalMatchListings(60);
+  const listings = await loadRentalMatchListings(null);
   return NextResponse.json({ listings }, { headers: NO_STORE });
 }

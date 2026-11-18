@@ -76,7 +76,7 @@ export function buildGuestLiffPickUrl(sessionId: string) {
 
 async function loadRentListings(): Promise<RentalMatchListing[]> {
   const { loadRentalMatchListings } = await import("@/lib/line-rental-assistant");
-  return loadRentalMatchListings(200);
+  return loadRentalMatchListings(null);
 }
 
 function citiesFrom(listings: RentalMatchListing[]) {

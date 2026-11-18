@@ -129,9 +129,13 @@ export function toRentalMatchListing(listing: {
   };
 }
 
-/** 已上架出租物件（含詳情欄位）供 LIFF／LINE 配對 */
+/**
+ * 已上架出租物件（含詳情欄位）供 LIFF／LINE 配對。
+ * 預設撈全部：與後台「已上架出租」對齊；下架即不進清單。
+ * take 僅在明確需要限筆數時使用。
+ */
 export async function loadRentalMatchListings(
-  take: number | null = 60,
+  take: number | null = null,
   extraIds: string[] = [],
 ): Promise<RentalMatchListing[]> {
   if (!process.env.DATABASE_URL) return [];
