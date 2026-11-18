@@ -549,6 +549,144 @@ export function criteriaSummary(criteria: RentalMatchCriteria) {
   ].join(" · ");
 }
 
+export type ParsedCriteriaDetail = RentalMatchCriteria & {
+  priceMin: number | null;
+  priceMax: number | null;
+};
+
+/** 從案件／聊天條件字串還原結構化條件（客服右側顯示用） */
+export function parseCriteriaText(raw: string): ParsedCriteriaDetail | null {
+  const text = raw.trim();
+  if (!text) return null;
+  const parts = text
+    .split(/[·・|｜]/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (!parts.length) return null;
+
+  const cities: string[] = [];
+  const districts: string[] = [];
+  const rooms: string[] = [];
+  const bathrooms: string[] = [];
+  const parking: string[] = [];
+  const priceKeys: string[] = [];
+  const extras: RentalExtra[] = [];
+  let priceMin: number | null = null;
+  let priceMax: number | null = null;
+
+  for (const part of parts) {
+    if (/不限/.test(part) && /縣市|行政區|房型|衛浴|車位|月租|補助|報稅|戶籍/.test(part)) {
+      continue;
+    }
+    const knownCities = [
+      "台北市",
+      "新北市",
+      "基隆市",
+      "桃園市",
+      "台中市",
+      "台南市",
+      "高雄市",
+      "新竹市",
+      "嘉義市",
+    ] as const;
+    if (knownCities.some((city) => part.includes(city))) {
+      for (const city of knownCities) {
+        if (part.includes(city) && !cities.includes(city)) cities.push(city);
+      }
+      const districtMatches = part.match(/[\u4e00-\u9fff]{1,4}區/g) ?? [];
+      for (const district of districtMatches) {
+        if (!districts.includes(district)) districts.push(district);
+      }
+      continue;
+    }
+    if (/區$/.test(part) && part.length <= 5) {
+      for (const district of part.split(/[、,，\s]+/).filter((item) => /區$/.test(item))) {
+        if (!districts.includes(district)) districts.push(district);
+      }
+      continue;
+    }
+    if (part.includes("獨立套房") || part === "套房") {
+      if (!rooms.includes("studio")) rooms.push("studio");
+      continue;
+    }
+    if (/^\d+\s*房/.test(part) || /房以上/.test(part)) {
+      if (/4\s*房|房以上/.test(part)) {
+        if (!rooms.includes("4")) rooms.push("4");
+      } else {
+        const n = part.match(/(\d+)\s*房/)?.[1];
+        if (n && !rooms.includes(n)) rooms.push(n);
+      }
+      continue;
+    }
+    if (/1\s*衛/.test(part) && !/以上/.test(part)) {
+      if (!bathrooms.includes("1")) bathrooms.push("1");
+      continue;
+    }
+    if (/2\s*衛|衛浴.*以上/.test(part)) {
+      if (!bathrooms.includes("2")) bathrooms.push("2");
+      continue;
+    }
+    if (/不要車位/.test(part)) {
+      if (!parking.includes("no")) parking.push("no");
+      continue;
+    }
+    if (/要車位|有車位/.test(part)) {
+      if (!parking.includes("yes")) parking.push("yes");
+      continue;
+    }
+    for (const option of RENT_PRICE_OPTIONS) {
+      if (part.includes(option.label) && !priceKeys.includes(option.value)) {
+        priceKeys.push(option.value);
+      }
+    }
+    const custom = part.match(
+      /(?:自訂(?:預算)?|預算)\s*(\d+)?\s*[～~\-－至到]\s*(\d+)?/,
+    );
+    if (custom) {
+      if (custom[1]) priceMin = Number(custom[1]);
+      if (custom[2]) priceMax = Number(custom[2]);
+      continue;
+    }
+    const range = part.match(/(\d{4,})\s*[～~\-－至到]\s*(\d{4,})/);
+    if (range && /租|預算|元|萬/.test(part)) {
+      priceMin = Number(range[1]);
+      priceMax = Number(range[2]);
+      continue;
+    }
+    if (/租補/.test(part) && !extras.includes("subsidy")) extras.push("subsidy");
+    if (/報稅/.test(part) && !extras.includes("tax")) extras.push("tax");
+    if (/入籍|戶籍|簽戶籍/.test(part) && !extras.includes("household")) {
+      extras.push("household");
+    }
+  }
+
+  if (
+    !cities.length &&
+    !districts.length &&
+    !rooms.length &&
+    !bathrooms.length &&
+    !parking.length &&
+    !priceKeys.length &&
+    priceMin == null &&
+    priceMax == null &&
+    !extras.length
+  ) {
+    return null;
+  }
+
+  return {
+    cities,
+    districts,
+    rooms,
+    bathrooms,
+    parking,
+    priceKeys,
+    extras,
+    priceMin,
+    priceMax,
+  };
+}
+
 export function formatViewingWhen(date: string, slotId: string) {
   const slot = VIEWING_SLOTS.find((item) => item.id === slotId);
   if (!date || !slot) return "";

@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { requireSuperAdmin } from "@/lib/admin-auth";
 import { findGuestReplyToken, readLineConversations } from "@/lib/line-conversations";
 import { listOpenGuestSessions } from "@/lib/line-guest-sessions";
-import { listGuestProfileUserIds } from "@/lib/line-guest-profile";
-import { listActiveGuestWatches } from "@/lib/line-guest-watch";
+import { listGuestProfiles, listGuestProfileUserIds } from "@/lib/line-guest-profile";
+import { listGuestWatches } from "@/lib/line-guest-watch";
 import {
   buildPublicBaseUrl,
   isLineMonthlyQuotaError,
@@ -42,16 +42,25 @@ export async function GET() {
     console.warn("[line/conversations] sync bookings failed", error);
   });
 
-  const [conversations, cases, sessions, watches, profileUserIds] = await Promise.all([
+  const [conversations, cases, sessions, watches, profileUserIds, profiles] = await Promise.all([
     readLineConversations(),
     readLineRentalCases(),
     listOpenGuestSessions(),
-    listActiveGuestWatches(),
+    listGuestWatches(),
     listGuestProfileUserIds(),
+    listGuestProfiles(),
   ]);
 
   return NextResponse.json(
-    { conversations, cases, sessions, watches, profileUserIds, fetchedAt: new Date().toISOString() },
+    {
+      conversations,
+      cases,
+      sessions,
+      watches,
+      profileUserIds,
+      profiles,
+      fetchedAt: new Date().toISOString(),
+    },
     { headers: NO_STORE },
   );
 }

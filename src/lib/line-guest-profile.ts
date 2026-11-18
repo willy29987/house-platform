@@ -88,6 +88,11 @@ export async function getGuestProfileByUserId(lineUserId: string): Promise<Guest
   return store.profiles.find((row) => row.lineUserId === id) ?? null;
 }
 
+export async function listGuestProfiles(): Promise<GuestProfile[]> {
+  const store = await readStore();
+  return store.profiles;
+}
+
 /** 以 lineUserId 覆蓋寫入最新個資 */
 export async function upsertGuestProfile(input: {
   lineUserId: string;
@@ -113,6 +118,56 @@ export async function upsertGuestProfile(input: {
     peopleCount: Number.isFinite(people) && people >= 1 ? Math.min(6, Math.round(people)) : 1,
     petNote: input.petNote?.trim() || "",
     moveInDate: input.moveInDate?.trim() || "",
+    updatedAt: new Date().toISOString(),
+  };
+
+  const store = await readStore();
+  store.profiles = [record, ...store.profiles.filter((row) => row.lineUserId !== lineUserId)];
+  await writeStore(store);
+  return record;
+}
+
+/**
+ * 客服代填／調整個資：允許電話尚未齊全也能存（方便還沒填表的客人）。
+ * 若電話有填則仍須合法格式。
+ */
+export async function upsertGuestProfileByStaff(input: {
+  lineUserId: string;
+  displayName?: string;
+  phone?: string;
+  occupation?: string;
+  nationality?: string;
+  peopleCount?: number;
+  petNote?: string;
+  moveInDate?: string;
+}): Promise<GuestProfile | null> {
+  const lineUserId = input.lineUserId.trim();
+  if (!lineUserId) return null;
+
+  const phone = (input.phone ?? "").trim();
+  if (phone && !isValidGuestPhone(phone)) return null;
+
+  const existing = await getGuestProfileByUserId(lineUserId);
+  const people = Number(input.peopleCount ?? existing?.peopleCount ?? 1);
+  const record: GuestProfile = {
+    lineUserId,
+    displayName: input.displayName?.trim() || existing?.displayName || "LINE 客人",
+    phone: phone || existing?.phone || "",
+    occupation:
+      input.occupation !== undefined
+        ? input.occupation.trim()
+        : existing?.occupation || "",
+    nationality:
+      input.nationality !== undefined
+        ? input.nationality.trim()
+        : existing?.nationality || "",
+    peopleCount: Number.isFinite(people) && people >= 1 ? Math.min(6, Math.round(people)) : 1,
+    petNote:
+      input.petNote !== undefined ? input.petNote.trim() : existing?.petNote || "",
+    moveInDate:
+      input.moveInDate !== undefined
+        ? input.moveInDate.trim()
+        : existing?.moveInDate || "",
     updatedAt: new Date().toISOString(),
   };
 

@@ -10,17 +10,30 @@ import {
   type ReactNode,
 } from "react";
 import { taipeiTodayYmd } from "@/lib/owner-tracking-next-contact";
-import { formatViewingRange, RENT_PRICE_OPTIONS, type RentalMatchListing } from "@/lib/line-rental-assistant";
+import {
+  EXTRA_OPTIONS,
+  RENT_PRICE_OPTIONS,
+  ROOM_TYPE_OPTIONS,
+  formatViewingRange,
+  parseCriteriaText,
+  type RentalMatchListing,
+} from "@/lib/line-rental-assistant";
 import type {
   LineConversation,
   LineConversationMediaType,
 } from "@/lib/line-conversations";
 import type { LineRentalCase } from "@/lib/line-rental-cases";
 import type { GuestSession } from "@/lib/line-guest-sessions";
+import type { GuestProfile } from "@/lib/line-guest-profile";
 import type { GuestWatchRecord } from "@/lib/line-guest-watch";
+import {
+  LineGuestCriteriaEditor,
+  type GuestCriteriaSaveResult,
+} from "@/components/line-guest-criteria-editor";
 import {
   buildViewingConfirmedGuestText,
   VIEWING_ASK_OTHER_TIME_TEXT,
+  VIEWING_CANCELLED_GUEST_TEXT,
   VIEWING_SUBMIT_ACK_TEXT,
   type ViewingConfirmListing,
 } from "@/lib/line-viewing-guest-copy";
@@ -41,6 +54,7 @@ type GuestStatus =
   | "pending_confirm"
   | "reschedule_sent"
   | "confirmed"
+  | "cancelled"
   | "saved"
   | "replied"
   | "awaiting_staff"
@@ -87,6 +101,18 @@ type StaffGuest = {
   criteriaText: string;
   /** 無配對時登記的最新找房條件 */
   watchCriteriaText?: string;
+  /** 結構化找房條件（右側直排顯示用） */
+  watchDetail?: {
+    cities: string[];
+    districts: string[];
+    rooms: string[];
+    bathrooms: string[];
+    parking: string[];
+    priceKeys: string[];
+    extras: string[];
+    priceMin: number | null;
+    priceMax: number | null;
+  };
   /** 已有完整個資（電話等），可略過重填 */
   profileSaved?: boolean;
   /** 列表預覽用 */
@@ -293,6 +319,7 @@ const STATUS_LABEL: Record<GuestStatus, string> = {
   pending_confirm: "待確認",
   reschedule_sent: "待客人確認改約",
   confirmed: "已確認",
+  cancelled: "已取消",
   saved: "進行中",
   replied: "已回覆",
   awaiting_staff: "待回覆",
@@ -701,7 +728,9 @@ function caseToStaffGuest(item: LineRentalCase): StaffGuest {
             ? "reschedule_sent"
             : item.status === "confirmed"
               ? "confirmed"
-              : "pending_confirm";
+              : item.status === "cancelled"
+                ? "cancelled"
+                : "pending_confirm";
 
   const criteriaBits = [
     item.kind === "591_link" ? "591 詢問" : item.kind === "image_inquiry" ? "圖片詢問" : item.criteriaText,
@@ -738,8 +767,123 @@ function watchSummary(watch: GuestWatchRecord) {
     watch.priceMin != null || watch.priceMax != null
       ? `自訂預算 ${watch.priceMin ?? "不限"}～${watch.priceMax ?? "不限"}`
       : "";
-  const pet = watch.petNote ? `寵物：${watch.petNote}` : "";
-  return [watch.criteriaText, budget, pet].filter(Boolean).join(" · ");
+  return [watch.criteriaText, budget].filter(Boolean).join(" · ");
+}
+
+function watchDetailFrom(watch: GuestWatchRecord): StaffGuest["watchDetail"] {
+  return {
+    cities: watch.cities ?? [],
+    districts: watch.districts ?? [],
+    rooms: watch.rooms ?? [],
+    bathrooms: watch.bathrooms ?? [],
+    parking: watch.parking ?? [],
+    priceKeys: watch.priceKeys ?? [],
+    extras: watch.extras ?? [],
+    priceMin: watch.priceMin,
+    priceMax: watch.priceMax,
+  };
+}
+
+function labelJoin(
+  ids: string[],
+  options: readonly { id?: string; value?: string; label: string }[],
+  empty: string,
+) {
+  if (!ids.length) return empty;
+  return ids
+    .map((id) => options.find((o) => o.id === id || o.value === id)?.label ?? id)
+    .join("、");
+}
+
+function hasWatchDetail(detail: StaffGuest["watchDetail"] | null | undefined) {
+  if (!detail) return false;
+  return Boolean(
+    detail.cities.length ||
+      detail.districts.length ||
+      detail.rooms.length ||
+      detail.bathrooms.length ||
+      detail.parking.length ||
+      detail.priceKeys.length ||
+      detail.extras.length ||
+      detail.priceMin != null ||
+      detail.priceMax != null,
+  );
+}
+
+function resolveWatchDetail(
+  guest: StaffGuest,
+  catalog: RentalMatchListing[],
+): StaffGuest["watchDetail"] | undefined {
+  if (hasWatchDetail(guest.watchDetail)) return guest.watchDetail;
+  const fromText = parseCriteriaText(
+    [guest.watchCriteriaText, guest.criteriaText].filter(Boolean).join(" · "),
+  );
+  if (fromText && hasWatchDetail(fromText)) return fromText;
+
+  const pickedIds = guest.picked.map((item) => item.id);
+  if (!pickedIds.length || !catalog.length) return undefined;
+  const pickedListings = catalog.filter((item) => pickedIds.includes(item.id));
+  if (!pickedListings.length) return undefined;
+  const cities = [...new Set(pickedListings.map((item) => item.city).filter(Boolean))];
+  const districts = [...new Set(pickedListings.map((item) => item.district).filter(Boolean))];
+  const rooms = [
+    ...new Set(
+      pickedListings
+        .map((item) => {
+          const condition = item.houseCondition || item.propertyType;
+          if (condition === "STUDIO") return "studio";
+          if (item.rooms >= 4) return "4";
+          if (item.rooms >= 1 && item.rooms <= 3) return String(item.rooms);
+          return "";
+        })
+        .filter(Boolean),
+    ),
+  ];
+  const prices = pickedListings.map((item) => item.price).filter((n) => Number.isFinite(n) && n > 0);
+  const detail = {
+    cities,
+    districts,
+    rooms,
+    bathrooms: [] as string[],
+    parking: [] as string[],
+    priceKeys: [] as string[],
+    extras: [] as string[],
+    priceMin: prices.length ? Math.min(...prices) : null,
+    priceMax: prices.length ? Math.max(...prices) : null,
+  };
+  return hasWatchDetail(detail) ? detail : undefined;
+}
+
+function fieldOrEmpty(
+  value: string,
+  hasAny: boolean,
+  emptyWhenMissing = "未填",
+  emptyWhenUnlimited = "不限",
+) {
+  if (value && value !== "未填") return value;
+  return hasAny ? emptyWhenUnlimited : emptyWhenMissing;
+}
+
+function applyCriteriaSaveToGuest(
+  guest: StaffGuest,
+  result: GuestCriteriaSaveResult,
+): StaffGuest {
+  const summary = watchSummary(result.watch);
+  const profile = result.profile;
+  return {
+    ...guest,
+    watching: result.watch.active,
+    watchCriteriaText: summary || undefined,
+    watchDetail: watchDetailFrom(result.watch),
+    criteriaText: summary || guest.criteriaText,
+    petNote: profile?.petNote || result.watch.petNote || guest.petNote,
+    profileSaved: result.profileComplete || guest.profileSaved,
+    phone: profile?.phone || guest.phone,
+    occupation: profile?.occupation || guest.occupation,
+    nationality: profile?.nationality || guest.nationality,
+    peopleCount: profile?.peopleCount || guest.peopleCount,
+    moveInDate: profile?.moveInDate || guest.moveInDate,
+  };
 }
 
 function buildLiveGuests(
@@ -748,24 +892,44 @@ function buildLiveGuests(
   openSessions: GuestSession[] = [],
   watches: GuestWatchRecord[] = [],
   profileUserIds: string[] = [],
+  profiles: GuestProfile[] = [],
 ): StaffGuest[] {
   const formInProgressIds = new Set(
     openSessions.map((session) => session.lineUserId).filter(Boolean),
   );
   const watchByUser = new Map(watches.map((watch) => [watch.lineUserId, watch]));
+  const profileByUser = new Map(profiles.map((row) => [row.lineUserId, row]));
   const profileIds = new Set(profileUserIds);
   const fromConversations = conversations.map((item) => {
     const guest = conversationToStaffGuest(item, cases, formInProgressIds);
     const watch = item.lineUserId ? watchByUser.get(item.lineUserId) : undefined;
-    if (!watch && !profileIds.has(item.lineUserId)) return guest;
+    const profile = item.lineUserId ? profileByUser.get(item.lineUserId) : undefined;
+    if (!watch && !profile && !profileIds.has(item.lineUserId)) return guest;
     const summary = watch ? watchSummary(watch) : "";
+    const fromWatch = watch ? watchDetailFrom(watch) : undefined;
+    const fromCaseText = !hasWatchDetail(fromWatch)
+      ? parseCriteriaText(guest.criteriaText || "") ?? undefined
+      : undefined;
     return {
       ...guest,
       watching: watch ? watch.active : guest.watching,
       watchCriteriaText: summary || undefined,
+      watchDetail: hasWatchDetail(fromWatch)
+        ? fromWatch
+        : hasWatchDetail(fromCaseText)
+          ? fromCaseText
+          : guest.watchDetail,
       criteriaText: summary || guest.criteriaText,
-      petNote: watch?.petNote || guest.petNote,
+      petNote: profile?.petNote || watch?.petNote || guest.petNote,
       profileSaved: profileIds.has(item.lineUserId),
+      phone: guest.phone || profile?.phone || "",
+      occupation: guest.occupation || profile?.occupation || "",
+      nationality: guest.nationality || profile?.nationality || "",
+      peopleCount:
+        guest.phone || guest.occupation || guest.moveInDate
+          ? guest.peopleCount
+          : profile?.peopleCount || guest.peopleCount,
+      moveInDate: guest.moveInDate || profile?.moveInDate || "",
     };
   });
   const covered = new Set(
@@ -921,6 +1085,7 @@ export function LineRentalPreview({
         initialWatches,
         initialProfileUserIds,
       ),
+    // 初次 SSR 未必帶 profiles；之後靠 stream／poll 補齊
     [initialConversations, initialCases, initialSessions, initialWatches, initialProfileUserIds],
   );
   const [liveReady, setLiveReady] = useState(() => seedLive.length > 0);
@@ -1063,6 +1228,7 @@ export function LineRentalPreview({
       sessions?: GuestSession[];
       watches?: GuestWatchRecord[];
       profileUserIds?: string[];
+      profiles?: GuestProfile[];
     }) {
       if (cancelled) return;
       const next = buildLiveGuests(
@@ -1071,6 +1237,7 @@ export function LineRentalPreview({
         data.sessions ?? [],
         data.watches ?? [],
         data.profileUserIds ?? [],
+        data.profiles ?? [],
       );
       notifyNewGuestMessages(next);
       setLiveGuests(next);
@@ -1554,6 +1721,56 @@ export function LineRentalPreview({
   }
 
   /** 客服點「改時間」：直接請客人另提方便時段 */
+  async function cancelViewing(guest: StaffGuest) {
+    const caseId = (guest.caseId || guest.id || "").trim();
+    if (!caseId || caseId.startsWith("demo") || caseId.startsWith("U")) {
+      const text = VIEWING_CANCELLED_GUEST_TEXT;
+      const id = lineId.current++;
+      const sentAt = new Date().toISOString();
+      const at = formatLineClock(sentAt);
+      patchGuest(guest.id, (current) =>
+        attachPipelineAndReply({
+          ...current,
+          status: "cancelled",
+          lines: [...current.lines, { id, from: "staff", text, at, atIso: sentAt, pending: true }],
+          summaryText: text,
+          createdAt: sentAt,
+          replyStatus: "replied",
+        }),
+      );
+      pushStaffLine(guest, text, id);
+      return;
+    }
+    try {
+      const response = await fetch("/api/line/viewing-cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ caseId, cancelledBy: "staff" }),
+      });
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        window.alert(data.error || "取消失敗");
+        return;
+      }
+      const text = VIEWING_CANCELLED_GUEST_TEXT;
+      const id = lineId.current++;
+      const sentAt = new Date().toISOString();
+      const at = formatLineClock(sentAt);
+      patchGuest(guest.id, (current) =>
+        attachPipelineAndReply({
+          ...current,
+          status: "cancelled",
+          lines: [...current.lines, { id, from: "staff", text, at, atIso: sentAt, pending: false }],
+          summaryText: text,
+          createdAt: sentAt,
+          replyStatus: "replied",
+        }),
+      );
+    } catch {
+      window.alert("取消失敗，請稍後再試");
+    }
+  }
+
   function askOtherTime(guest: StaffGuest) {
     const text = VIEWING_ASK_OTHER_TIME_TEXT;
     const id = lineId.current++;
@@ -1725,7 +1942,7 @@ export function LineRentalPreview({
         ) : null}
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-1 overflow-hidden lg:grid-cols-[minmax(16rem,20%)_minmax(0,1fr)_minmax(18rem,22%)]">
+      <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-1 overflow-hidden lg:grid-cols-[minmax(14rem,17%)_minmax(0,1fr)_minmax(26rem,34%)]">
         <ul
           className={`min-h-0 overflow-y-auto border-b border-[#d8dde6] bg-white max-lg:border-0 max-lg:pb-[env(safe-area-inset-bottom)] lg:border-r lg:border-b-0 ${
             mobilePane === "chat" ? "max-lg:hidden" : ""
@@ -1860,12 +2077,14 @@ export function LineRentalPreview({
               <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-white px-4 py-4 lg:hidden">
                 <GuestDecisionPanel
                   guest={selected}
+                  listings={listings}
                   needsConfirm={Boolean(needsConfirm)}
                   editingTime={editingTime}
                   schedule={schedule}
                   today={today}
                   onConfirm={(orderedIds) => confirmTime(selected, orderedIds)}
                   onAskOtherTime={() => askOtherTime(selected)}
+                  onCancelViewing={() => void cancelViewing(selected)}
                   onStartEdit={() => {
                     setEditingTime(true);
                     setSchedule(emptyViewingSchedule());
@@ -1876,6 +2095,16 @@ export function LineRentalPreview({
                   }}
                   onScheduleChange={setSchedule}
                   onSendNewTime={() => sendNewTime(selected)}
+                  onCriteriaSaved={(result) => {
+                    const patch = (list: StaffGuest[]) =>
+                      list.map((item) =>
+                        item.id === selected.id
+                          ? applyCriteriaSaveToGuest(item, result)
+                          : item,
+                      );
+                    setLiveGuests(patch);
+                    setGuests(patch);
+                  }}
                 />
               </div>
             ) : null}
@@ -2262,12 +2491,14 @@ export function LineRentalPreview({
           {selected ? (
             <GuestDecisionPanel
               guest={selected}
+              listings={listings}
               needsConfirm={Boolean(needsConfirm)}
               editingTime={editingTime}
               schedule={schedule}
               today={today}
               onConfirm={(orderedIds) => confirmTime(selected, orderedIds)}
               onAskOtherTime={() => askOtherTime(selected)}
+              onCancelViewing={() => void cancelViewing(selected)}
               onStartEdit={() => {
                 setEditingTime(true);
                 setSchedule(emptyViewingSchedule());
@@ -2278,6 +2509,14 @@ export function LineRentalPreview({
               }}
               onScheduleChange={setSchedule}
               onSendNewTime={() => sendNewTime(selected)}
+              onCriteriaSaved={(result) => {
+                const patch = (list: StaffGuest[]) =>
+                  list.map((item) =>
+                    item.id === selected.id ? applyCriteriaSaveToGuest(item, result) : item,
+                  );
+                setLiveGuests(patch);
+                setGuests(patch);
+              }}
             />
           ) : (
             <p className="text-sm text-zinc-500">選客人後，這裡會顯示物件選擇與時間。</p>
@@ -2290,39 +2529,52 @@ export function LineRentalPreview({
 
 function GuestDecisionPanel({
   guest,
+  listings,
   needsConfirm,
   editingTime,
   schedule,
   today,
   onConfirm,
   onAskOtherTime,
+  onCancelViewing,
   onStartEdit,
   onCancelEdit,
   onScheduleChange,
   onSendNewTime,
+  onCriteriaSaved,
 }: {
   guest: StaffGuest;
+  listings: RentalMatchListing[];
   needsConfirm: boolean;
   editingTime: boolean;
   schedule: ViewingScheduleValue;
   today: string;
   onConfirm: (orderedIds: string[]) => void;
   onAskOtherTime: () => void;
+  onCancelViewing: () => void;
   onStartEdit: () => void;
   onCancelEdit: () => void;
   onScheduleChange: (next: ViewingScheduleValue) => void;
   onSendNewTime: () => void;
+  onCriteriaSaved: (result: GuestCriteriaSaveResult) => void;
 }) {
   const pickedKey = guest.picked.map((item) => item.id).join("|");
   const [orderIds, setOrderIds] = useState<string[]>(() => guest.picked.map((item) => item.id));
+  const [editingCriteria, setEditingCriteria] = useState(false);
 
   useEffect(() => {
     setOrderIds(guest.picked.map((item) => item.id));
   }, [guest.id, pickedKey]);
 
+  useEffect(() => {
+    setEditingCriteria(false);
+  }, [guest.id]);
+
   const orderedPicked = orderIds
     .map((id) => guest.picked.find((item) => item.id === id))
     .filter((item): item is PickedListing => Boolean(item));
+  const displayWatch = resolveWatchDetail(guest, listings);
+  const hasCriteria = hasWatchDetail(displayWatch);
 
   function movePicked(id: string, direction: -1 | 1) {
     setOrderIds((current) => {
@@ -2373,51 +2625,169 @@ function GuestDecisionPanel({
         </p>
       </div>
 
-      {guest.watchCriteriaText ? (
-        <div className="rounded-xl border border-[#c5d4e8] bg-[#eef3f9] p-3">
-          <p className="text-xs font-semibold text-[#0b2545]">已登記找房條件</p>
-          <p className="mt-1 break-words font-medium text-zinc-900">{guest.watchCriteriaText}</p>
-          <p className="mt-1 text-xs text-zinc-600">
-            {guest.profileSaved ? "已有個人資料，之後約看可只選時間" : "個人資料尚未填寫"}
-          </p>
-        </div>
-      ) : null}
+      {editingCriteria && guest.lineUserId ? (
+        <LineGuestCriteriaEditor
+          lineUserId={guest.lineUserId}
+          displayName={guest.lineName}
+          listings={listings}
+          seedProfile={{
+            phone: guest.phone,
+            occupation: guest.occupation,
+            nationality: guest.nationality,
+            peopleCount: guest.peopleCount,
+            petNote: guest.petNote,
+            moveInDate: guest.moveInDate,
+          }}
+          onCancel={() => setEditingCriteria(false)}
+          onSaved={(result) => {
+            onCriteriaSaved(result);
+            setEditingCriteria(false);
+          }}
+        />
+      ) : (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[11px] text-zinc-500">
+              {guest.profileSaved
+                ? "已有個人資料，之後約看可只選時間"
+                : "個人資料尚未填寫 · 可代填條件"}
+            </p>
+            {guest.lineUserId ? (
+              <button
+                type="button"
+                onClick={() => setEditingCriteria(true)}
+                className="shrink-0 rounded-full border border-[#0b2545] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#0b2545]"
+              >
+                調整條件
+              </button>
+            ) : null}
+          </div>
 
-      <div>
-        <p className="text-xs font-semibold text-zinc-500">基本資料</p>
-        <dl className="mt-1 space-y-1 text-zinc-800">
-          <div className="flex gap-2">
-            <dt className="w-16 shrink-0 text-zinc-500">電話</dt>
-            <dd className="min-w-0 break-all font-medium">{guest.phone || "未填"}</dd>
-          </div>
-          <div className="flex gap-2">
-            <dt className="w-16 shrink-0 text-zinc-500">人數</dt>
-            <dd className="min-w-0 font-medium">{guest.peopleCount || 1} 人</dd>
-          </div>
-          <div className="flex gap-2">
-            <dt className="w-16 shrink-0 text-zinc-500">職業</dt>
-            <dd className="min-w-0 break-words font-medium">{guest.occupation || "未填"}</dd>
-          </div>
-          <div className="flex gap-2">
-            <dt className="w-16 shrink-0 text-zinc-500">預計入住</dt>
-            <dd className="min-w-0 font-medium">{guest.moveInDate || "未填"}</dd>
-          </div>
-          <div className="flex gap-2">
-            <dt className="w-16 shrink-0 text-zinc-500">國籍</dt>
-            <dd className="min-w-0 font-medium">{guest.nationality || "未填"}</dd>
-          </div>
-          <div className="flex gap-2">
-            <dt className="w-16 shrink-0 text-zinc-500">寵物</dt>
-            <dd className="min-w-0 break-words font-medium">{guest.petNote || "未填"}</dd>
-          </div>
-          {guest.criteriaText ? (
-            <div className="flex gap-2">
-              <dt className="w-16 shrink-0 text-zinc-500">條件</dt>
-              <dd className="min-w-0 break-words font-medium">{guest.criteriaText}</dd>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-zinc-500">找房條件</p>
+              <dl className="mt-1 space-y-1 text-zinc-800">
+                <div className="flex gap-2">
+                  <dt className="w-14 shrink-0 text-zinc-500">縣市</dt>
+                  <dd className="min-w-0 break-words font-medium">
+                    {fieldOrEmpty(
+                      displayWatch?.cities.length ? displayWatch.cities.join("、") : "",
+                      hasCriteria,
+                    )}
+                  </dd>
+                </div>
+                <div className="flex gap-2">
+                  <dt className="w-14 shrink-0 text-zinc-500">行政區</dt>
+                  <dd className="min-w-0 break-words font-medium">
+                    {fieldOrEmpty(
+                      displayWatch?.districts.length ? displayWatch.districts.join("、") : "",
+                      hasCriteria,
+                    )}
+                  </dd>
+                </div>
+                <div className="flex gap-2">
+                  <dt className="w-14 shrink-0 text-zinc-500">房型</dt>
+                  <dd className="min-w-0 break-words font-medium">
+                    {fieldOrEmpty(
+                      labelJoin(displayWatch?.rooms ?? [], ROOM_TYPE_OPTIONS, ""),
+                      hasCriteria,
+                    )}
+                  </dd>
+                </div>
+                <div className="flex gap-2">
+                  <dt className="w-14 shrink-0 text-zinc-500">衛浴</dt>
+                  <dd className="min-w-0 break-words font-medium">
+                    {fieldOrEmpty(
+                      labelJoin(
+                        displayWatch?.bathrooms ?? [],
+                        [
+                          { id: "1", label: "1 衛" },
+                          { id: "2", label: "2 衛以上" },
+                        ],
+                        "",
+                      ),
+                      hasCriteria,
+                    )}
+                  </dd>
+                </div>
+                <div className="flex gap-2">
+                  <dt className="w-14 shrink-0 text-zinc-500">車位</dt>
+                  <dd className="min-w-0 break-words font-medium">
+                    {fieldOrEmpty(
+                      !displayWatch?.parking.length || displayWatch.parking.includes("any")
+                        ? ""
+                        : labelJoin(
+                            displayWatch.parking,
+                            [
+                              { id: "yes", label: "要車位" },
+                              { id: "no", label: "不要車位" },
+                            ],
+                            "",
+                          ),
+                      hasCriteria,
+                    )}
+                  </dd>
+                </div>
+                <div className="flex gap-2">
+                  <dt className="w-14 shrink-0 text-zinc-500">預算</dt>
+                  <dd className="min-w-0 break-words font-medium">
+                    {fieldOrEmpty(
+                      displayWatch &&
+                        (displayWatch.priceMin != null || displayWatch.priceMax != null)
+                        ? `${displayWatch.priceMin ?? "不限"}～${displayWatch.priceMax ?? "不限"}`
+                        : labelJoin(displayWatch?.priceKeys ?? [], RENT_PRICE_OPTIONS, ""),
+                      hasCriteria,
+                    )}
+                  </dd>
+                </div>
+                <div className="flex gap-2">
+                  <dt className="w-14 shrink-0 text-zinc-500">其他</dt>
+                  <dd className="min-w-0 break-words font-medium">
+                    {fieldOrEmpty(
+                      labelJoin(displayWatch?.extras ?? [], EXTRA_OPTIONS, ""),
+                      hasCriteria,
+                    )}
+                  </dd>
+                </div>
+              </dl>
             </div>
-          ) : null}
-        </dl>
-      </div>
+
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-zinc-500">基本資料</p>
+              <dl className="mt-1 space-y-1 text-zinc-800">
+                <div className="flex gap-2">
+                  <dt className="w-14 shrink-0 text-zinc-500">電話</dt>
+                  <dd className="min-w-0 break-all font-medium">{guest.phone || "未填"}</dd>
+                </div>
+                <div className="flex gap-2">
+                  <dt className="w-14 shrink-0 text-zinc-500">人數</dt>
+                  <dd className="min-w-0 font-medium">{guest.peopleCount || 1} 人</dd>
+                </div>
+                <div className="flex gap-2">
+                  <dt className="w-14 shrink-0 text-zinc-500">職業</dt>
+                  <dd className="min-w-0 break-words font-medium">
+                    {guest.occupation || "未填"}
+                  </dd>
+                </div>
+                <div className="flex gap-2">
+                  <dt className="w-14 shrink-0 text-zinc-500">預計入住</dt>
+                  <dd className="min-w-0 font-medium">{guest.moveInDate || "未填"}</dd>
+                </div>
+                <div className="flex gap-2">
+                  <dt className="w-14 shrink-0 text-zinc-500">國籍</dt>
+                  <dd className="min-w-0 font-medium">{guest.nationality || "未填"}</dd>
+                </div>
+                <div className="flex gap-2">
+                  <dt className="w-14 shrink-0 text-zinc-500">寵物</dt>
+                  <dd className="min-w-0 break-words font-medium">
+                    {guest.petNote || "未填"}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 物件選擇 ＋ 帶看順序（待確認時可調順序；標題可點進廣告） */}
       <section>
@@ -2511,6 +2881,13 @@ function GuestDecisionPanel({
               >
                 改時間
               </button>
+              <button
+                type="button"
+                onClick={onCancelViewing}
+                className="rounded-full border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-800"
+              >
+                取消約看
+              </button>
             </div>
           ) : (
             rescheduleForm
@@ -2521,17 +2898,32 @@ function GuestDecisionPanel({
       {guest.status === "confirmed" ? (
         <section className="space-y-2">
           {!editingTime ? (
-            <button
-              type="button"
-              onClick={onAskOtherTime}
-              className="w-full rounded-full border border-zinc-300 bg-white px-3 py-2 text-sm font-semibold text-zinc-800"
-            >
-              改時間
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={onAskOtherTime}
+                className="w-full rounded-full border border-zinc-300 bg-white px-3 py-2 text-sm font-semibold text-zinc-800"
+              >
+                改時間
+              </button>
+              <button
+                type="button"
+                onClick={onCancelViewing}
+                className="w-full rounded-full border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-800"
+              >
+                取消約看
+              </button>
+            </>
           ) : (
             rescheduleForm
           )}
         </section>
+      ) : null}
+
+      {guest.status === "cancelled" ? (
+        <p className="rounded-xl bg-zinc-50 px-3 py-2 text-center text-xs font-medium text-zinc-500">
+          此約看已取消
+        </p>
       ) : null}
     </div>
   );

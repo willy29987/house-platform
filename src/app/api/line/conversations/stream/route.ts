@@ -2,8 +2,8 @@ import { requireSuperAdmin } from "@/lib/admin-auth";
 import { ADMIN_CLOUD_DATA_KEYS } from "@/lib/admin-cloud-data-keys";
 import { readLineConversations } from "@/lib/line-conversations";
 import { listOpenGuestSessions } from "@/lib/line-guest-sessions";
-import { listGuestProfileUserIds } from "@/lib/line-guest-profile";
-import { listActiveGuestWatches } from "@/lib/line-guest-watch";
+import { listGuestProfiles, listGuestProfileUserIds } from "@/lib/line-guest-profile";
+import { listGuestWatches } from "@/lib/line-guest-watch";
 import { readLineRentalCases } from "@/lib/line-rental-cases";
 import { prisma } from "@/lib/prisma";
 
@@ -69,19 +69,22 @@ export async function GET(request: Request) {
           const stamp = await readChangeStamp();
           if (stamp !== lastStamp) {
             lastStamp = stamp;
-            const [conversations, cases, sessions, watches, profileUserIds] = await Promise.all([
-              readLineConversations(),
-              readLineRentalCases(),
-              listOpenGuestSessions(),
-              listActiveGuestWatches(),
-              listGuestProfileUserIds(),
-            ]);
+            const [conversations, cases, sessions, watches, profileUserIds, profiles] =
+              await Promise.all([
+                readLineConversations(),
+                readLineRentalCases(),
+                listOpenGuestSessions(),
+                listGuestWatches(),
+                listGuestProfileUserIds(),
+                listGuestProfiles(),
+              ]);
             send("snapshot", {
               conversations,
               cases,
               sessions,
               watches,
               profileUserIds,
+              profiles,
               fetchedAt: new Date().toISOString(),
             });
           } else if (Date.now() - lastPingAt > 15_000) {

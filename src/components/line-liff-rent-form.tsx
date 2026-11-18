@@ -30,6 +30,9 @@ import {
 import { taipeiTodayYmd } from "@/lib/owner-tracking-next-contact";
 import { PARKING_TYPE_LABELS } from "@/lib/parking-type-label";
 import { propertyTypeLabel } from "@/lib/property-type-label";
+import { TAIWAN_REGIONS } from "@/lib/taiwan-regions";
+
+const LIFF_CITY_NAMES = ["台北市", "新北市"] as const;
 
 export type { LiffDirectListingEntry };
 
@@ -997,15 +1000,23 @@ export function LineLiffRentForm({
     setStep("listings");
   }, [listings, skipCriteria, listMode]);
 
-  const cities = useMemo(
-    () => [...new Set(listings.map((item) => item.city).filter(Boolean))].sort(),
-    [listings],
-  );
+  const cities = useMemo(() => {
+    const fromListings = listings.map((item) => item.city).filter(Boolean);
+    return [...new Set([...LIFF_CITY_NAMES, ...fromListings])].sort();
+  }, [listings]);
   const districts = useMemo(() => {
-    const pool = criteria.cities.length
-      ? listings.filter((item) => criteria.cities.includes(item.city))
-      : listings;
-    return [...new Set(pool.map((item) => item.district).filter(Boolean))].sort();
+    const selected = criteria.cities.length
+      ? criteria.cities
+      : [...LIFF_CITY_NAMES];
+    const fromRegions = selected.flatMap((city) => {
+      const region = TAIWAN_REGIONS.find((row) => row.city === city);
+      return region?.districts ?? [];
+    });
+    const fromListings = listings
+      .filter((item) => selected.includes(item.city))
+      .map((item) => item.district)
+      .filter(Boolean);
+    return [...new Set([...fromRegions, ...fromListings])].sort();
   }, [listings, criteria.cities]);
 
   const listingPool = useMemo(() => {
@@ -1385,6 +1396,9 @@ export function LineLiffRentForm({
             `入住 ${formatDateYmd(moveIn)}`,
             nationality,
           ].join(" · "),
+          criteria: priceCustomOn ? { ...criteria, priceKeys: [] } : criteria,
+          priceMin: priceCustomOn && priceMin.trim() ? Number(priceMin) : null,
+          priceMax: priceCustomOn && priceMax.trim() ? Number(priceMax) : null,
           picked,
           requestedWhen: when,
           summaryText: outboundText,
@@ -1579,8 +1593,8 @@ export function LineLiffRentForm({
             </div>
             <div>
               <p className="mb-2 text-xs font-medium text-zinc-500">行政區（可複選）</p>
-              <div className="grid grid-cols-5 gap-1.5">
-                {districts.slice(0, 16).map((d) => (
+              <div className="grid max-h-48 grid-cols-5 gap-1.5 overflow-y-auto">
+                {districts.map((d) => (
                   <Chip
                     key={d}
                     label={d}

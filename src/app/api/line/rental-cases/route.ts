@@ -19,6 +19,13 @@ import { applyLineDisplayName } from "@/lib/line-booking-text";
 import { getLineUserProfile, pushLineMessages, type LineMessage } from "@/lib/line-messaging";
 import { VIEWING_SUBMIT_ACK_TEXT } from "@/lib/line-viewing-guest-copy";
 import { upsertGuestProfile } from "@/lib/line-guest-profile";
+import { upsertGuestWatchCriteria } from "@/lib/line-guest-watch";
+import {
+  emptyCriteria,
+  parseCriteriaText,
+  type RentalExtra,
+  type RentalMatchCriteria,
+} from "@/lib/line-rental-assistant";
 import { getViewingAgentUserIds, notifyAgentsOfNewViewing } from "@/lib/line-viewing-agent";
 
 export const dynamic = "force-dynamic";
@@ -33,6 +40,10 @@ type PostBody = {
   petNote?: string;
   moveInDate?: string;
   criteriaText?: string;
+  /** LIFF 結構化找房條件；有傳就寫入 watch，客服右側才能顯示 */
+  criteria?: Partial<RentalMatchCriteria>;
+  priceMin?: number | null;
+  priceMax?: number | null;
   picked?: { id: string; title: string; price: number }[];
   requestedWhen?: string;
   summaryText?: string;
@@ -160,6 +171,68 @@ export async function POST(request: Request) {
         });
       } catch (error) {
         console.warn("[line/rental-cases] upsert guest profile failed", error);
+      }
+    }
+
+    if (created.lineUserId) {
+      try {
+        const incoming = body.criteria && typeof body.criteria === "object" ? body.criteria : null;
+        const parsed = parseCriteriaText(created.criteriaText);
+        const base = emptyCriteria();
+        const criteria: RentalMatchCriteria = {
+          cities: Array.isArray(incoming?.cities)
+            ? incoming.cities.map(String)
+            : parsed?.cities ?? base.cities,
+          districts: Array.isArray(incoming?.districts)
+            ? incoming.districts.map(String)
+            : parsed?.districts ?? base.districts,
+          rooms: Array.isArray(incoming?.rooms)
+            ? incoming.rooms.map(String)
+            : parsed?.rooms ?? base.rooms,
+          bathrooms: Array.isArray(incoming?.bathrooms)
+            ? incoming.bathrooms.map(String)
+            : parsed?.bathrooms ?? base.bathrooms,
+          parking: Array.isArray(incoming?.parking)
+            ? incoming.parking.map(String)
+            : parsed?.parking ?? base.parking,
+          priceKeys: Array.isArray(incoming?.priceKeys)
+            ? incoming.priceKeys.map(String)
+            : parsed?.priceKeys ?? base.priceKeys,
+          extras: Array.isArray(incoming?.extras)
+            ? (incoming.extras as RentalExtra[])
+            : parsed?.extras ?? base.extras,
+        };
+        const priceMin =
+          typeof body.priceMin === "number" && Number.isFinite(body.priceMin)
+            ? body.priceMin
+            : parsed?.priceMin ?? null;
+        const priceMax =
+          typeof body.priceMax === "number" && Number.isFinite(body.priceMax)
+            ? body.priceMax
+            : parsed?.priceMax ?? null;
+        const hasCriteria =
+          criteria.cities.length ||
+          criteria.districts.length ||
+          criteria.rooms.length ||
+          criteria.bathrooms.length ||
+          criteria.parking.length ||
+          criteria.priceKeys.length ||
+          criteria.extras.length ||
+          priceMin != null ||
+          priceMax != null;
+        if (hasCriteria) {
+          await upsertGuestWatchCriteria({
+            lineUserId: created.lineUserId,
+            displayName: created.displayName,
+            criteria,
+            priceMin,
+            priceMax,
+            petNote: created.petNote,
+            active: true,
+          });
+        }
+      } catch (error) {
+        console.warn("[line/rental-cases] upsert guest watch failed", error);
       }
     }
 

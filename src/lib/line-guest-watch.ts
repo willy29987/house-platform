@@ -168,6 +168,12 @@ export async function listActiveGuestWatches(): Promise<GuestWatchRecord[]> {
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
+/** 客服讀全部找房條件（含已關閉推播），避免右側顯示成未填 */
+export async function listGuestWatches(): Promise<GuestWatchRecord[]> {
+  const store = await readStore();
+  return store.watches.slice().sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
 export async function setGuestWatchActive(lineUserId: string, active: boolean) {
   const id = lineUserId.trim();
   if (!id) return null;
