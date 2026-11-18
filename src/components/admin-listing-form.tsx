@@ -428,50 +428,22 @@ export function AdminListingForm({
     if (kind === "image") setUploading(true); else setUploadingVideo(true);
     setMediaStatus("");
     try {
-      const fd = new FormData();
-      for (const file of files) fd.append("files", file);
-      // 物件廣告圖：後端依品質自動輕調光（夠好的幾乎不動）
-      if (kind === "image") fd.append("purpose", "listing");
-      const res = await fetch("/api/admin/upload", {
-        method: "POST",
-        body: fd,
-        credentials: "include",
+      const { uploadAdminMediaFiles } = await import("@/lib/admin-direct-upload");
+      const list = Array.from(files);
+      const result = await uploadAdminMediaFiles(list, {
+        purpose: kind === "image" ? "listing" : undefined,
       });
-      const contentType = res.headers.get("content-type") ?? "";
-      const result = contentType.includes("application/json")
-        ? ((await res.json()) as {
-            ok: boolean;
-            urls?: string[];
-            message?: string;
-            enhance?: Array<{ tier: string; reason: string }>;
-          })
-        : ({ ok: false, message: await res.text() } as {
-            ok: boolean;
-            urls?: string[];
-            message?: string;
-            enhance?: Array<{ tier: string; reason: string }>;
-          });
 
-      if (!res.ok || !result.ok || !result.urls) {
-        const fallback = kind === "video"
-          ? "影片上傳失敗。正式網站需設定 Supabase Storage；單檔也請勿超過平台限制（約 4MB）。"
-          : "圖片上傳失敗。請改一次少選幾張，或單張壓到較小再傳；正式站也需已設定雲端儲存。";
-        let message = result.message || fallback;
-        if (res.status === 413) {
-          message = "檔案太大或一次選太多張（平台請求上限約 4.5MB），請一次少傳幾張或先壓縮。";
-        }
-        setMediaStatus(message);
-        if (res.status === 401) {
-          setMediaStatus(`${message}（登入可能已過期，請重新登入後台）`);
-        }
+      if (!result.urls.length) {
+        setMediaStatus(kind === "video" ? "影片上傳失敗" : "圖片上傳失敗");
         return;
       }
 
       if (kind === "image") {
         setFormData((prev) => ({
           ...prev,
-          images: [...prev.images, ...result.urls!],
-          coverImage: prev.coverImage || result.urls![0] || "",
+          images: [...prev.images, ...result.urls],
+          coverImage: prev.coverImage || result.urls[0] || "",
         }));
         const tiers = result.enhance ?? [];
         const adjusted = tiers.filter((t) => t.tier !== "skip").length;
@@ -482,7 +454,7 @@ export function AdminListingForm({
             : `已上傳 ${result.urls.length} 張圖片`,
         );
       } else {
-        setFormData((prev) => ({ ...prev, videoUrl: result.urls![0] ?? prev.videoUrl }));
+        setFormData((prev) => ({ ...prev, videoUrl: result.urls[0] ?? prev.videoUrl }));
         setMediaStatus("影片已上傳");
       }
     } catch (error) {
@@ -1521,7 +1493,7 @@ export function AdminListingForm({
               {uploading ? "上傳中（自動美化）..." : "＋ 選擇圖片"}
             </button>
             <p className="mt-1 text-[10px] text-zinc-400 sm:text-xs">
-              JPG、PNG、WEBP、HEIC｜上傳後依品質自動調光（夠好的幾乎不動）
+              JPG、PNG、WEBP、HEIC｜單張最大約 25MB，可一次多選；直傳雲端後不受 4.5MB 限制｜上傳後自動調光
             </p>
           </div>
 
@@ -1543,7 +1515,9 @@ export function AdminListingForm({
               className="w-full rounded-lg border border-dashed border-zinc-400 bg-zinc-50 px-2 py-2.5 text-xs text-zinc-600 hover:bg-zinc-100 disabled:opacity-60 sm:px-4 sm:py-3 sm:text-sm">
               {uploadingVideo ? "上傳中..." : formData.videoUrl ? "＋ 更換影片" : "＋ 選擇影片"}
             </button>
-            <p className="mt-1 text-[10px] text-zinc-400 sm:text-xs">MP4、MOV、WEBM；正式站單檔建議 4MB 內</p>
+            <p className="mt-1 text-[10px] text-zinc-400 sm:text-xs">
+              MP4、MOV、WEBM；直傳雲端後單檔最大約 100MB（若失敗請到 Supabase Storage 確認檔案大小上限）
+            </p>
             <div className="mt-2 sm:mt-3">
               <label className="mb-1 block text-[10px] font-medium text-zinc-600 sm:text-xs">或貼影片連結</label>
               <input type="text" value={formData.videoUrl}

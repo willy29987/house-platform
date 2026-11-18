@@ -303,6 +303,12 @@ export function buildAgentRescheduleUrl(caseId: string) {
   return base ? `${base}${path}` : path;
 }
 
+export function buildViewingCancelGuestUrl(caseId: string) {
+  const base = buildPublicBaseUrl();
+  const path = `/line/viewing-cancel?caseId=${encodeURIComponent(caseId)}`;
+  return base ? `${base}${path}` : path;
+}
+
 /** Confirm 文案上限約 240 字元 */
 export function truncateLineTemplateText(text: string, max = 220): string {
   const t = text.trim();

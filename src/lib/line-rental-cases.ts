@@ -20,6 +20,8 @@ export type LineRentalCaseStatus =
   | "confirmed"
   | "cancelled";
 
+export type LineRentalCaseCancelledBy = "guest" | "agent" | "staff";
+
 export type LineRentalCase = {
   id: string;
   createdAt: string;
@@ -42,6 +44,9 @@ export type LineRentalCase = {
   source591Url?: string;
   guestMessage?: string;
   handledByAgentLineUserId?: string | null;
+  cancelledAt?: string;
+  cancelledBy?: LineRentalCaseCancelledBy | null;
+  cancelNote?: string;
 };
 
 export type LineRentalCasesStore = {
@@ -56,6 +61,16 @@ const STATUS_SET = new Set<LineRentalCaseStatus>([
   "reschedule_sent",
   "confirmed",
   "cancelled",
+]);
+
+const CANCELLED_BY_SET = new Set<LineRentalCaseCancelledBy>(["guest", "agent", "staff"]);
+
+export const CANCELLABLE_VIEWING_STATUSES = new Set<LineRentalCaseStatus>([
+  "pending_confirm",
+  "awaiting_agent",
+  "agent_proposing",
+  "reschedule_sent",
+  "confirmed",
 ]);
 
 export function emptyLineRentalCasesStore(): LineRentalCasesStore {
@@ -97,6 +112,13 @@ function normalizeCase(item: unknown): LineRentalCase | null {
     guestMessage: typeof row.guestMessage === "string" ? row.guestMessage : "",
     handledByAgentLineUserId:
       typeof row.handledByAgentLineUserId === "string" ? row.handledByAgentLineUserId : null,
+    cancelledAt: typeof row.cancelledAt === "string" ? row.cancelledAt : "",
+    cancelledBy:
+      typeof row.cancelledBy === "string" &&
+      CANCELLED_BY_SET.has(row.cancelledBy as LineRentalCaseCancelledBy)
+        ? (row.cancelledBy as LineRentalCaseCancelledBy)
+        : null,
+    cancelNote: typeof row.cancelNote === "string" ? row.cancelNote : "",
   };
 }
 
@@ -277,6 +299,9 @@ export async function updateLineRentalCase(
       | "requestedWhen"
       | "proposedWhen"
       | "handledByAgentLineUserId"
+      | "cancelledAt"
+      | "cancelledBy"
+      | "cancelNote"
     >
   >,
 ): Promise<LineRentalCase | null> {

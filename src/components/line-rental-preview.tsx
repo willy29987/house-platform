@@ -1562,16 +1562,10 @@ export function LineRentalPreview({
   }
 
   async function uploadMediaFile(file: File) {
-    const form = new FormData();
-    form.append("files", file);
-    const uploadRes = await fetch("/api/admin/upload", { method: "POST", body: form });
-    const uploadJson = (await uploadRes.json().catch(() => null)) as
-      | { ok?: boolean; urls?: string[]; message?: string }
-      | null;
-    const url = uploadJson?.urls?.[0];
-    if (!uploadRes.ok || !url) {
-      throw new Error(uploadJson?.message || "上傳失敗");
-    }
+    const { uploadAdminMediaFiles } = await import("@/lib/admin-direct-upload");
+    const result = await uploadAdminMediaFiles([file]);
+    const url = result.urls[0];
+    if (!url) throw new Error("上傳失敗");
     return url;
   }
 

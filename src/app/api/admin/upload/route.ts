@@ -9,6 +9,12 @@ import {
   defaultUploadExtension,
   resolveUploadContentType,
 } from "@/lib/upload-media";
+import {
+  formatUploadMb,
+  MAX_UPLOAD_IMAGE_BYTES,
+  MAX_UPLOAD_PDF_BYTES,
+  MAX_UPLOAD_VIDEO_BYTES,
+} from "@/lib/upload-limits";
 
 export const runtime = "nodejs";
 /** 多張圖＋美化可能超過預設時限 */
@@ -57,21 +63,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (kind === "image" && file.size > 25 * 1024 * 1024) {
+    if (kind === "image" && file.size > MAX_UPLOAD_IMAGE_BYTES) {
       return NextResponse.json(
-        { ok: false, message: "單張圖片不得大於 25MB，請壓縮後再傳" },
+        {
+          ok: false,
+          message: `單張圖片不得大於 ${formatUploadMb(MAX_UPLOAD_IMAGE_BYTES)}，請壓縮後再傳`,
+        },
         { status: 400 },
       );
     }
-    if (kind === "video" && file.size > 100 * 1024 * 1024) {
+    if (kind === "video" && file.size > MAX_UPLOAD_VIDEO_BYTES) {
       return NextResponse.json(
-        { ok: false, message: "影片檔案不得大於 100MB" },
+        {
+          ok: false,
+          message: `影片檔案不得大於 ${formatUploadMb(MAX_UPLOAD_VIDEO_BYTES)}`,
+        },
         { status: 400 },
       );
     }
-    if (kind === "pdf" && file.size > 20 * 1024 * 1024) {
+    if (kind === "pdf" && file.size > MAX_UPLOAD_PDF_BYTES) {
       return NextResponse.json(
-        { ok: false, message: "PDF 檔案不得大於 20MB" },
+        {
+          ok: false,
+          message: `PDF 檔案不得大於 ${formatUploadMb(MAX_UPLOAD_PDF_BYTES)}`,
+        },
         { status: 400 },
       );
     }

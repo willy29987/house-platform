@@ -143,3 +143,55 @@ export async function uploadToSupabaseStorage(
   const { data } = storage.client.storage.from(storage.bucket).getPublicUrl(objectPath);
   return data.publicUrl;
 }
+
+/** 給瀏覽器直傳：不經 Vercel body，可突破約 4.5MB 限制 */
+export async function createSupabaseSignedUpload(input: {
+  filename: string;
+  contentType: string;
+}): Promise<{ path: string; token: string; signedUrl: string; publicUrl: string }> {
+  const storage = getSupabaseStorage();
+  if (!storage) {
+    const validated = validateSupabaseStorageConfig();
+    throw new Error(validated.ok ? "Supabase Storage 尚未設定" : validated.message);
+  }
+
+  const objectPath = normalizeStorageObjectPath(input.filename);
+  const { data, error } = await storage.client.storage
+    .from(storage.bucket)
+    .createSignedUploadUrl(objectPath);
+  if (error || !data) {
+    throw new Error(`建立上傳憑證失敗：${error?.message || "未知錯誤"}`);
+  }
+
+  const { data: pub } = storage.client.storage.from(storage.bucket).getPublicUrl(objectPath);
+  return {
+    path: data.path || objectPath,
+    token: data.token,
+    signedUrl: data.signedUrl,
+    publicUrl: pub.publicUrl,
+  };
+}
+
+/** 以後端覆寫同一路徑（例如美化後回存） */
+export async function upsertSupabaseStorageObject(
+  filename: string,
+  buffer: Buffer,
+  contentType: string,
+): Promise<string> {
+  const storage = getSupabaseStorage();
+  if (!storage) {
+    const validated = validateSupabaseStorageConfig();
+    throw new Error(validated.ok ? "Supabase Storage 尚未設定" : validated.message);
+  }
+  const objectPath = normalizeStorageObjectPath(filename);
+  const { error } = await storage.client.storage.from(storage.bucket).upload(objectPath, buffer, {
+    contentType,
+    upsert: true,
+    cacheControl: "31536000",
+  });
+  if (error) {
+    throw new Error(`Supabase 覆寫失敗：${error.message}`);
+  }
+  const { data } = storage.client.storage.from(storage.bucket).getPublicUrl(objectPath);
+  return data.publicUrl;
+}

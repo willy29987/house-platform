@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-Hant"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>客人 LINE 推薦訊息預覽</title>
+<style>
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#7494c0}
+  .phone{max-width:390px;margin:16px auto;padding:12px}
+  .note{background:#fff8e6;border:1px solid #f5d78e;color:#7a5b00;border-radius:12px;padding:10px 12px;font-size:13px;margin-bottom:12px;line-height:1.45}
+  .alt{display:inline-block;width:fit-content;max-width:85%;background:rgba(255,255,255,.92);border-radius:16px;padding:10px 12px;font-size:13px;margin-bottom:10px;line-height:1.4}
+  .rail{display:flex;gap:10px;overflow-x:auto;padding-bottom:8px;align-items:stretch}
+  .card{flex:0 0 240px;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.12);display:flex;flex-direction:column}
+  .card img,.ph{width:100%;aspect-ratio:20/13;object-fit:cover;background:#e5e7eb;display:block;flex:0 0 auto}
+  .ph{display:flex;align-items:center;justify-content:center;color:#9ca3af;font-size:12px}
+  .body{padding:10px 12px 12px;display:flex;flex-direction:column;flex:1;min-height:0}
+  .row-addr{margin:0;height:22px;font-size:16px;line-height:22px;font-weight:700;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+  .row-type{margin-top:6px;height:24px;display:flex;align-items:center;gap:8px;overflow:hidden}
+  .community{font-size:12px;font-weight:700;color:#4b5563;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+  .row-layout{margin:6px 0 0;height:22px;font-size:14px;color:#4b5563;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;line-height:22px}
+  .row-price{margin:10px 0 0;height:24px;font-size:16px;font-weight:700;color:#2563EB;line-height:24px}
+  .row-tags{margin-top:8px;height:24px;display:flex;flex-wrap:nowrap;gap:6px;overflow:hidden;align-items:center}
+  .chip{display:inline-flex;border-radius:6px;padding:4px 6px;font-size:11px;font-weight:700;flex:0 0 auto}
+  .chip-type{background:#E0E7FF;color:#3730A3}
+  .chip-tag{background:#FFEDD5;color:#9A3412}
+  .spacer{flex:1;min-height:8px}
+  .btn{margin-top:8px;display:block;width:100%;box-sizing:border-box;border:0;border-radius:999px;background:#2563EB;color:#fff;font-weight:700;font-size:13px;padding:8px 0;text-align:center;text-decoration:none}
+</style></head>
+<body><div class="phone">
+  <div class="note">預覽按鈕已可點：會開本機找房 LIFF。正式推播走 LINE 內 liff.line.me。</div>
+  <div class="alt">您好～今天有2筆符合您的物件！趕快點開看看～</div>
+  <div class="rail"><article class="card">
+      <img src="https://img1.591.com.tw/house/2026/11/12/179444302031361003.jpg!1000x.water2.jpg" alt="" />
+      <div class="body">
+        <h2 class="row-addr">新北市土城區金城路三段</h2>
+        <div class="row-type">
+          <span class="chip chip-type">公寓</span>
+          <span class="community">金城路三段139巷華廈</span>
+        </div>
+        <p class="row-layout">3房2廳2衛1陽台 · 29坪</p>
+        <p class="row-price">35,000 元/月</p>
+        <div class="row-tags"><span class="chip chip-tag">可寵</span></div>
+        <div class="spacer"></div>
+        <a class="btn" href="/liff/rent-assistant?listingId=cmwk9nnhp0000l507juor64r3" data-line-href="https://liff.line.me/2012308800-9xNMWz5n?listingId=cmwk9nnhp0000l507juor64r3">物件詳情</a>
+      </div>
+    </article>
+<article class="card">
+      <img src="https://xyovpgokrnvnmhbrooca.supabase.co/storage/v1/object/public/listing-media/images/1794212298120-gzybqqyp0ye.jpg" alt="" />
+      <div class="body">
+        <h2 class="row-addr">新北市土城區青和街</h2>
+        <div class="row-type">
+          <span class="chip chip-type">電梯大樓</span>
+          <span class="community">寶佳淳青</span>
+        </div>
+        <p class="row-layout">2房2廳2衛1陽台 · 19坪</p>
+        <p class="row-price">35,000 元/月</p>
+        <div class="row-tags"><span class="chip chip-tag">不可寵</span><span class="chip chip-tag">車位</span></div>
+        <div class="spacer"></div>
+        <a class="btn" href="/liff/rent-assistant?listingId=cmw8zowvk0000l408ad4938w9" data-line-href="https://liff.line.me/2012308800-9xNMWz5n?listingId=cmw8zowvk0000l408ad4938w9">物件詳情</a>
+      </div>
+    </article></div>
+</div></body></html>
