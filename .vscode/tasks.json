@@ -39,7 +39,7 @@
           {
             "command": "simpleBrowser.api.open",
             "args": [
-              "http://127.0.0.1:3000/mobile-preview?lan=1"
+              "http://192.168.18.16:3000/mobile-preview?lan=1"
             ]
           }
         ]
@@ -54,7 +54,7 @@
           {
             "command": "simpleBrowser.api.open",
             "args": [
-              "http://127.0.0.1:3000/?lan=1"
+              "http://192.168.18.16:3000/?lan=1"
             ]
           }
         ]
@@ -99,7 +99,7 @@
           {
             "command": "simpleBrowser.api.open",
             "args": [
-              "http://127.0.0.1:3000/mobile-preview?scope=admin&path=%2Fadmin%2Flogin&lan=1"
+              "http://192.168.18.16:3000/mobile-preview?scope=admin&path=%2Fadmin%2Flogin&lan=1"
             ]
           }
         ]
@@ -114,7 +114,7 @@
           {
             "command": "simpleBrowser.api.open",
             "args": [
-              "http://127.0.0.1:3000/admin/login?lan=1"
+              "http://192.168.18.16:3000/admin/login?lan=1"
             ]
           }
         ]

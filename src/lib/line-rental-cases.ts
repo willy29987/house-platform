@@ -17,7 +17,8 @@ export type LineRentalCaseStatus =
   | "awaiting_agent"
   | "agent_proposing"
   | "reschedule_sent"
-  | "confirmed";
+  | "confirmed"
+  | "cancelled";
 
 export type LineRentalCase = {
   id: string;
@@ -54,6 +55,7 @@ const STATUS_SET = new Set<LineRentalCaseStatus>([
   "agent_proposing",
   "reschedule_sent",
   "confirmed",
+  "cancelled",
 ]);
 
 export function emptyLineRentalCasesStore(): LineRentalCasesStore {

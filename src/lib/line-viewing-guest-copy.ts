@@ -6,6 +6,9 @@ export const VIEWING_SUBMIT_ACK_TEXT =
 export const VIEWING_ASK_OTHER_TIME_TEXT =
   "不好意思，您選的時間沒有辦法安排帶看，請問您其他方便的時間是什麼時候呢？";
 
+export const VIEWING_CANCELLED_GUEST_TEXT =
+  "好的，這次看屋已取消。若之後想再約，回官方帳點「開始找房」即可。";
+
 export function buildGoogleMapsSearchUrl(address: string): string {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address.trim())}`;
 }
