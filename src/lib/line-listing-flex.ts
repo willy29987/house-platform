@@ -67,8 +67,10 @@ function layoutLabel(
     .join("");
 }
 
-/** 市＋區＋路／街（無分隔點、不含巷弄門牌） */
-function cardAddressLine(listing: RentalMatchListing) {
+/** 市＋區＋路／街（無分隔點、不含巷弄門牌）；預約文／物件卡共用 */
+export function guestListingCardAddress(
+  listing: Pick<RentalMatchListing, "city" | "district" | "address">,
+) {
   const city = (listing.city || "").trim().replace(/^臺/, "台");
   const district = (listing.district || "").trim();
   const place = `${city}${district}`;
@@ -79,6 +81,10 @@ function cardAddressLine(listing: RentalMatchListing) {
   if (district) street = street.replace(district, "");
   street = street.trim();
   return `${place}${street}` || "出租物件";
+}
+
+function cardAddressLine(listing: RentalMatchListing) {
+  return guestListingCardAddress(listing);
 }
 
 function propertyTypeChipLabel(listing: RentalMatchListing): string {

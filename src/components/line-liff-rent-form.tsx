@@ -9,7 +9,7 @@ import {
 } from "@/components/viewing-schedule-picker";
 import { EQUIPMENT_ITEMS, FURNITURE_ITEMS } from "@/lib/furniture-appliance-value";
 import { loadLiffClient } from "@/lib/line-liff-client";
-import { buildListingCardsFlex } from "@/lib/line-listing-flex";
+import { buildListingCardsFlex, guestListingCardAddress } from "@/lib/line-listing-flex";
 import { readClientMessagingUid } from "@/lib/line-liff-id";
 import {
   EXTRA_OPTIONS,
@@ -1273,7 +1273,8 @@ export function LineLiffRentForm({
       .filter((item): item is RentalMatchListing => Boolean(item));
     const picked = pickedListings.map((item) => ({
       id: item.id,
-      title: item.title,
+      // 客人可見用地址，不用行銷標題
+      title: guestListingCardAddress(item),
       price: item.price,
     }));
     const phoneTrim = phone.trim();
