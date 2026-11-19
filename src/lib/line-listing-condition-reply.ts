@@ -186,13 +186,35 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function formatTriState(
-  value: boolean | null | undefined,
-  labels: { yes: string; no: string; unknown: string },
-) {
-  if (value === true) return labels.yes;
-  if (value === false) return labels.no;
-  return labels.unknown;
+const TOPIC_LABEL: Record<ListingConditionTopic, string> = {
+  pets: "養寵物",
+  subsidy: "租補",
+  tax: "報稅",
+  register: "入籍",
+};
+
+function attrForTopic(
+  listing: RentalMatchListing,
+  topic: ListingConditionTopic,
+): boolean | null | undefined {
+  if (topic === "pets") return listing.petsAllowed;
+  if (topic === "subsidy") return listing.rentSubsidy;
+  if (topic === "tax") return listing.taxDeductible;
+  return listing.canRegisterAddress;
+}
+
+function joinTopicLabels(topics: ListingConditionTopic[]) {
+  return topics.map((t) => TOPIC_LABEL[t]).join("、");
+}
+
+/** 可以：固定句（不帶 XXX） */
+function yesConditionReplyText() {
+  return "您好～可以的～幫我點選「挑選看屋時間 」，會有其他相似物件供您參考，確定想看的物件告訴我們想要看屋的時間就好嘍～";
+}
+
+/** 不行：固定句，XXX＝養寵物／租補／報稅／入籍 */
+function noConditionReplyText(xxx: string) {
+  return `您好～這個物件可能比較沒辦法哦～有需要${xxx}可以點選「 開始找房 」挑選合適您的物件～如果您可以接受不能${xxx}的話，點選「 挑選看屋時間 」進去會有其他相似的物件供您參考～確定想看的物件告訴我們想要看屋的時間就好嘍～`;
 }
 
 export function buildListingConditionReplyText(input: {
@@ -210,50 +232,28 @@ export function buildListingConditionReplyText(input: {
   }
 
   const listing = input.listing;
-  const title = listing.title?.trim() || "這間物件";
-  const lines: string[] = [`關於「${title}」：`];
+  const denied: ListingConditionTopic[] = [];
+  const allowed: ListingConditionTopic[] = [];
+  const unknown: ListingConditionTopic[] = [];
 
   for (const topic of topics) {
-    if (topic === "pets") {
-      lines.push(
-        formatTriState(listing.petsAllowed, {
-          yes: "・寵物：可以養",
-          no: "・寵物：不行（不可養寵物）",
-          unknown: "・寵物：資料尚未標明，我幫你跟業務確認",
-        }),
-      );
-    }
-    if (topic === "subsidy") {
-      lines.push(
-        formatTriState(listing.rentSubsidy, {
-          yes: "・租補：可協助申請",
-          no: "・租補：這間目前標示不可／不適用",
-          unknown: "・租補：資料尚未標明，我幫你跟業務確認",
-        }),
-      );
-    }
-    if (topic === "tax") {
-      lines.push(
-        formatTriState(listing.taxDeductible, {
-          yes: "・報稅：可協助申請",
-          no: "・報稅：這間目前標示不可／不適用",
-          unknown: "・報稅：資料尚未標明，我幫你跟業務確認",
-        }),
-      );
-    }
-    if (topic === "register") {
-      lines.push(
-        formatTriState(listing.canRegisterAddress, {
-          yes: "・入戶籍：可協助申請",
-          no: "・入戶籍：這間目前標示不可／不適用",
-          unknown: "・入戶籍：資料尚未標明，我幫你跟業務確認",
-        }),
-      );
-    }
+    const value = attrForTopic(listing, topic);
+    if (value === true) allowed.push(topic);
+    else if (value === false) denied.push(topic);
+    else unknown.push(topic);
   }
 
-  lines.push("若還想看屋或比較其他間，跟我說即可～");
-  return lines.join("\n");
+  // 有任一「不行」→ 用不行固定句（XXX 只帶不行的項目）
+  if (denied.length > 0) {
+    return noConditionReplyText(joinTopicLabels(denied));
+  }
+  // 全都可以 → 可以固定句
+  if (allowed.length === topics.length) {
+    return yesConditionReplyText();
+  }
+  // 其餘＝尚未標明，不亂回可以／不行
+  const xxx = joinTopicLabels(unknown.length ? unknown : topics);
+  return `不好意思～這間「${xxx}」的資料我這邊還沒標清楚，先幫你跟業務確認後再回你～`;
 }
 
 async function resolveFocusListingId(lineUserId: string): Promise<string | null> {
