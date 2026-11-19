@@ -25,6 +25,7 @@ import {
 } from "@/lib/house-fields";
 import { getMrtStationOptions, getMrtStationsForLine, MRT_LINE_OPTIONS } from "@/lib/mrt-stations";
 import { LEGACY_PARKING_TYPES, PARKING_TYPE_LABELS, PARKING_TYPE_OPTIONS } from "@/lib/parking-type-label";
+import { AdminListingPublishExportPanel } from "@/components/admin-listing-publish-export-panel";
 
 export type AdminListingFormData = {
   title: string;
@@ -76,6 +77,10 @@ export type AdminListingFormData = {
   ownerIdCardUrl: string;
   /** 591 物件網址或編號；送出時後端抽出 source591Id */
   source591Url: string;
+  /** 外掛刊登後回填 */
+  sourceFacebookUrl: string;
+  sourceLejuUrl: string;
+  sourceOtherPortalUrl: string;
   furnitureItems: string[];
   equipmentItems: string[];
   shortTermRent: string;
@@ -632,6 +637,9 @@ export function AdminListingForm({
       contactPhone: formData.contactPhone,
       ownerIdCardUrl: formData.ownerIdCardUrl.trim() || null,
       source591Url: formData.source591Url.trim() || null,
+      sourceFacebookUrl: formData.sourceFacebookUrl.trim() || null,
+      sourceLejuUrl: formData.sourceLejuUrl.trim() || null,
+      sourceOtherPortalUrl: formData.sourceOtherPortalUrl.trim() || null,
       // 有勾選任何項目就視為「有」，供列表篩選使用
       furnitureProvided: formData.furnitureItems.length > 0 ? true : null,
       applianceProvided: formData.equipmentItems.length > 0 ? true : null,
@@ -769,6 +777,30 @@ export function AdminListingForm({
             <p className="mt-1 text-xs text-zinc-500">
               貼上已刊登的 591 連結，會帶入房屋現況、房屋型態、租金、樓層、管理費、車位、設備家具，以及「查看全部照片」裡的圖片。套房也會帶入公寓或電梯。700 公尺內的捷運會對到路線和站名。帶入後請再核對。
             </p>
+          </div>
+          <div className="sm:col-span-2">
+            <AdminListingPublishExportPanel
+              listingType={formData.listingType}
+              title={formData.title}
+              city={formData.city}
+              district={formData.district}
+              address={formData.address}
+              price={formData.price}
+              areaPing={formData.areaPing}
+              rooms={formData.rooms}
+              bathrooms={formData.bathrooms}
+              contactName={formData.contactName}
+              contactPhone={formData.contactPhone}
+              coverImage={formData.coverImage}
+              images={formData.images}
+              features={formData.features}
+              specialMatters={formData.specialMatters}
+              source591Url={formData.source591Url}
+              sourceFacebookUrl={formData.sourceFacebookUrl}
+              sourceLejuUrl={formData.sourceLejuUrl}
+              sourceOtherPortalUrl={formData.sourceOtherPortalUrl}
+              onChangePortal={(patch) => setFormData((p) => ({ ...p, ...patch }))}
+            />
           </div>
           {!lockedListingType ? (
             <div>

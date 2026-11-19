@@ -116,6 +116,9 @@ export type AdminListingDetail = ListingDetail & {
   isPublished: boolean;
   source591Id?: string | null;
   source591Url?: string | null;
+  sourceFacebookUrl?: string | null;
+  sourceLejuUrl?: string | null;
+  sourceOtherPortalUrl?: string | null;
   shortTermRent?: string | null;
   serviceFee?: string | null;
   registrationUse?: string | null;
@@ -628,6 +631,9 @@ async function getAdminListingByIdImpl(id: string): Promise<AdminListingDetail |
     const meta = parseListingInternalMeta(row.description);
     return {
       ...row,
+      sourceFacebookUrl: meta.sourceFacebookUrl ?? null,
+      sourceLejuUrl: meta.sourceLejuUrl ?? null,
+      sourceOtherPortalUrl: meta.sourceOtherPortalUrl ?? null,
       shortTermRent: meta.shortTermRent ?? null,
       serviceFee: meta.serviceFee ?? null,
       registrationUse: meta.registrationUse ?? null,

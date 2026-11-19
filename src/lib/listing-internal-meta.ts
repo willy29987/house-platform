@@ -22,6 +22,10 @@ export type ListingInternalMeta = {
   unpublishNote?: string | null;
   expectedReleaseDate?: string | null;
   unpublishedAt?: string | null;
+  /** 外掛／外站刊登網址回填（非 591；591 用 DB 欄位 source591Url） */
+  sourceFacebookUrl?: string | null;
+  sourceLejuUrl?: string | null;
+  sourceOtherPortalUrl?: string | null;
 };
 
 /** 距離預計釋出日期還有幾天，過期/沒設定回傳 null */
