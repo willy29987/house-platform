@@ -48,15 +48,17 @@ const TOPIC_PATTERNS: { topic: ListingConditionTopic; re: RegExp }[] = [
 const QUESTIONISH_RE =
   /嗎|嘛|？|\?|可以|可否|能不能|可不可以|行不行|有沒有|允不允許|允許|支援|方便|OK|ok|Ok/;
 
-const MIN_DELAY_MS = 2 * 60 * 1000;
-const MAX_DELAY_MS = 5 * 60 * 1000;
+/** 正式：2～5 分隨機。LINE 實測期間改短延遲，測完再改回。 */
+const TEST_SHORT_DELAY = true;
+const MIN_DELAY_MS = TEST_SHORT_DELAY ? 5 * 1000 : 2 * 60 * 1000;
+const MAX_DELAY_MS = TEST_SHORT_DELAY ? 8 * 1000 : 5 * 60 * 1000;
 
-/** 測試用：.env 設 LINE_CONDITION_REPLY_TEST_DELAY_MS=10000 → 約 10 秒就推（正式勿設） */
+/** 也可 .env 設 LINE_CONDITION_REPLY_TEST_DELAY_MS=3000 覆寫（毫秒，正式勿設） */
 function delayBoundsMs() {
   const raw = process.env.LINE_CONDITION_REPLY_TEST_DELAY_MS?.trim();
   if (raw) {
     const n = Number(raw);
-    if (Number.isFinite(n) && n >= 1000 && n <= MAX_DELAY_MS) {
+    if (Number.isFinite(n) && n >= 0 && n <= 5 * 60 * 1000) {
       return { min: n, max: n };
     }
   }
