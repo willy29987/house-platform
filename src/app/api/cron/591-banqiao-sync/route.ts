@@ -4,6 +4,11 @@ import {
   scrub591TransferPhones,
   scrubBanqiaoSyncedOwnerTrackingNotes,
 } from "@/lib/listing-591-banqiao-sync";
+import {
+  readOpsSchedule,
+  shouldRunSync,
+  writeOpsSchedule,
+} from "@/lib/ops-schedule";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -30,10 +35,28 @@ async function handle(request: Request) {
       const scrub = await scrubBanqiaoSyncedOwnerTrackingNotes();
       return NextResponse.json({ ok: true, transferPhones, scrub });
     }
+
+    const force = url.searchParams.get("force") === "1";
+    const schedule = await readOpsSchedule();
+    if (!force && !shouldRunSync(schedule)) {
+      return NextResponse.json({
+        ok: true,
+        skipped: true,
+        reason: schedule.syncEnabled
+          ? `未到間隔（每 ${schedule.syncIntervalHours} 小時）`
+          : "後台已關閉 591 自動抓取",
+        schedule,
+      });
+    }
+
     const maxRaw = Number(url.searchParams.get("maxDetails") ?? "");
     const maxDetails = Number.isFinite(maxRaw) && maxRaw > 0 ? Math.min(Math.round(maxRaw), 80) : undefined;
     const summary = await runBanqiao591SuiteSync(maxDetails ? { maxDetails } : undefined);
-    return NextResponse.json({ ok: true, summary });
+    const next = await writeOpsSchedule({
+      ...schedule,
+      lastSyncAt: new Date().toISOString(),
+    });
+    return NextResponse.json({ ok: true, summary, schedule: next });
   } catch (error) {
     console.error("[cron/591-banqiao-sync]", error);
     const message = error instanceof Error ? error.message : "同步失敗";
