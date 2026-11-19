@@ -49,6 +49,7 @@ export async function buildLiffBootstrap(input: {
   listingId?: string | string[];
   similar?: string | string[];
   fresh?: string | string[];
+  restart?: string | string[];
   "liff.state"?: string;
 }): Promise<LiffBootstrapPayload> {
   const search = new URLSearchParams();
@@ -56,12 +57,20 @@ export async function buildLiffBootstrap(input: {
   if (input["liff.state"]) search.set("liff.state", input["liff.state"]);
   const fallbackLineUserId = messagingUidFromSearch(search.toString());
   const stateParams = liffStateParams(input["liff.state"]);
+  const restartMode = truthyParam(
+    input.restart ?? stateParams.get("restart") ?? undefined,
+  );
   const directIds = listingIdsFromParam(input.listingId);
-  const pushedListingIds = directIds.length
-    ? directIds
-    : listingIdsFromParam(stateParams.getAll("listingId"));
-  const similarMode = truthyParam(input.similar ?? stateParams.get("similar") ?? undefined);
+  const pushedListingIds = restartMode
+    ? []
+    : directIds.length
+      ? directIds
+      : listingIdsFromParam(stateParams.getAll("listingId"));
+  const similarMode =
+    !restartMode &&
+    truthyParam(input.similar ?? stateParams.get("similar") ?? undefined);
   const freshMode =
+    !restartMode &&
     Boolean(fallbackLineUserId) &&
     truthyParam(input.fresh ?? stateParams.get("fresh") ?? undefined);
 
@@ -82,6 +91,16 @@ export async function buildLiffBootstrap(input: {
   ]);
 
   let directListing: LiffDirectListingEntry | null = null;
+
+  // restart＝開始找房：不帶舊條件／直開物件，表單從空的房屋條件起
+  if (restartMode) {
+    return {
+      listings: cards,
+      fallbackLineUserId,
+      initialDisplayName: lineProfile?.displayName ?? null,
+      directListing: null,
+    };
+  }
 
   if (freshMode && fallbackLineUserId) {
     const watch = await getGuestWatchByUserId(fallbackLineUserId);

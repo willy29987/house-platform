@@ -31,9 +31,14 @@ export function resolveLiffBootstrapHint(input: {
   listingId?: string | string[];
   similar?: string | string[];
   fresh?: string | string[];
+  restart?: string | string[];
   "liff.state"?: string;
 }): LiffBootstrapHint {
   const stateParams = liffStateParams(input["liff.state"]);
+  // 圖文選單「開始找房」：一律先房屋條件，忽略殘留 listingId／fresh
+  if (truthyParam(input.restart ?? stateParams.get("restart") ?? undefined)) {
+    return { mode: "criteria", listingIds: [] };
+  }
   if (truthyParam(input.fresh ?? stateParams.get("fresh") ?? undefined)) {
     return { mode: "similar", listingIds: [] };
   }

@@ -344,7 +344,7 @@ async function finishCase(session: GuestSession) {
 /** 歡迎文＋「開始找房」按鈕合成一則（不再拆兩則）。 */
 function openFullLiffFormMessages(lineUserId?: string): LineMessage[] {
   const uri = buildLiffRentAssistantUrl(
-    lineUserId ? { uid: lineUserId } : undefined,
+    lineUserId ? { uid: lineUserId, restart: "1" } : { restart: "1" },
   );
   return [
     {

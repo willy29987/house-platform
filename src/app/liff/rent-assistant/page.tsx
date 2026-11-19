@@ -16,6 +16,7 @@ export default async function LiffRentAssistantPage({
     listingId?: string | string[];
     similar?: string | string[];
     fresh?: string | string[];
+    restart?: string | string[];
     notice?: string | string[];
     "liff.state"?: string;
   }>;
@@ -37,6 +38,14 @@ export default async function LiffRentAssistantPage({
   if (params.similar) {
     const similar = Array.isArray(params.similar) ? params.similar[0] : params.similar;
     if (similar) bootstrapQuery.set("similar", similar);
+  }
+  if (params.fresh) {
+    const fresh = Array.isArray(params.fresh) ? params.fresh[0] : params.fresh;
+    if (fresh) bootstrapQuery.set("fresh", fresh);
+  }
+  if (params.restart) {
+    const restart = Array.isArray(params.restart) ? params.restart[0] : params.restart;
+    if (restart) bootstrapQuery.set("restart", restart);
   }
   if (entryNotice) bootstrapQuery.set("notice", entryNotice);
   const listingIds = Array.isArray(params.listingId)

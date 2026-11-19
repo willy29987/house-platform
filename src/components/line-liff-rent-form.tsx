@@ -1079,6 +1079,15 @@ export function LineLiffRentForm({
     setError("");
     setDetailId(null);
     setPickedIds([]);
+    setMatched([]);
+    setSimilar([]);
+    setMatchedRelaxed([]);
+    setCriteria(emptyCriteria());
+    setPetHas(null);
+    setPetDraft("");
+    setPriceCustomOn(false);
+    setPriceMin("");
+    setPriceMax("");
     setWatchSaved(false);
     setStep("criteria");
   }
@@ -1106,7 +1115,7 @@ export function LineLiffRentForm({
     const uid = readClientMessagingUid(lineUserId);
     if (!uid) {
       setWatchSaved(false);
-      return;
+      return false;
     }
     try {
       const response = await fetch("/api/line/guest-watch-criteria", {
@@ -1122,13 +1131,16 @@ export function LineLiffRentForm({
           active: true,
         }),
       });
-      setWatchSaved(response.ok);
+      const ok = response.ok;
+      setWatchSaved(ok);
+      return ok;
     } catch {
       setWatchSaved(false);
+      return false;
     }
   }
 
-  function confirmCriteria() {
+  async function confirmCriteria() {
     if (petHas === "yes" && !petDraft.trim()) {
       setError("請填寫寵物種類");
       return;
@@ -1164,16 +1176,21 @@ export function LineLiffRentForm({
     const result = matchRentals(listings, criteria, { wantsPet });
     const items = applyBudgetFilter(result.items, minRaw, maxRaw, min, max);
 
+    setError("");
+    setWatchSaved(false);
+    // 先覆寫客戶條件，再進配對結果
+    const saved = await persistWatchCriteria({ minRaw, maxRaw, min, max });
+    if (!saved && readClientMessagingUid(lineUserId)) {
+      setError("條件儲存失敗，請再試一次");
+      return;
+    }
+
     setMatched(items);
     setMatchedRelaxed(result.relaxed);
     setSimilar([]);
     setPickedIds([]);
     setDetailId(null);
-    setError("");
-    setWatchSaved(false);
     setStep("listings");
-    // 每次確認條件都以最新條件覆蓋寫入（關掉 LIFF 也保留，之後新案可推）
-    void persistWatchCriteria({ minRaw, maxRaw, min, max });
   }
 
   function wantCurrentListing() {
@@ -1484,7 +1501,7 @@ export function LineLiffRentForm({
               : "確認送出到對話";
 
   function onPrimary() {
-    if (step === "criteria") confirmCriteria();
+    if (step === "criteria") void confirmCriteria();
     else if (step === "listings") {
       if (!canContinueListings) {
         if (!skipCriteria) reselectCriteria();

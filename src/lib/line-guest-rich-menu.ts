@@ -113,7 +113,10 @@ export async function setDefaultFindHomeRichMenu() {
   const token = await getLineChannelAccessToken();
   if (!token) return { ok: false as const, reason: "missing_token" as const };
 
-  const richMenuId = await createFindHomeMenu(token, buildLiffRentAssistantUrl());
+  const richMenuId = await createFindHomeMenu(
+    token,
+    buildLiffRentAssistantUrl({ restart: "1" }),
+  );
   if (!richMenuId) return { ok: false as const, reason: "create_failed" as const };
 
   const linked = await fetch(
@@ -143,7 +146,7 @@ export async function ensureGuestFindHomeMenu(
 
   const richMenuId = await createFindHomeMenu(
     token,
-    buildLiffRentAssistantUrl({ uid: userId }),
+    buildLiffRentAssistantUrl({ uid: userId, restart: "1" }),
   );
   if (!richMenuId) return;
 
