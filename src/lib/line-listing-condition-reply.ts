@@ -1,6 +1,6 @@
 /**
- * 客人問租補／報稅／入戶籍／寵物時，依最近相關物件屬性組回覆，
- * 並以 2～5 分鐘隨機延遲 push（reply token 無法撐這麼久）。
+ * 客人問租補／報稅／入戶籍／寵物／還在嗎時，依最近相關物件屬性組回覆，
+ * 並以 1～3 分鐘隨機延遲 push（reply token 無法撐這麼久）。
  */
 
 import { after } from "next/server";
@@ -14,14 +14,19 @@ import { pushLineMessages } from "@/lib/line-messaging";
 import { normalizeItemList } from "@/lib/furniture-appliance-value";
 import { parseListingInternalMeta } from "@/lib/listing-internal-meta";
 import {
-  loadPublishedRentalMatchListing,
+  loadRentalMatchListingAny,
   toRentalMatchListing,
   type RentalMatchListing,
 } from "@/lib/line-rental-assistant";
 import { readLineRentalCases } from "@/lib/line-rental-cases";
 import { prisma } from "@/lib/prisma";
 
-export type ListingConditionTopic = "pets" | "subsidy" | "tax" | "register";
+export type ListingConditionTopic =
+  | "pets"
+  | "subsidy"
+  | "tax"
+  | "register"
+  | "available";
 
 export type DelayedGuestReplyItem = {
   id: string;
@@ -43,15 +48,18 @@ const TOPIC_PATTERNS: { topic: ListingConditionTopic; re: RegExp }[] = [
   { topic: "subsidy", re: /租補|租屋補助|租金補助|補助/ },
   { topic: "tax", re: /報稅|扣抵|列報/ },
   { topic: "register", re: /入戶籍|入籍|遷入戶籍|設籍|遷戶籍|戶籍/ },
+  {
+    topic: "available",
+    re: /還在|在不在|有沒有了|租出去|被租走|已出租|已經租|下架了|還能看|還可以看|還開著|還能約|是否還在|還有嗎/,
+  },
 ];
 
 const QUESTIONISH_RE =
-  /嗎|嘛|？|\?|可以|可否|能不能|可不可以|行不行|有沒有|允不允許|允許|支援|方便|OK|ok|Ok/;
+  /嗎|嘛|？|\?|可以|可否|能不能|可不可以|行不行|有沒有|允不允許|允許|支援|方便|在不在|OK|ok|Ok/;
 
-/** 正式：2～5 分隨機。LINE 實測期間改短延遲，測完再改回。 */
-const TEST_SHORT_DELAY = true;
-const MIN_DELAY_MS = TEST_SHORT_DELAY ? 5 * 1000 : 2 * 60 * 1000;
-const MAX_DELAY_MS = TEST_SHORT_DELAY ? 8 * 1000 : 5 * 60 * 1000;
+/** 正式：1～3 分隨機 */
+const MIN_DELAY_MS = 1 * 60 * 1000;
+const MAX_DELAY_MS = 3 * 60 * 1000;
 
 /** 也可 .env 設 LINE_CONDITION_REPLY_TEST_DELAY_MS=3000 覆寫（毫秒，正式勿設） */
 function delayBoundsMs() {
@@ -108,12 +116,12 @@ function randomDelayMs() {
   return min + Math.floor(Math.random() * (max - min + 1));
 }
 
-/** 後台物件 id、或 591 網址／編號 → 已上架出租物件 */
+/** 後台物件 id、或 591 網址／編號 → 出租物件（含已下架，供「還在嗎」） */
 async function loadListingByIdOr591Ref(raw: string | null | undefined): Promise<RentalMatchListing | null> {
   const text = (raw ?? "").trim();
   if (!text) return null;
 
-  const byId = await loadPublishedRentalMatchListing(text);
+  const byId = await loadRentalMatchListingAny(text);
   if (byId) return byId;
 
   const { id: source591Id } = resolve591IdFromUrlOrId(text);
@@ -123,7 +131,6 @@ async function loadListingByIdOr591Ref(raw: string | null | undefined): Promise<
       where: {
         source591Id,
         listingType: ListingType.RENT,
-        isPublished: true,
       },
     });
     if (!row) return null;
@@ -137,6 +144,7 @@ async function loadListingByIdOr591Ref(raw: string | null | undefined): Promise<
       shortTermRent: meta.shortTermRent ?? null,
       serviceFee: meta.serviceFee ?? null,
       houseCondition: meta.houseCondition ?? null,
+      isPublished: row.isPublished,
     });
   } catch (error) {
     console.error("[line-listing-condition-reply] load by 591 failed", error);
@@ -159,7 +167,7 @@ export async function previewListingConditionReply(input: {
       : input.lineUserId
         ? await resolveFocusListingId(input.lineUserId)
         : null;
-  const fromFocus = fromUser ? await loadPublishedRentalMatchListing(fromUser) : null;
+  const fromFocus = fromUser ? await loadRentalMatchListingAny(fromUser) : null;
   const listing = fromField || fromMessage || fromFocus;
   const replyText = topics.length
     ? buildListingConditionReplyText({ listing, topics })
@@ -177,6 +185,7 @@ export async function previewListingConditionReply(input: {
           rentSubsidy: listing.rentSubsidy,
           taxDeductible: listing.taxDeductible,
           canRegisterAddress: listing.canRegisterAddress,
+          isPublished: listing.isPublished ?? true,
         }
       : null,
     replyText,
@@ -193,6 +202,7 @@ const TOPIC_LABEL: Record<ListingConditionTopic, string> = {
   subsidy: "租補",
   tax: "報稅",
   register: "入籍",
+  available: "還在的房子",
 };
 
 function attrForTopic(
@@ -202,7 +212,9 @@ function attrForTopic(
   if (topic === "pets") return listing.petsAllowed;
   if (topic === "subsidy") return listing.rentSubsidy;
   if (topic === "tax") return listing.taxDeductible;
-  return listing.canRegisterAddress;
+  if (topic === "register") return listing.canRegisterAddress;
+  // 還在嗎：以上架為準（明確布林，不做 unknown）
+  return listing.isPublished !== false;
 }
 
 function joinTopicLabels(topics: ListingConditionTopic[]) {
@@ -228,7 +240,7 @@ export function buildListingConditionReplyText(input: {
 
   if (!input.listing) {
     return [
-      "關於租補／報稅／入戶籍／寵物，要對到「哪一間」我才能依物件資料回你。",
+      "關於租補／報稅／入戶籍／寵物／是否還在，要對到「哪一間」我才能依物件資料回你。",
       "請再開一次物件卡片，或貼該間連結／截圖，我再跟你確認。",
     ].join("\n");
   }
@@ -362,7 +374,7 @@ export async function flushDueDelayedGuestReplies(opts?: { onlyId?: string; now?
 }
 
 /**
- * 若偵測到條件問句：排程 2～5 分隨機延遲回覆並回 true（表示已接手，webhook 勿再走其他自動回）。
+ * 若偵測到條件問句：排程 1～3 分隨機延遲回覆並回 true（表示已接手，webhook 勿再走其他自動回）。
  */
 export async function maybeScheduleListingConditionReply(input: {
   lineUserId: string;
@@ -374,7 +386,7 @@ export async function maybeScheduleListingConditionReply(input: {
   const fromMessage = await loadListingByIdOr591Ref(input.text);
   const focusId = fromMessage ? null : await resolveFocusListingId(input.lineUserId);
   const listing =
-    fromMessage || (focusId ? await loadPublishedRentalMatchListing(focusId) : null);
+    fromMessage || (focusId ? await loadRentalMatchListingAny(focusId) : null);
   const replyText = buildListingConditionReplyText({ listing, topics });
   if (!replyText) return false;
 

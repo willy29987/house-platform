@@ -44,6 +44,8 @@ export type RentalMatchListing = {
   availableFrom: string | null;
   shortTermRent: string | null;
   serviceFee: string | null;
+  /** 是否仍上架（問「還在嗎」用；未帶時視為 true） */
+  isPublished?: boolean;
 };
 
 /** 從網站出租物件卡片轉成 LIFF／客服配對用結構 */
@@ -86,6 +88,7 @@ export function toRentalMatchListing(listing: {
   availableFrom?: string | null;
   shortTermRent?: string | null;
   serviceFee?: string | null;
+  isPublished?: boolean;
 }): RentalMatchListing {
   return {
     id: listing.id,
@@ -126,6 +129,7 @@ export function toRentalMatchListing(listing: {
     availableFrom: listing.availableFrom ?? null,
     shortTermRent: listing.shortTermRent ?? null,
     serviceFee: listing.serviceFee ?? null,
+    isPublished: listing.isPublished ?? true,
   };
 }
 
@@ -203,9 +207,42 @@ export async function loadPublishedRentalMatchListing(
       shortTermRent: meta.shortTermRent ?? null,
       serviceFee: meta.serviceFee ?? null,
       houseCondition: meta.houseCondition ?? null,
+      isPublished: true,
     });
   } catch (error) {
     console.error("[line-rental-assistant] loadPublishedRentalMatchListing", error);
+    return null;
+  }
+}
+
+/** 出租物件（含已下架），供「還在嗎」等條件問句對物件 */
+export async function loadRentalMatchListingAny(
+  id: string,
+): Promise<RentalMatchListing | null> {
+  const listingId = id.trim();
+  if (!listingId || !process.env.DATABASE_URL) return null;
+  try {
+    const row = await prisma.listing.findFirst({
+      where: {
+        id: listingId,
+        listingType: ListingType.RENT,
+      },
+    });
+    if (!row) return null;
+    const meta = parseListingInternalMeta(row.description);
+    return toRentalMatchListing({
+      ...row,
+      furnitureItems: normalizeItemList(meta.furnitureItems),
+      equipmentItems: normalizeItemList(meta.equipmentItems),
+      securityDeposit: meta.securityDeposit ?? null,
+      availableFrom: meta.availableFrom ?? null,
+      shortTermRent: meta.shortTermRent ?? null,
+      serviceFee: meta.serviceFee ?? null,
+      houseCondition: meta.houseCondition ?? null,
+      isPublished: row.isPublished,
+    });
+  } catch (error) {
+    console.error("[line-rental-assistant] loadRentalMatchListingAny", error);
     return null;
   }
 }

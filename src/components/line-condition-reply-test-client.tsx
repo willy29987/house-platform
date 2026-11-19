@@ -15,6 +15,7 @@ type PreviewResult = {
     rentSubsidy: boolean | null;
     taxDeductible: boolean | null;
     canRegisterAddress: boolean | null;
+    isPublished?: boolean | null;
   } | null;
   replyText?: string;
   delaySec?: { min: number; max: number };
@@ -26,6 +27,7 @@ const SAMPLES = [
   "報稅方便嗎",
   "可以入戶籍嗎",
   "租補跟報稅都可以嗎",
+  "這間還在嗎",
 ];
 
 function attrLabel(v: boolean | null | undefined) {
@@ -168,13 +170,14 @@ export function LineConditionReplyTestClient() {
                   <span className="text-zinc-500">{result.listingId}</span>
                 ) : result.source591Id ? (
                   <span className="text-amber-700">
-                    （有 591 #{result.source591Id}，但內網沒有「已上架出租」對應物件）
+                    （有 591 #{result.source591Id}，但內網沒有對應出租物件）
                   </span>
                 ) : null}
               </p>
               {result.attrs ? (
                 <p className="text-zinc-600">
-                  屬性：寵物 {attrLabel(result.attrs.petsAllowed)}／租補{" "}
+                  屬性：還在 {attrLabel(result.attrs.isPublished)}／寵物{" "}
+                  {attrLabel(result.attrs.petsAllowed)}／租補{" "}
                   {attrLabel(result.attrs.rentSubsidy)}／報稅 {attrLabel(result.attrs.taxDeductible)}
                   ／入戶籍 {attrLabel(result.attrs.canRegisterAddress)}
                 </p>
