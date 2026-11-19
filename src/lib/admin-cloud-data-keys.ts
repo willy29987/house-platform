@@ -16,6 +16,8 @@ export const ADMIN_CLOUD_DATA_KEYS = {
   lineListingImageHashes: "line_listing_image_hashes",
   adminWebPushVapid: "admin_web_push_vapid",
   adminWebPushSubscriptions: "admin_web_push_subscriptions",
+  /** 591 抓取／客人彙整推播時段（後台可調） */
+  opsSchedule: "ops_schedule",
 } as const;
 
 export type AdminCloudDataKey = (typeof ADMIN_CLOUD_DATA_KEYS)[keyof typeof ADMIN_CLOUD_DATA_KEYS];

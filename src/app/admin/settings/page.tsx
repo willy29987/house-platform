@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { AdminOpsSchedulePanel } from "@/components/admin-ops-schedule-panel";
 import { AdminUsersManager } from "@/components/admin-users-manager";
 import { getCurrentAdmin } from "@/lib/admin-auth";
 import { formatAdminStaffLabel } from "@/lib/admin-staff-labels";
@@ -55,7 +56,7 @@ export default async function AdminSettingsPage() {
     <main className="mx-auto w-full max-w-3xl px-6 py-10">
       <div className="mb-6">
         <p className="text-sm text-zinc-600">內部管理後台</p>
-        <h1 className="text-2xl font-bold text-zinc-900">帳號管理</h1>
+        <h1 className="text-2xl font-bold text-zinc-900">系統設定</h1>
         <p className="mt-1 text-xs text-zinc-500">
           目前登入：
           <span className="font-medium text-zinc-700" title={current.username}>
@@ -66,6 +67,10 @@ export default async function AdminSettingsPage() {
           <span className="ml-2 rounded-full bg-[#0b2545] px-2 py-0.5 text-white">最高管理員</span>
         </p>
       </div>
+
+      <section className="mb-6 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-zinc-200">
+        <AdminOpsSchedulePanel />
+      </section>
 
       <section className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-zinc-200">
         <AdminUsersManager initialUsers={serializedUsers} hasDatabase={hasDatabase} />
