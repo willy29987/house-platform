@@ -411,7 +411,8 @@ export function matchRentals(
 }
 
 /**
- * 主配對以外的「類似／符合條件」物件：同縣市為主，略放寬行政區／房型等，排除已在主列表者。
+ * 主配對以外的「類似／符合條件」物件：
+ * 先守行政區，再放寬；同批內優先已選行政區，其次預算區間。
  */
 export function similarRentals(
   listings: RentalMatchListing[],
@@ -422,6 +423,7 @@ export function similarRentals(
   const exclude = new Set(excludeIds);
   const pool = listings.filter((listing) => !exclude.has(listing.id));
   const notes: string[] = [];
+  const wantDistricts = new Set(criteria.districts.filter(Boolean));
 
   const tryMatch = (soft: RentalMatchCriteria, note: string) => {
     const items = pool.filter((listing) => listingMatchesCriteria(listing, soft));
@@ -434,12 +436,21 @@ export function similarRentals(
     tryMatch(
       {
         ...criteria,
+        bathrooms: [],
+        parking: [],
+        extras: [],
+      },
+      "同行政區相近（已略放寬衛浴／車位等）",
+    ) ||
+    tryMatch(
+      {
+        ...criteria,
         districts: [],
         bathrooms: [],
         parking: [],
         extras: [],
       },
-      "同條件相近（已略放寬行政區／衛浴／車位等）",
+      "同縣市相近（已略放寬行政區／衛浴／車位等）",
     ) ||
     tryMatch(
       {
@@ -467,12 +478,23 @@ export function similarRentals(
     ) ||
     [];
 
+  // 同批內：已選行政區優先，再依是否落在預算鍵排序（有預算鍵時）
+  items = [...items].sort((a, b) => {
+    const aDistrict = wantDistricts.size ? (wantDistricts.has(a.district) ? 1 : 0) : 0;
+    const bDistrict = wantDistricts.size ? (wantDistricts.has(b.district) ? 1 : 0) : 0;
+    if (bDistrict !== aDistrict) return bDistrict - aDistrict;
+    if (!criteria.priceKeys.length) return a.price - b.price;
+    const aIn = criteria.priceKeys.some((key) => priceInBand(a.price, key)) ? 1 : 0;
+    const bIn = criteria.priceKeys.some((key) => priceInBand(b.price, key)) ? 1 : 0;
+    if (bIn !== aIn) return bIn - aIn;
+    return a.price - b.price;
+  });
+
   return { items: items.slice(0, limit), notes };
 }
 
 /**
- * 以客人問的那間排類似物件：同區優先，租金 ±5000；符合的全部列出（不截斷）。
- * 同區沒有時，退回同縣市＋租金區間。
+ * 以客人選的那間排類似物件：同行政區優先，其次租金接近；同縣市內列出（不先被租金區間砍掉同區）。
  */
 export function rankSimilarToListing(
   listings: RentalMatchListing[],
@@ -483,27 +505,29 @@ export function rankSimilarToListing(
   const exclude = new Set(excludeIds);
   exclude.add(focus.id);
   const price = Number.isFinite(focus.price) ? Math.max(0, focus.price) : 0;
-  const priceMin = Math.max(0, price - SIMILAR_PRICE_BAND);
-  const priceMax = price + SIMILAR_PRICE_BAND;
   const focusRoom = roomKeyFromListing(focus);
+  const focusDistrict = (focus.district || "").trim();
 
-  const inBand = listings.filter((listing) => {
-    if (exclude.has(listing.id)) return false;
-    if (listing.city !== focus.city) return false;
-    return listing.price >= priceMin && listing.price <= priceMax;
-  });
-
-  const sameDistrict = inBand.filter((listing) => listing.district === focus.district);
-  const pool = sameDistrict.length ? sameDistrict : inBand;
-
-  const scored = pool
-    .map((listing) => {
-      let score = 0;
-      if (listing.district === focus.district) score += 10;
-      if (focusRoom && roomKeyFromListing(listing) === focusRoom) score += 2;
-      return { listing, score, gap: Math.abs(listing.price - price) };
+  const scored = listings
+    .filter((listing) => {
+      if (exclude.has(listing.id)) return false;
+      if (focus.city && listing.city !== focus.city) return false;
+      return true;
     })
-    .sort((a, b) => b.score - a.score || a.gap - b.gap);
+    .map((listing) => {
+      const sameDistrict = focusDistrict && listing.district === focusDistrict ? 1 : 0;
+      const gap = Math.abs(listing.price - price);
+      const inBand = gap <= SIMILAR_PRICE_BAND ? 1 : 0;
+      const sameRoom = focusRoom && roomKeyFromListing(listing) === focusRoom ? 1 : 0;
+      return { listing, sameDistrict, gap, inBand, sameRoom };
+    })
+    .sort(
+      (a, b) =>
+        b.sameDistrict - a.sameDistrict ||
+        a.gap - b.gap ||
+        b.inBand - a.inBand ||
+        b.sameRoom - a.sameRoom,
+    );
 
   const ranked = scored.map((row) => row.listing);
   if (limit == null || limit <= 0) return ranked;

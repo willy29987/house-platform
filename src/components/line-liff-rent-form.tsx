@@ -770,11 +770,25 @@ export function LineLiffRentForm({
       });
       const rest = filtered.filter((item) => !focusSet.has(item.id));
       if (!focus.length && !rest.length) {
+        const seed = listings.find((item) => focusIds.includes(item.id));
+        if (seed) {
+          return rankSimilarToListing(listings, seed, focusIds, 8).filter((item) =>
+            wantsPet ? item.petsAllowed !== false : true,
+          );
+        }
         return similarRentals(listings, directListing.criteria, [], 8).items.filter((item) =>
           wantsPet ? item.petsAllowed !== false : true,
         );
       }
-      return [...focus, ...rest];
+      const focusPrice = focus[0]?.price ?? directListing.priceMin ?? 0;
+      const focusDistrict = focus[0]?.district ?? "";
+      const restSorted = [...rest].sort((a, b) => {
+        const aDistrict = focusDistrict && a.district === focusDistrict ? 1 : 0;
+        const bDistrict = focusDistrict && b.district === focusDistrict ? 1 : 0;
+        if (bDistrict !== aDistrict) return bDistrict - aDistrict;
+        return Math.abs(a.price - focusPrice) - Math.abs(b.price - focusPrice);
+      });
+      return [...focus, ...restSorted];
     }
     const ids = new Set(directListing.listingIds);
     return listings.filter((item) => ids.has(item.id));
@@ -982,16 +996,15 @@ export function LineLiffRentForm({
       .filter((item): item is RentalMatchListing => Boolean(item));
     if (!found.length || !skipCriteria) return;
     listingBootRef.current = true;
-    const seed = emptyCriteria();
-    seed.cities = [...new Set(found.map((item) => item.city).filter(Boolean))];
-    const similarResult = similarRentals(
+    const focus = found[0]!;
+    const similarItems = rankSimilarToListing(
       listings,
-      seed,
+      focus,
       found.map((item) => item.id),
       8,
     );
     setMatched(found);
-    setSimilar(similarResult.items);
+    setSimilar(similarItems);
     setPickedIds(found.map((item) => item.id).slice(0, MAX_WANTED_LISTINGS));
     if (skipCriteria) setDetailId(found[0]?.id ?? null);
     setStep("listings");
