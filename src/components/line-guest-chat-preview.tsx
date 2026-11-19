@@ -232,7 +232,10 @@ function TextStep({
       value={value}
       onChange={(event) => onChange(event.target.value)}
       onKeyDown={(event) => {
-        if (event.key === "Enter" && value.trim()) onSubmit();
+        if (event.key !== "Enter" || !value.trim()) return;
+        // IME 組字中 Enter 是確認選字，不可當成送出
+        if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+        onSubmit();
       }}
       inputMode={inputMode}
       className="w-full rounded-2xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-[#06c755]"
@@ -976,7 +979,9 @@ export function LineGuestChatPreview({
                   value={petDraft}
                   onChange={(event) => setPetDraft(event.target.value)}
                   onKeyDown={(event) => {
-                    if (event.key === "Enter" && petDraft.trim()) continuePet();
+                    if (event.key !== "Enter" || !petDraft.trim()) return;
+                    if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+                    continuePet();
                   }}
                   className="min-w-0 flex-1 rounded-2xl border border-zinc-200 px-3 py-1.5 text-sm outline-none focus:border-[#06c755]"
                 />
@@ -1033,7 +1038,9 @@ export function LineGuestChatPreview({
                   value={nationalityDraft}
                   onChange={(event) => setNationalityDraft(event.target.value)}
                   onKeyDown={(event) => {
-                    if (event.key === "Enter" && nationalityDraft.trim()) continueNationality();
+                    if (event.key !== "Enter" || !nationalityDraft.trim()) return;
+                    if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+                    continueNationality();
                   }}
                   className="min-w-0 flex-1 rounded-2xl border border-zinc-200 px-3 py-1.5 text-sm outline-none focus:border-[#06c755]"
                 />

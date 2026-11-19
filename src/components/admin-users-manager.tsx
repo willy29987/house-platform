@@ -180,10 +180,11 @@ export function AdminUsersManager({ initialUsers, hasDatabase }: AdminUsersManag
                           placeholder="業務姓名"
                           className="min-w-[8rem] flex-1 rounded-lg border border-zinc-300 px-2 py-1 text-xs text-zinc-800"
                           onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              void onChangeDisplayName(user.id, (e.target as HTMLInputElement).value);
-                            }
+                            if (e.key !== "Enter") return;
+                            // IME 組字中（注音／日文等）Enter 是確認選字，不可當成儲存
+                            if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+                            e.preventDefault();
+                            void onChangeDisplayName(user.id, (e.target as HTMLInputElement).value);
                           }}
                         />
                         <button

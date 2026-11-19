@@ -1124,6 +1124,10 @@ export function LineRentalPreview({
   const today = useMemo(() => taipeiTodayYmd(), []);
 
   function resizeDraftInput(node?: HTMLTextAreaElement | null) {
+    // 支援 field-sizing: content 時交給 CSS，舊瀏覽器才用 JS 量高
+    if (typeof CSS !== "undefined" && CSS.supports("field-sizing", "content")) {
+      return;
+    }
     const el =
       node ??
       [draftInputRef.current, desktopDraftRef.current].find(
@@ -2364,7 +2368,7 @@ export function LineRentalPreview({
                         resizeDraftInput(event.target);
                       }}
                       onKeyDown={onDraftKeyDown}
-                      className="max-h-32 min-h-[1.35rem] w-full resize-none overflow-y-auto bg-transparent py-1.5 text-[15px] leading-6 text-zinc-900 outline-none placeholder:text-zinc-400"
+                      className="field-sizing-content max-h-32 min-h-[1.35rem] w-full resize-none overflow-y-auto bg-transparent py-1.5 text-[15px] leading-6 text-zinc-900 outline-none placeholder:text-zinc-400"
                     />
                   </label>
                   <button
@@ -2406,7 +2410,7 @@ export function LineRentalPreview({
                       resizeDraftInput(event.target);
                     }}
                     onKeyDown={onDraftKeyDown}
-                    className="max-h-32 min-h-[2.5rem] w-full resize-none overflow-y-auto bg-transparent text-[14px] leading-6 text-[#222] outline-none placeholder:text-[#bbb]"
+                    className="field-sizing-content max-h-32 min-h-[2.5rem] w-full resize-none overflow-y-auto bg-transparent text-[14px] leading-6 text-[#222] outline-none placeholder:text-[#bbb]"
                   />
                 </label>
                 <div className="flex items-center gap-1 px-2 pb-2 pt-1">

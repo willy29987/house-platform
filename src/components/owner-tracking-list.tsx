@@ -697,6 +697,14 @@ function OwnerTrackingListInner({
               }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
+                  // IME 組字中（注音等）Enter 是確認選字；兼顧 Safari composition 時序
+                  if (
+                    searchComposingRef.current ||
+                    e.nativeEvent.isComposing ||
+                    e.keyCode === 229
+                  ) {
+                    return;
+                  }
                   e.preventDefault();
                   commitSearchToUrl(keywordInput);
                 }
