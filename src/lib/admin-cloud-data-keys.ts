@@ -9,6 +9,8 @@ export const ADMIN_CLOUD_DATA_KEYS = {
   lineGuestWatchPushes: "line_guest_watch_pushes",
   lineGuestProfile: "line_guest_profile",
   lineGuestPushQueue: "line_guest_push_queue",
+  /** 客人條件問句延遲回覆（租補／報稅／入戶籍／寵物） */
+  lineDelayedGuestReplies: "line_delayed_guest_replies",
   lineRuntimeSecrets: "line_runtime_secrets",
   lineConversations: "line_conversations",
   lineGuestRichMenus: "line_guest_rich_menus",

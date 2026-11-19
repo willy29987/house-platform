@@ -93,6 +93,20 @@ export async function getGuestSessionByUserId(lineUserId: string): Promise<Guest
   return store.sessions.find((s) => s.lineUserId === lineUserId && s.step !== "done") ?? null;
 }
 
+/** 含已完成：取該客人最新一筆有選物件的進度（條件問句對物件用） */
+export async function getLatestGuestSessionWithPicked(
+  lineUserId: string,
+): Promise<GuestSession | null> {
+  const id = lineUserId.trim();
+  if (!id) return null;
+  const store = await readStore();
+  return (
+    store.sessions
+      .filter((s) => s.lineUserId === id && s.picked.length > 0)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] ?? null
+  );
+}
+
 /** 尚未填完表單的客人進度（step !== done） */
 export async function listOpenGuestSessions(): Promise<GuestSession[]> {
   const store = await readStore();

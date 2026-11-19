@@ -11,6 +11,7 @@ import {
   type LineConversationMediaType,
 } from "@/lib/line-conversations";
 import { handleGuestPostback, handleGuestText, startGuestFlow } from "@/lib/line-guest-flow";
+import { maybeScheduleListingConditionReply } from "@/lib/line-listing-condition-reply";
 import { notifyAdminsLineGuestMessage } from "@/lib/admin-web-push";
 import { getLineUserProfile, replyLineMessages } from "@/lib/line-messaging";
 import { readLineChannelSecretFromCloud } from "@/lib/line-runtime-secrets";
@@ -24,8 +25,11 @@ import {
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-/** 圖檔辨識（照片比對＋讀截圖＋查 591）最多約 20 秒，之後背景補算物件圖指紋 */
-export const maxDuration = 60;
+/**
+ * 圖檔辨識約 20 秒；條件問句會用 after() 延遲 2～5 分再 push，
+ * 需要較長 maxDuration 當準時備援（另有每分鐘 cron）。
+ */
+export const maxDuration = 300;
 
 function rememberLineUserId(userId: string | null | undefined, eventType?: string) {
   if (!userId) return;
@@ -357,6 +361,14 @@ async function handleEvent(event: LineEvent, state: { failed: boolean }) {
           displayName,
         });
         if (guestHandled) return;
+      }
+
+      if (userId) {
+        const conditionHandled = await maybeScheduleListingConditionReply({
+          lineUserId: userId,
+          text,
+        });
+        if (conditionHandled) return;
       }
 
       const result = await handle591LinkInquiry({
