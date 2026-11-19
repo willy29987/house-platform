@@ -335,9 +335,9 @@ function resolveReplyStatus(lines: ChatLine[]): ReplyStatus {
 }
 
 /**
- * 進行中：還在填表單
- * 待確認：看屋時間尚未向業務確認
- * 已確認：時間與物件都安排好
+ * 待確認：已送出看屋時間，等我們確認物件與時間
+ * 已確認：維持不變
+ * 進行中：其餘未結案（含改約中、還在聊、還在填）
  */
 function resolvePipeline(input: {
   status: GuestStatus;
@@ -345,27 +345,16 @@ function resolvePipeline(input: {
   pickedCount: number;
   hasWhen: boolean;
 }): PipelineBucket {
-  if (input.formInProgress) return "active";
-  if (
-    input.status === "selecting" ||
-    input.status === "picking_time" ||
-    input.status === "saved"
-  ) {
-    return "active";
-  }
-  if (
-    input.status === "pending_confirm" ||
-    input.status === "reschedule_sent" ||
-    input.status === "awaiting_agent" ||
-    input.status === "agent_proposing"
-  ) {
-    return "pending";
-  }
-  if (input.status === "confirmed" && input.pickedCount > 0 && input.hasWhen) {
-    return "confirmed";
-  }
   if (input.status === "confirmed") return "confirmed";
-  return "none";
+  if (input.status === "cancelled") return "none";
+
+  // 只有「已填完並送出時間」且仍等我們確認的才進待確認
+  const waitingOurConfirm =
+    input.hasWhen &&
+    (input.status === "pending_confirm" || input.status === "awaiting_agent");
+  if (waitingOurConfirm) return "pending";
+
+  return "active";
 }
 
 const FILTERS: { id: ListFilter; label: string }[] = [
