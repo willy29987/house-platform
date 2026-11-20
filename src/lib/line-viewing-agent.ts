@@ -434,7 +434,16 @@ export async function notifyAgentsOfNewViewing(caseRecord: LineRentalCase): Prom
   await Promise.all(
     agentIds.map(async (agentId) => {
       const result = await pushLineMessages(agentId, [message], { force: true });
-      if (result.sent) notified += 1;
+      if (result.sent) {
+        notified += 1;
+        return;
+      }
+      console.warn("[line-viewing-agent] notify agent failed", {
+        agentId: `${agentId.slice(0, 6)}…`,
+        reason: "reason" in result ? result.reason : "unknown",
+        status: "status" in result ? result.status : undefined,
+        body: "body" in result ? String(result.body).slice(0, 200) : undefined,
+      });
     }),
   );
   return { notified, agentIds };

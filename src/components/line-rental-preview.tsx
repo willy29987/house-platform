@@ -1447,8 +1447,11 @@ export function LineRentalPreview({
   useEffect(() => {
     window.requestAnimationFrame(() => resizeDraftInput());
   }, [selectedId, draft]);
+  // awaiting_agent＝已送業務確認，客服右側仍要能確認／改時間
   const needsConfirm =
-    (selected?.status === "pending_confirm" || selected?.status === "reschedule_sent") &&
+    (selected?.status === "pending_confirm" ||
+      selected?.status === "awaiting_agent" ||
+      selected?.status === "reschedule_sent") &&
     Boolean(selected.requestedWhen || selected.proposedWhen);
 
   function selectGuest(id: string) {
