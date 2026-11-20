@@ -268,9 +268,19 @@ export const ROOM_TYPE_OPTIONS = [
 
 export type RentalExtra = "subsidy" | "tax" | "household";
 
+/** ""＝不限；apartment＝公寓；elevator＝電梯（單選） */
+export type RentalBuildingForm = "" | "apartment" | "elevator";
+
+export const BUILDING_FORM_OPTIONS = [
+  { id: "apartment", label: "公寓" },
+  { id: "elevator", label: "電梯" },
+] as const;
+
 export type RentalMatchCriteria = {
   cities: string[];
   districts: string[];
+  /** ""＝不限；apartment／elevator 單選 */
+  buildingForm: RentalBuildingForm;
   /** "4" 代表 4 房以上。空陣列＝不限 */
   rooms: string[];
   /** "1" 剛好 1 衛；"2" 代表 2 衛以上 */
@@ -311,12 +321,30 @@ export function emptyCriteria(): RentalMatchCriteria {
   return {
     cities: [],
     districts: [],
+    buildingForm: "",
     rooms: [],
     bathrooms: [],
     parking: [],
     priceKeys: [],
     extras: [],
   };
+}
+
+/** 物件對應的房屋形態；無法判斷時回 null */
+export function listingBuildingForm(
+  listing: Pick<RentalMatchListing, "propertyType" | "hasElevator">,
+): Exclude<RentalBuildingForm, ""> | null {
+  if (listing.propertyType === "ELEVATOR_BUILDING" || listing.hasElevator === true) {
+    return "elevator";
+  }
+  if (listing.propertyType === "APARTMENT" || listing.hasElevator === false) {
+    return "apartment";
+  }
+  return null;
+}
+
+export function normalizeBuildingForm(raw: unknown): RentalBuildingForm {
+  return raw === "apartment" || raw === "elevator" ? raw : "";
 }
 
 function roomKeyFromListing(listing: Pick<RentalMatchListing, "rooms" | "houseCondition" | "propertyType">) {
@@ -379,6 +407,9 @@ export function listingMatchesCriteria(
 ) {
   if (criteria.cities.length && !criteria.cities.includes(listing.city)) return false;
   if (criteria.districts.length && !criteria.districts.includes(listing.district)) return false;
+  if (criteria.buildingForm) {
+    if (listingBuildingForm(listing) !== criteria.buildingForm) return false;
+  }
   if (criteria.rooms.length) {
     const condition = listing.houseCondition || listing.propertyType;
     const suite = condition === "STUDIO" || condition === "SUITE";
@@ -448,8 +479,7 @@ export function matchRentals(
 }
 
 /**
- * 主配對以外的「類似／符合條件」物件：
- * 先守行政區，再放寬；同批內優先已選行政區，其次預算區間。
+ * 主配對以外的「類似」物件：只保留客人要的行政區＋房型（不放寬到縣市／預算）。
  */
 export function similarRentals(
   listings: RentalMatchListing[],
@@ -459,79 +489,27 @@ export function similarRentals(
 ): { items: RentalMatchListing[]; notes: string[] } {
   const exclude = new Set(excludeIds);
   const pool = listings.filter((listing) => !exclude.has(listing.id));
-  const notes: string[] = [];
-  const wantDistricts = new Set(criteria.districts.filter(Boolean));
+  if (!criteria.districts.length && !criteria.rooms.length) {
+    return { items: [], notes: [] };
+  }
 
-  const tryMatch = (soft: RentalMatchCriteria, note: string) => {
-    const items = pool.filter((listing) => listingMatchesCriteria(listing, soft));
-    if (!items.length) return null;
-    notes.push(note);
-    return items;
+  const soft: RentalMatchCriteria = {
+    ...emptyCriteria(),
+    districts: criteria.districts,
+    rooms: criteria.rooms,
   };
+  const items = pool
+    .filter((listing) => listingMatchesCriteria(listing, soft))
+    .sort((a, b) => a.price - b.price);
 
-  let items =
-    tryMatch(
-      {
-        ...criteria,
-        bathrooms: [],
-        parking: [],
-        extras: [],
-      },
-      "同行政區相近（已略放寬衛浴／車位等）",
-    ) ||
-    tryMatch(
-      {
-        ...criteria,
-        districts: [],
-        bathrooms: [],
-        parking: [],
-        extras: [],
-      },
-      "同縣市相近（已略放寬行政區／衛浴／車位等）",
-    ) ||
-    tryMatch(
-      {
-        ...emptyCriteria(),
-        cities: criteria.cities,
-        priceKeys: criteria.priceKeys,
-        rooms: criteria.rooms,
-      },
-      "同縣市＋預算／房型相近",
-    ) ||
-    tryMatch(
-      {
-        ...emptyCriteria(),
-        cities: criteria.cities,
-        priceKeys: criteria.priceKeys,
-      },
-      "同縣市＋預算相近",
-    ) ||
-    tryMatch(
-      {
-        ...emptyCriteria(),
-        cities: criteria.cities,
-      },
-      "同縣市其他物件",
-    ) ||
-    [];
-
-  // 同批內：已選行政區優先，再依是否落在預算鍵排序（有預算鍵時）
-  items = [...items].sort((a, b) => {
-    const aDistrict = wantDistricts.size ? (wantDistricts.has(a.district) ? 1 : 0) : 0;
-    const bDistrict = wantDistricts.size ? (wantDistricts.has(b.district) ? 1 : 0) : 0;
-    if (bDistrict !== aDistrict) return bDistrict - aDistrict;
-    if (!criteria.priceKeys.length) return a.price - b.price;
-    const aIn = criteria.priceKeys.some((key) => priceInBand(a.price, key)) ? 1 : 0;
-    const bIn = criteria.priceKeys.some((key) => priceInBand(b.price, key)) ? 1 : 0;
-    if (bIn !== aIn) return bIn - aIn;
-    return a.price - b.price;
-  });
-
-  return { items: items.slice(0, limit), notes };
+  return {
+    items: items.slice(0, limit),
+    notes: items.length ? ["同行政區＋房型"] : [],
+  };
 }
 
 /**
- * 以客人選的那間排類似物件：同行政區優先，其次租金接近；同縣市內列出（不先被租金區間砍掉同區）。
+ * 以客人選的那間排類似物件：只保留同行政區且同房型；同批內租金接近優先。
  */
 export function rankSimilarToListing(
   listings: RentalMatchListing[],
@@ -544,27 +522,20 @@ export function rankSimilarToListing(
   const price = Number.isFinite(focus.price) ? Math.max(0, focus.price) : 0;
   const focusRoom = roomKeyFromListing(focus);
   const focusDistrict = (focus.district || "").trim();
+  if (!focusDistrict && !focusRoom) return [];
 
   const scored = listings
     .filter((listing) => {
       if (exclude.has(listing.id)) return false;
-      if (focus.city && listing.city !== focus.city) return false;
+      if (focusDistrict && listing.district !== focusDistrict) return false;
+      if (focusRoom && roomKeyFromListing(listing) !== focusRoom) return false;
       return true;
     })
-    .map((listing) => {
-      const sameDistrict = focusDistrict && listing.district === focusDistrict ? 1 : 0;
-      const gap = Math.abs(listing.price - price);
-      const inBand = gap <= SIMILAR_PRICE_BAND ? 1 : 0;
-      const sameRoom = focusRoom && roomKeyFromListing(listing) === focusRoom ? 1 : 0;
-      return { listing, sameDistrict, gap, inBand, sameRoom };
-    })
-    .sort(
-      (a, b) =>
-        b.sameDistrict - a.sameDistrict ||
-        a.gap - b.gap ||
-        b.inBand - a.inBand ||
-        b.sameRoom - a.sameRoom,
-    );
+    .map((listing) => ({
+      listing,
+      gap: Math.abs(listing.price - price),
+    }))
+    .sort((a, b) => a.gap - b.gap);
 
   const ranked = scored.map((row) => row.listing);
   if (limit == null || limit <= 0) return ranked;
@@ -580,6 +551,12 @@ function labelsOf(ids: string[], options: readonly { value?: string; id?: string
 
 export function criteriaSummary(criteria: RentalMatchCriteria) {
   const rooms = labelsOf(criteria.rooms, ROOM_TYPE_OPTIONS, "房型不限");
+  const building =
+    criteria.buildingForm === "apartment"
+      ? "公寓"
+      : criteria.buildingForm === "elevator"
+        ? "電梯"
+        : "房屋形態不限";
   const baths = labelsOf(
     criteria.bathrooms,
     [
@@ -606,6 +583,7 @@ export function criteriaSummary(criteria: RentalMatchCriteria) {
   return [
     criteria.cities.join("、") || "縣市不限",
     criteria.districts.join("、") || "行政區不限",
+    building,
     rooms,
     baths,
     parking,
@@ -631,6 +609,7 @@ export function parseCriteriaText(raw: string): ParsedCriteriaDetail | null {
 
   const cities: string[] = [];
   const districts: string[] = [];
+  let buildingForm: RentalBuildingForm = "";
   const rooms: string[] = [];
   const bathrooms: string[] = [];
   const parking: string[] = [];
@@ -640,7 +619,18 @@ export function parseCriteriaText(raw: string): ParsedCriteriaDetail | null {
   let priceMax: number | null = null;
 
   for (const part of parts) {
-    if (/不限/.test(part) && /縣市|行政區|房型|衛浴|車位|月租|補助|報稅|戶籍/.test(part)) {
+    if (
+      /不限/.test(part) &&
+      /縣市|行政區|房屋形態|房型|衛浴|車位|月租|補助|報稅|戶籍/.test(part)
+    ) {
+      continue;
+    }
+    if (/^公寓$/.test(part) || part === "房屋形態 公寓") {
+      buildingForm = "apartment";
+      continue;
+    }
+    if (/^電梯$/.test(part) || part === "房屋形態 電梯") {
+      buildingForm = "elevator";
       continue;
     }
     const knownCities = [
@@ -728,6 +718,7 @@ export function parseCriteriaText(raw: string): ParsedCriteriaDetail | null {
   if (
     !cities.length &&
     !districts.length &&
+    !buildingForm &&
     !rooms.length &&
     !bathrooms.length &&
     !parking.length &&
@@ -742,6 +733,7 @@ export function parseCriteriaText(raw: string): ParsedCriteriaDetail | null {
   return {
     cities,
     districts,
+    buildingForm,
     rooms,
     bathrooms,
     parking,

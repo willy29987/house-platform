@@ -4,10 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import type { GuestProfile } from "@/lib/line-guest-profile";
 import type { GuestWatchRecord } from "@/lib/line-guest-watch";
 import {
+  BUILDING_FORM_OPTIONS,
   EXTRA_OPTIONS,
   RENT_PRICE_OPTIONS,
   ROOM_TYPE_OPTIONS,
   emptyCriteria,
+  type RentalBuildingForm,
   type RentalExtra,
   type RentalMatchCriteria,
   type RentalMatchListing,
@@ -125,6 +127,7 @@ export type GuestCriteriaSaveResult = {
 type OpenKey =
   | "cities"
   | "districts"
+  | "buildingForm"
   | "rooms"
   | "bathrooms"
   | "parking"
@@ -197,6 +200,10 @@ export function LineGuestCriteriaEditor({
           setCriteria({
             cities: watch.cities ?? [],
             districts: watch.districts ?? [],
+            buildingForm:
+              watch.buildingForm === "apartment" || watch.buildingForm === "elevator"
+                ? watch.buildingForm
+                : "",
             rooms: watch.rooms ?? [],
             bathrooms: watch.bathrooms ?? [],
             parking: watch.parking ?? [],
@@ -441,6 +448,34 @@ export function LineGuestCriteriaEditor({
                 return;
               }
               setCriteria((c) => ({ ...c, districts: toggleIn(c.districts, id) }));
+            }}
+          />
+
+          <OptionPicker
+            label="房屋形態"
+            summary={
+              criteria.buildingForm
+                ? BUILDING_FORM_OPTIONS.find((o) => o.id === criteria.buildingForm)?.label ||
+                  criteria.buildingForm
+                : "不限"
+            }
+            open={openKey === "buildingForm"}
+            onToggleOpen={() => toggleOpen("buildingForm")}
+            multi={false}
+            options={[
+              { id: "__unlimited__", label: "不限" },
+              ...BUILDING_FORM_OPTIONS.map((o) => ({ id: o.id, label: o.label })),
+            ]}
+            selectedIds={criteria.buildingForm ? [criteria.buildingForm] : []}
+            onPick={(id) => {
+              if (id === "__unlimited__") {
+                setCriteria((c) => ({ ...c, buildingForm: "" }));
+                return;
+              }
+              setCriteria((c) => ({
+                ...c,
+                buildingForm: id as RentalBuildingForm,
+              }));
             }}
           />
 

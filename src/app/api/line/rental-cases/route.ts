@@ -186,6 +186,10 @@ export async function POST(request: Request) {
           districts: Array.isArray(incoming?.districts)
             ? incoming.districts.map(String)
             : parsed?.districts ?? base.districts,
+          buildingForm:
+            incoming?.buildingForm === "apartment" || incoming?.buildingForm === "elevator"
+              ? incoming.buildingForm
+              : parsed?.buildingForm ?? base.buildingForm,
           rooms: Array.isArray(incoming?.rooms)
             ? incoming.rooms.map(String)
             : parsed?.rooms ?? base.rooms,
@@ -213,6 +217,7 @@ export async function POST(request: Request) {
         const hasCriteria =
           criteria.cities.length ||
           criteria.districts.length ||
+          criteria.buildingForm ||
           criteria.rooms.length ||
           criteria.bathrooms.length ||
           criteria.parking.length ||

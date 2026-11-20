@@ -38,6 +38,10 @@ function parseCriteria(raw: unknown): RentalMatchCriteria {
   return {
     cities: asStringArray(incoming.cities),
     districts: asStringArray(incoming.districts),
+    buildingForm:
+      incoming.buildingForm === "apartment" || incoming.buildingForm === "elevator"
+        ? incoming.buildingForm
+        : "",
     rooms: asStringArray(incoming.rooms),
     bathrooms: asStringArray(incoming.bathrooms),
     parking: asStringArray(incoming.parking),

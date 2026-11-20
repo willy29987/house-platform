@@ -105,6 +105,7 @@ type StaffGuest = {
   watchDetail?: {
     cities: string[];
     districts: string[];
+    buildingForm?: string;
     rooms: string[];
     bathrooms: string[];
     parking: string[];
@@ -763,6 +764,7 @@ function watchDetailFrom(watch: GuestWatchRecord): StaffGuest["watchDetail"] {
   return {
     cities: watch.cities ?? [],
     districts: watch.districts ?? [],
+    buildingForm: watch.buildingForm || "",
     rooms: watch.rooms ?? [],
     bathrooms: watch.bathrooms ?? [],
     parking: watch.parking ?? [],
@@ -789,6 +791,7 @@ function hasWatchDetail(detail: StaffGuest["watchDetail"] | null | undefined) {
   return Boolean(
     detail.cities.length ||
       detail.districts.length ||
+      detail.buildingForm ||
       detail.rooms.length ||
       detail.bathrooms.length ||
       detail.parking.length ||
@@ -832,6 +835,7 @@ function resolveWatchDetail(
   const detail = {
     cities,
     districts,
+    buildingForm: "",
     rooms,
     bathrooms: [] as string[],
     parking: [] as string[],
@@ -2670,6 +2674,19 @@ function GuestDecisionPanel({
                   <dd className="min-w-0 break-words font-medium">
                     {fieldOrEmpty(
                       displayWatch?.districts.length ? displayWatch.districts.join("、") : "",
+                      hasCriteria,
+                    )}
+                  </dd>
+                </div>
+                <div className="flex gap-2">
+                  <dt className="w-14 shrink-0 text-zinc-500">房屋形態</dt>
+                  <dd className="min-w-0 break-words font-medium">
+                    {fieldOrEmpty(
+                      displayWatch?.buildingForm === "apartment"
+                        ? "公寓"
+                        : displayWatch?.buildingForm === "elevator"
+                          ? "電梯"
+                          : "",
                       hasCriteria,
                     )}
                   </dd>

@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { emptyCriteria, type RentalMatchCriteria } from "@/lib/line-rental-assistant";
+import {
+  emptyCriteria,
+  normalizeBuildingForm,
+  type RentalMatchCriteria,
+} from "@/lib/line-rental-assistant";
 import { upsertGuestWatchCriteria } from "@/lib/line-guest-watch";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +36,7 @@ export async function POST(request: Request) {
   const criteria: RentalMatchCriteria = {
     cities: Array.isArray(incoming.cities) ? incoming.cities.map(String) : base.cities,
     districts: Array.isArray(incoming.districts) ? incoming.districts.map(String) : base.districts,
+    buildingForm: normalizeBuildingForm(incoming.buildingForm),
     rooms: Array.isArray(incoming.rooms) ? incoming.rooms.map(String) : base.rooms,
     bathrooms: Array.isArray(incoming.bathrooms)
       ? incoming.bathrooms.map(String)

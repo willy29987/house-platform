@@ -15,6 +15,7 @@ import {
   EXTRA_OPTIONS,
   RENT_PRICE_OPTIONS,
   ROOM_TYPE_OPTIONS,
+  BUILDING_FORM_OPTIONS,
   criteriaSummary,
   emptyCriteria,
   formatDateYmd,
@@ -1638,6 +1639,29 @@ export function LineLiffRentForm({
                   active={criteria.districts.length === 0}
                   onClick={() => setCriteria((c) => ({ ...c, districts: [] }))}
                   className="w-full justify-center px-1 text-xs"
+                />
+              </div>
+            </div>
+            <div>
+              <p className="mb-2 text-xs font-medium text-zinc-500">房屋形態</p>
+              <div className="flex flex-wrap gap-2">
+                {BUILDING_FORM_OPTIONS.map((o) => (
+                  <Chip
+                    key={o.id}
+                    label={o.label}
+                    active={criteria.buildingForm === o.id}
+                    onClick={() =>
+                      setCriteria((c) => ({
+                        ...c,
+                        buildingForm: c.buildingForm === o.id ? "" : o.id,
+                      }))
+                    }
+                  />
+                ))}
+                <Chip
+                  label="不限"
+                  active={!criteria.buildingForm}
+                  onClick={() => setCriteria((c) => ({ ...c, buildingForm: "" }))}
                 />
               </div>
             </div>

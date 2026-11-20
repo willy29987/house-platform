@@ -5,6 +5,8 @@ import { readAdminCloudPayload, writeAdminCloudPayload } from "@/lib/admin-cloud
 import {
   criteriaSummary,
   emptyCriteria,
+  normalizeBuildingForm,
+  type RentalBuildingForm,
   type RentalExtra,
   type RentalMatchCriteria,
 } from "@/lib/line-rental-assistant";
@@ -14,6 +16,7 @@ export type GuestWatchRecord = {
   displayName: string;
   cities: string[];
   districts: string[];
+  buildingForm: RentalBuildingForm;
   rooms: string[];
   bathrooms: string[];
   parking: string[];
@@ -53,6 +56,7 @@ function normalizeWatch(raw: unknown): GuestWatchRecord | null {
     displayName: typeof row.displayName === "string" ? row.displayName : "LINE 客人",
     cities: normalizeCriteriaArrays(row.cities),
     districts: normalizeCriteriaArrays(row.districts),
+    buildingForm: normalizeBuildingForm(row.buildingForm),
     rooms: normalizeCriteriaArrays(row.rooms),
     bathrooms: normalizeCriteriaArrays(row.bathrooms),
     parking: normalizeCriteriaArrays(row.parking),
@@ -90,6 +94,7 @@ export function watchRecordToCriteria(watch: GuestWatchRecord): RentalMatchCrite
   return {
     cities: watch.cities,
     districts: watch.districts,
+    buildingForm: watch.buildingForm || "",
     rooms: watch.rooms,
     bathrooms: watch.bathrooms,
     parking: watch.parking,
@@ -117,6 +122,7 @@ export async function upsertGuestWatchCriteria(input: {
     ...input.criteria,
     cities: input.criteria.cities ?? [],
     districts: input.criteria.districts ?? [],
+    buildingForm: normalizeBuildingForm(input.criteria.buildingForm),
     rooms: input.criteria.rooms ?? [],
     bathrooms: input.criteria.bathrooms ?? [],
     parking: input.criteria.parking ?? [],
@@ -129,6 +135,7 @@ export async function upsertGuestWatchCriteria(input: {
     displayName: input.displayName?.trim() || "LINE 客人",
     cities: criteria.cities,
     districts: criteria.districts,
+    buildingForm: criteria.buildingForm,
     rooms: criteria.rooms,
     bathrooms: criteria.bathrooms,
     parking: criteria.parking,
