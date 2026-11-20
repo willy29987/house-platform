@@ -110,7 +110,7 @@ function agentProfileLines(caseRecord: LineRentalCase): string[] {
   return lines;
 }
 
-function flexRow(label: string, value: string) {
+function flexRow(label: string, value: string, boldValue = false) {
   return {
     type: "box",
     layout: "baseline",
@@ -126,23 +126,180 @@ function flexRow(label: string, value: string) {
       },
       {
         type: "text",
-        text: value.slice(0, 200) || "—",
+        text: value.slice(0, 220) || "—",
         size: "sm",
         color: "#111827",
         flex: 7,
         wrap: true,
-        weight: label === "時段" || label === "物件" ? "bold" : "regular",
+        weight: boldValue ? "bold" : "regular",
       },
     ],
   };
 }
 
-/** 業務約看通知：時間＋物件＋個資濃縮成一則 Flex（含可以／改時間）。 */
-export function buildAgentConfirmMessage(caseRecord: LineRentalCase): LineMessage {
+type AgentListingDetail = {
+  id: string;
+  title: string;
+  fullAddress: string;
+  contactName: string;
+  contactPhone: string;
+  source591Url: string | null;
+};
+
+function fullListingAddress(input: {
+  city?: string | null;
+  district?: string | null;
+  address?: string | null;
+}): string {
+  const city = (input.city || "").trim();
+  const district = (input.district || "").trim();
+  const address = (input.address || "").trim();
+  const prefixed = `${city}${district}`;
+  if (address && prefixed && address.startsWith(prefixed)) return address;
+  return `${prefixed}${address}`.trim();
+}
+
+function resolve591Url(source591Url?: string | null, source591Id?: string | null) {
+  const url = (source591Url || "").trim();
+  if (url) return url;
+  const id = (source591Id || "").trim();
+  if (id) return `https://rent.591.com.tw/${id}`;
+  return null;
+}
+
+/** 業務通知用：完整地址＋屋主聯絡＋591（給客人看的遮罩地址不要用在這裡） */
+async function loadAgentListingDetails(
+  caseRecord: LineRentalCase,
+): Promise<AgentListingDetail[]> {
+  const picked = caseRecord.picked.filter((item) => item.id || item.title);
+  if (!picked.length) return [];
+
+  if (!process.env.DATABASE_URL) {
+    return picked.map((item) => ({
+      id: item.id || "",
+      title: item.title || "出租物件",
+      fullAddress: item.title || "地址未建檔",
+      contactName: "",
+      contactPhone: "",
+      source591Url: null,
+    }));
+  }
+
+  try {
+    const ids = picked.map((item) => item.id).filter(Boolean);
+    const rows = ids.length
+      ? await prisma.listing.findMany({
+          where: { id: { in: ids } },
+          select: {
+            id: true,
+            title: true,
+            city: true,
+            district: true,
+            address: true,
+            contactName: true,
+            contactPhone: true,
+            source591Id: true,
+            source591Url: true,
+          },
+        })
+      : [];
+
+    return picked.map((item) => {
+      const row = item.id ? rows.find((entry) => entry.id === item.id) : undefined;
+      return {
+        id: item.id || "",
+        title: row?.title?.trim() || item.title || "出租物件",
+        fullAddress:
+          fullListingAddress({
+            city: row?.city,
+            district: row?.district,
+            address: row?.address,
+          }) || item.title || "地址未建檔",
+        contactName: (row?.contactName || "").trim(),
+        contactPhone: (row?.contactPhone || "").trim(),
+        source591Url: resolve591Url(row?.source591Url, row?.source591Id),
+      };
+    });
+  } catch (error) {
+    console.warn("[line-viewing-agent] loadAgentListingDetails failed", error);
+    return picked.map((item) => ({
+      id: item.id || "",
+      title: item.title || "出租物件",
+      fullAddress: item.title || "地址未建檔",
+      contactName: "",
+      contactPhone: "",
+      source591Url: null,
+    }));
+  }
+}
+
+function listingBlocksForAgent(details: AgentListingDetail[]): Record<string, unknown>[] {
+  if (!details.length) {
+    return [flexRow("物件", "尚未指定", true)];
+  }
+
+  const blocks: Record<string, unknown>[] = [];
+  details.forEach((detail, index) => {
+    const rows: Record<string, unknown>[] = [
+      {
+        type: "text",
+        text: details.length > 1 ? `物件 ${index + 1}` : "物件",
+        size: "sm",
+        weight: "bold",
+        color: "#111827",
+      },
+      flexRow("地址", detail.fullAddress, true),
+    ];
+    if (detail.contactName) rows.push(flexRow("屋主", detail.contactName));
+    if (detail.contactPhone) rows.push(flexRow("電話", detail.contactPhone));
+
+    blocks.push({
+      type: "box",
+      layout: "vertical",
+      margin: index === 0 ? "none" : "md",
+      spacing: "sm",
+      contents: rows,
+    });
+
+    if (detail.source591Url) {
+      blocks.push({
+        type: "button",
+        style: "link",
+        height: "sm",
+        margin: "sm",
+        action: {
+          type: "uri",
+          label: details.length > 1 ? `591 物件 ${index + 1}` : "591 物件連結",
+          uri: detail.source591Url,
+        },
+      });
+    }
+  });
+  return blocks;
+}
+
+/**
+ * 業務約看通知：時段 → 個人資訊 → 物件（完整地址／屋主／電話／591）。
+ */
+export async function buildAgentConfirmMessage(
+  caseRecord: LineRentalCase,
+): Promise<LineMessage> {
   const name = caseRecord.displayName || "客人";
   const when = caseRecord.requestedWhen || "未填時段";
-  const titles = listingTitles(caseRecord);
   const profile = agentProfileLines(caseRecord);
+  const details = await loadAgentListingDetails(caseRecord);
+  const titles = details.map((item) => item.title).join("、") || listingTitles(caseRecord);
+
+  const profileRows =
+    profile.length > 0
+      ? profile.map((line) => {
+          const space = line.indexOf(" ");
+          const label = space > 0 ? line.slice(0, space) : "資料";
+          const value = space > 0 ? line.slice(space + 1) : line;
+          return flexRow(label, value);
+        })
+      : [flexRow("資料", "尚未填寫")];
+
   const bodyContents: Record<string, unknown>[] = [
     {
       type: "text",
@@ -166,16 +323,31 @@ export function buildAgentConfirmMessage(caseRecord: LineRentalCase): LineMessag
       layout: "vertical",
       margin: "md",
       spacing: "sm",
-      contents: [
-        flexRow("時段", when),
-        flexRow("物件", titles),
-        ...profile.map((line) => {
-          const space = line.indexOf(" ");
-          const label = space > 0 ? line.slice(0, space) : "資料";
-          const value = space > 0 ? line.slice(space + 1) : line;
-          return flexRow(label, value);
-        }),
-      ],
+      contents: [flexRow("時段", when, true)],
+    },
+    { type: "separator", margin: "md" },
+    {
+      type: "text",
+      text: "個人資訊",
+      size: "sm",
+      weight: "bold",
+      color: "#111827",
+      margin: "md",
+    },
+    {
+      type: "box",
+      layout: "vertical",
+      margin: "sm",
+      spacing: "sm",
+      contents: profileRows,
+    },
+    { type: "separator", margin: "md" },
+    {
+      type: "box",
+      layout: "vertical",
+      margin: "md",
+      spacing: "sm",
+      contents: listingBlocksForAgent(details),
     },
   ];
 
@@ -257,7 +429,7 @@ export async function notifyAgentsOfNewViewing(caseRecord: LineRentalCase): Prom
   const agentIds = getViewingAgentUserIds();
   if (!agentIds.length) return { notified: 0, agentIds: [] };
 
-  const message = buildAgentConfirmMessage(caseRecord);
+  const message = await buildAgentConfirmMessage(caseRecord);
   let notified = 0;
   await Promise.all(
     agentIds.map(async (agentId) => {
