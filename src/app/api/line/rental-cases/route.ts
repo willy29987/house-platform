@@ -29,6 +29,8 @@ import {
 import { getViewingAgentUserIds, notifyAgentsOfNewViewing } from "@/lib/line-viewing-agent";
 
 export const dynamic = "force-dynamic";
+/** 建案＋寫對話＋推業務；避免預設時長太短把業務通知砍掉 */
+export const maxDuration = 60;
 
 type PostBody = {
   lineUserId?: string | null;
@@ -315,7 +317,24 @@ export async function POST(request: Request) {
       }
     }
 
-    const notify = await notifyAgentsOfNewViewing(created);
+    let agentsNotified = 0;
+    let agentsFailed: Array<{ agentId: string; reason: string }> = [];
+    try {
+      const notify = await notifyAgentsOfNewViewing(created);
+      agentsNotified = notify.notified;
+      agentsFailed = notify.failed;
+      if (notify.agentIds.length && notify.notified === 0) {
+        console.error("[line/rental-cases] agent notify all failed", {
+          caseId: created.id,
+          failed: notify.failed,
+        });
+      }
+    } catch (error) {
+      console.error("[line/rental-cases] agent notify threw", {
+        caseId: created.id,
+        error: error instanceof Error ? error.message : error,
+      });
+    }
     if (created.lineUserId) {
       const { clearGuestRecommendationAfterBooking } = await import(
         "@/lib/line-guest-watch-notify"
@@ -326,7 +345,8 @@ export async function POST(request: Request) {
     return NextResponse.json({
       id: created.id,
       case: created,
-      agentsNotified: notify.notified,
+      agentsNotified,
+      agentsFailed,
       pushSent,
       pushReason,
       hasLineUserId: Boolean(created.lineUserId),

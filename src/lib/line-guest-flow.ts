@@ -318,7 +318,9 @@ async function finishCase(session: GuestSession) {
     requestedWhen: session.requestedWhen,
     summaryText: summary,
   });
-  await notifyAgentsOfNewViewing(created);
+  await notifyAgentsOfNewViewing(created).catch((error) => {
+    console.warn("[guest-flow] notify agents failed", error);
+  });
   const { clearGuestRecommendationAfterBooking } = await import("@/lib/line-guest-watch-notify");
   await clearGuestRecommendationAfterBooking(session.lineUserId).catch(() => undefined);
   session.step = "done";

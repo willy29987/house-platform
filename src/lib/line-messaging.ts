@@ -163,14 +163,23 @@ export async function pushLineMessages(
     return { sent: false as const, reason: "not_live" as const };
   }
 
-  const response = await fetch("https://api.line.me/v2/bot/message/push", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ to: lineUserId, messages }),
-  });
+  let response: Response;
+  try {
+    response = await fetch("https://api.line.me/v2/bot/message/push", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ to: lineUserId, messages }),
+    });
+  } catch (error) {
+    return {
+      sent: false as const,
+      reason: "network_error" as const,
+      body: error instanceof Error ? error.message : "fetch failed",
+    };
+  }
 
   if (!response.ok) {
     const body = await response.text().catch(() => "");
@@ -283,7 +292,17 @@ export function buildPublicBaseUrl() {
   const fromLine = process.env.LINE_PUBLIC_BASE_URL?.replace(/\/$/, "") ?? "";
   if (fromLine) return fromLine;
   const fromSite = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "";
-  return fromSite;
+  if (fromSite) return fromSite;
+  const fromVercel = process.env.VERCEL_PROJECT_PRODUCTION_URL?.replace(/\/$/, "") ?? "";
+  if (fromVercel) {
+    return fromVercel.startsWith("http") ? fromVercel : `https://${fromVercel}`;
+  }
+  const fromVercelUrl = process.env.VERCEL_URL?.replace(/\/$/, "") ?? "";
+  if (fromVercelUrl) {
+    return fromVercelUrl.startsWith("http") ? fromVercelUrl : `https://${fromVercelUrl}`;
+  }
+  // LINE flex uri 必須是 https；沒設環境變數時不可回傳空字串／相對路徑
+  return "https://house-platform.vercel.app";
 }
 
 export function buildLiffRentAssistantUrl(query?: Record<string, string>) {
@@ -299,14 +318,12 @@ export function buildLiffRentAssistantUrl(query?: Record<string, string>) {
 
 export function buildAgentRescheduleUrl(caseId: string) {
   const base = buildPublicBaseUrl();
-  const path = `/line/agent-reschedule?caseId=${encodeURIComponent(caseId)}`;
-  return base ? `${base}${path}` : path;
+  return `${base}/line/agent-reschedule?caseId=${encodeURIComponent(caseId)}`;
 }
 
 export function buildViewingCancelGuestUrl(caseId: string) {
   const base = buildPublicBaseUrl();
-  const path = `/line/viewing-cancel?caseId=${encodeURIComponent(caseId)}`;
-  return base ? `${base}${path}` : path;
+  return `${base}/line/viewing-cancel?caseId=${encodeURIComponent(caseId)}`;
 }
 
 /** Confirm 文案上限約 240 字元 */

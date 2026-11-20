@@ -421,32 +421,94 @@ export function buildGuestRescheduleConfirmMessage(caseRecord: LineRentalCase): 
   };
 }
 
-/** 客人送出後通知所有業務；回傳是否有推到至少一位 */
+function buildAgentConfirmTextFallback(caseRecord: LineRentalCase): LineMessage {
+  const name = caseRecord.displayName || "客人";
+  const when = caseRecord.requestedWhen || "未填時段";
+  const profile = agentProfileLines(caseRecord);
+  const titles = listingTitles(caseRecord);
+  const lines = [
+    "新約看待確認",
+    name,
+    `時段 ${when}`,
+    ...profile,
+    `物件 ${titles}`,
+    "",
+    "請到客服後台確認時間，或回覆此則後再操作。",
+  ];
+  return { type: "text", text: lines.filter(Boolean).join("\n").slice(0, 4500) };
+}
+
+async function pushAgentNotifyOnce(
+  agentId: string,
+  messages: LineMessage[],
+): Promise<{ sent: boolean; reason?: string; status?: number; body?: string }> {
+  try {
+    const result = await pushLineMessages(agentId, messages, { force: true });
+    if (result.sent) return { sent: true };
+    return {
+      sent: false,
+      reason: "reason" in result ? String(result.reason) : "unknown",
+      status: "status" in result ? result.status : undefined,
+      body: "body" in result ? String(result.body).slice(0, 300) : undefined,
+    };
+  } catch (error) {
+    return {
+      sent: false,
+      reason: "throw",
+      body: error instanceof Error ? error.message : "unknown",
+    };
+  }
+}
+
+/** 客人送出後通知所有業務；Flex 失敗會改文字再試，單人失敗不影響其他人 */
 export async function notifyAgentsOfNewViewing(caseRecord: LineRentalCase): Promise<{
   notified: number;
   agentIds: string[];
+  failed: Array<{ agentId: string; reason: string }>;
 }> {
   const agentIds = getViewingAgentUserIds();
-  if (!agentIds.length) return { notified: 0, agentIds: [] };
+  if (!agentIds.length) return { notified: 0, agentIds: [], failed: [] };
 
-  const message = await buildAgentConfirmMessage(caseRecord);
+  const flex = await buildAgentConfirmMessage(caseRecord);
+  const fallback = buildAgentConfirmTextFallback(caseRecord);
   let notified = 0;
-  await Promise.all(
-    agentIds.map(async (agentId) => {
-      const result = await pushLineMessages(agentId, [message], { force: true });
-      if (result.sent) {
-        notified += 1;
-        return;
-      }
-      console.warn("[line-viewing-agent] notify agent failed", {
-        agentId: `${agentId.slice(0, 6)}…`,
-        reason: "reason" in result ? result.reason : "unknown",
-        status: "status" in result ? result.status : undefined,
-        body: "body" in result ? String(result.body).slice(0, 200) : undefined,
-      });
-    }),
-  );
-  return { notified, agentIds };
+  const failed: Array<{ agentId: string; reason: string }> = [];
+
+  // 逐一推：避免並行寫對話紀錄互相覆蓋，也比較好重試
+  for (const agentId of agentIds) {
+    let result = await pushAgentNotifyOnce(agentId, [flex]);
+    if (!result.sent) {
+      // Flex 被拒（常見：uri 相對路徑）時改文字再送一次
+      result = await pushAgentNotifyOnce(agentId, [fallback]);
+    }
+    if (!result.sent) {
+      // 短暫重試一次（網路／瞬斷）
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      result = await pushAgentNotifyOnce(agentId, [flex]);
+      if (!result.sent) result = await pushAgentNotifyOnce(agentId, [fallback]);
+    }
+    if (result.sent) {
+      notified += 1;
+      continue;
+    }
+    const reason = [result.reason, result.status, result.body].filter(Boolean).join(" ");
+    failed.push({ agentId: `${agentId.slice(0, 6)}…`, reason: reason.slice(0, 200) });
+    console.warn("[line-viewing-agent] notify agent failed", {
+      caseId: caseRecord.id,
+      agentId: `${agentId.slice(0, 6)}…`,
+      reason: result.reason,
+      status: result.status,
+      body: result.body,
+    });
+  }
+
+  console.info("[line-viewing-agent] notify done", {
+    caseId: caseRecord.id,
+    agents: agentIds.length,
+    notified,
+    failed: failed.length,
+  });
+  return { notified, agentIds, failed };
 }
 
 function alreadyHandledReply(caseRecord: LineRentalCase): LineMessage {
