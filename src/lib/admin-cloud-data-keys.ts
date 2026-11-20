@@ -11,6 +11,8 @@ export const ADMIN_CLOUD_DATA_KEYS = {
   lineGuestPushQueue: "line_guest_push_queue",
   /** 客人條件問句延遲回覆（租補／報稅／入戶籍／寵物） */
   lineDelayedGuestReplies: "line_delayed_guest_replies",
+  /** 客人最近貼的 591／對中物件（條件問句焦點） */
+  lineGuestListingFocus: "line_guest_listing_focus",
   lineRuntimeSecrets: "line_runtime_secrets",
   lineConversations: "line_conversations",
   lineGuestRichMenus: "line_guest_rich_menus",

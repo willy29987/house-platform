@@ -12,6 +12,7 @@ import {
 } from "@/lib/line-conversations";
 import { handleGuestPostback, handleGuestText, startGuestFlow } from "@/lib/line-guest-flow";
 import { maybeScheduleListingConditionReply } from "@/lib/line-listing-condition-reply";
+import { find591UrlInText, find591UrlInUnknown } from "@/lib/listing-591-id";
 import { notifyAdminsLineGuestMessage } from "@/lib/admin-web-push";
 import { getLineUserProfile, replyLineMessages } from "@/lib/line-messaging";
 import { readLineChannelSecretFromCloud } from "@/lib/line-runtime-secrets";
@@ -26,7 +27,7 @@ import {
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 /**
- * 圖檔辨識約 20 秒；條件問句會用 after() 延遲 2～5 分再 push，
+ * 圖檔辨識約 20 秒；條件問句會用 after() 延遲 1～3 分再 push，
  * 需要較長 maxDuration 當準時備援（另有每分鐘 cron）。
  */
 export const maxDuration = 300;
@@ -64,6 +65,8 @@ type LineEvent = {
     title?: string;
     address?: string;
     fileName?: string;
+    /** 部分分享／外部內容可能帶額外欄位，保留給 591 網址掃描 */
+    [key: string]: unknown;
   };
   postback?: {
     data?: string;
@@ -122,19 +125,30 @@ function previewForIncomingMessage(message: NonNullable<LineEvent["message"]>): 
   mediaType?: LineConversationMediaType;
   stickerId?: string;
   packageId?: string;
+  /** 從分享卡片／非純文字裡掃到的 591 網址 */
+  embedded591Url?: string | null;
 } {
+  const embedded591Url = find591UrlInUnknown(message);
+  const withUrl = (base: string) => {
+    if (embedded591Url && !find591UrlInText(base)) {
+      return `${base}\n${embedded591Url}`.trim();
+    }
+    return base;
+  };
+
   const type = message.type;
   if (type === "text") {
     const text = message.text?.trim() ?? "";
-    return { text: text || "［空白訊息］" };
+    return { text: withUrl(text || "［空白訊息］"), embedded591Url };
   }
-  if (type === "image") return { text: "［圖片］", mediaType: "image" };
-  if (type === "video") return { text: "［影片］", mediaType: "video" };
-  if (type === "audio") return { text: "［語音］", mediaType: "audio" };
+  if (type === "image") return { text: withUrl("［圖片］"), mediaType: "image", embedded591Url };
+  if (type === "video") return { text: withUrl("［影片］"), mediaType: "video", embedded591Url };
+  if (type === "audio") return { text: withUrl("［語音］"), mediaType: "audio", embedded591Url };
   if (type === "file") {
     return {
-      text: `［檔案］${message.fileName?.trim() || ""}`.trim(),
+      text: withUrl(`［檔案］${message.fileName?.trim() || ""}`.trim()),
       mediaType: "file",
+      embedded591Url,
     };
   }
   if (type === "location") {
@@ -146,17 +160,22 @@ function previewForIncomingMessage(message: NonNullable<LineEvent["message"]>): 
         : title || address
           ? `［位置］${title || address}`
           : "［位置］";
-    return { text, mediaType: "location" };
+    return { text: withUrl(text), mediaType: "location", embedded591Url };
   }
   if (type === "sticker") {
     return {
-      text: "［貼圖］",
+      text: withUrl("［貼圖］"),
       mediaType: "sticker",
-      stickerId: message.stickerId?.trim() || undefined,
-      packageId: message.packageId?.trim() || undefined,
+      stickerId: typeof message.stickerId === "string" ? message.stickerId.trim() || undefined : undefined,
+      packageId: typeof message.packageId === "string" ? message.packageId.trim() || undefined : undefined,
+      embedded591Url,
     };
   }
-  return { text: type ? `［${type}］` : "［訊息］" };
+  // flex／分享卡片等：若掃得到 591 網址就當文字處理
+  if (embedded591Url) {
+    return { text: withUrl(type ? `［${type}］` : "［分享］"), embedded591Url };
+  }
+  return { text: type ? `［${type}］` : "［訊息］", embedded591Url };
 }
 
 async function storeGuestMessage(
@@ -337,9 +356,12 @@ async function handleEvent(event: LineEvent, state: { failed: boolean }) {
   if (!event.replyToken) return;
 
   const messageType = message.type;
+  const textForHandlers = preview.text.trim();
+  const has591Ref = Boolean(find591UrlInText(textForHandlers) || preview.embedded591Url);
 
-  if (messageType === "text") {
-    const text = message.text?.trim() ?? "";
+  // 文字，或分享卡片裡夾帶 591 網址
+  if (messageType === "text" || has591Ref) {
+    const text = messageType === "text" ? message.text?.trim() || textForHandlers : textForHandlers;
     if (!text) return;
 
     // 對話已寫入；後續自動回覆失敗不可讓 webhook 整包 500（否則 LINE 重送也救不回體感）
@@ -353,7 +375,7 @@ async function handleEvent(event: LineEvent, state: { failed: boolean }) {
         if (handled) return;
       }
 
-      if (userId) {
+      if (userId && messageType === "text") {
         const guestHandled = await handleGuestText({
           replyToken: event.replyToken,
           lineUserId: userId,
@@ -361,6 +383,18 @@ async function handleEvent(event: LineEvent, state: { failed: boolean }) {
           displayName,
         });
         if (guestHandled) return;
+      }
+
+      // 先處理 591 分享／連結（寫入焦點），再處理條件問句，才能對到「剛傳的那間」
+      if (has591Ref) {
+        const result = await handle591LinkInquiry({
+          text: textForHandlers,
+          lineUserId: userId,
+          displayName,
+        });
+        if (result?.messages.length) {
+          await replyLineMessages(event.replyToken, result.messages, { lineUserId: userId });
+        }
       }
 
       if (userId) {
@@ -371,14 +405,16 @@ async function handleEvent(event: LineEvent, state: { failed: boolean }) {
         if (conditionHandled) return;
       }
 
-      const result = await handle591LinkInquiry({
-        text,
-        lineUserId: userId,
-        displayName,
-      });
-      if (!result) return;
-      if (result.messages.length) {
-        await replyLineMessages(event.replyToken, result.messages, { lineUserId: userId });
+      if (!has591Ref) {
+        const result = await handle591LinkInquiry({
+          text,
+          lineUserId: userId,
+          displayName,
+        });
+        if (!result) return;
+        if (result.messages.length) {
+          await replyLineMessages(event.replyToken, result.messages, { lineUserId: userId });
+        }
       }
     } catch (error) {
       console.warn("[line/webhook] text auto-reply failed", error);

@@ -7,7 +7,12 @@ import { after } from "next/server";
 import { ListingType } from "@prisma/client";
 import { ADMIN_CLOUD_DATA_KEYS } from "@/lib/admin-cloud-data-keys";
 import { readAdminCloudPayload, writeAdminCloudPayload } from "@/lib/admin-cloud-data-server";
-import { resolve591IdFromUrlOrId } from "@/lib/listing-591-id";
+import { find591UrlInText, resolve591IdFromUrlOrId } from "@/lib/listing-591-id";
+import { getLineConversation } from "@/lib/line-conversations";
+import {
+  getGuestListingFocus,
+  rememberGuestListingFocus,
+} from "@/lib/line-guest-listing-focus";
 import { getGuestNewListingIds } from "@/lib/line-guest-rich-menu";
 import { getLatestGuestSessionWithPicked } from "@/lib/line-guest-sessions";
 import { pushLineMessages } from "@/lib/line-messaging";
@@ -116,15 +121,74 @@ function randomDelayMs() {
   return min + Math.floor(Math.random() * (max - min + 1));
 }
 
-/** 後台物件 id、或 591 網址／編號 → 出租物件（含已下架，供「還在嗎」） */
+function rowToMatchListing(row: {
+  id: string;
+  title: string;
+  city: string;
+  district: string;
+  address: string;
+  price: number;
+  areaPing: number;
+  areaMain: number | null;
+  areaAncillary: number | null;
+  rooms: number;
+  livingRooms: number | null;
+  balconies: number | null;
+  bathrooms: number;
+  floor: number | null;
+  totalFloors: number | null;
+  propertyType: string;
+  hasElevator: boolean | null;
+  community: string | null;
+  managementFee: number | null;
+  parkingType: string | null;
+  parkingRent: number | null;
+  areaParkingSpace: number | null;
+  orientation: string | null;
+  petsAllowed: boolean | null;
+  coverImage: string | null;
+  images: string[];
+  features: string[];
+  rentSubsidy: boolean | null;
+  taxDeductible: boolean | null;
+  canRegisterAddress: boolean | null;
+  viewingMethod: string | null;
+  description: string | null;
+  isPublished: boolean;
+}): RentalMatchListing {
+  const meta = parseListingInternalMeta(row.description);
+  return toRentalMatchListing({
+    ...row,
+    furnitureItems: normalizeItemList(meta.furnitureItems),
+    equipmentItems: normalizeItemList(meta.equipmentItems),
+    securityDeposit: meta.securityDeposit ?? null,
+    availableFrom: meta.availableFrom ?? null,
+    shortTermRent: meta.shortTermRent ?? null,
+    serviceFee: meta.serviceFee ?? null,
+    houseCondition: meta.houseCondition ?? null,
+    isPublished: row.isPublished,
+  });
+}
+
+/** 後台物件 id、或 591 網址／短網址／編號 → 出租物件（含已下架；可標題特徵對同一間） */
 async function loadListingByIdOr591Ref(raw: string | null | undefined): Promise<RentalMatchListing | null> {
-  const text = (raw ?? "").trim();
+  let text = (raw ?? "").trim();
   if (!text) return null;
 
   const byId = await loadRentalMatchListingAny(text);
   if (byId) return byId;
 
-  const { id: source591Id } = resolve591IdFromUrlOrId(text);
+  if (/591\.(to|com\.tw)/i.test(text)) {
+    try {
+      const { expand591ShortLinks } = await import("@/lib/line-591-inquiry");
+      text = await expand591ShortLinks(text);
+    } catch (error) {
+      console.warn("[line-listing-condition-reply] expand short link failed", error);
+    }
+  }
+
+  const url = find591UrlInText(text);
+  const { id: source591Id } = resolve591IdFromUrlOrId(url || text);
   if (!source591Id || !process.env.DATABASE_URL) return null;
   try {
     const row = await prisma.listing.findFirst({
@@ -133,19 +197,19 @@ async function loadListingByIdOr591Ref(raw: string | null | undefined): Promise<
         listingType: ListingType.RENT,
       },
     });
-    if (!row) return null;
-    const meta = parseListingInternalMeta(row.description);
-    return toRentalMatchListing({
-      ...row,
-      furnitureItems: normalizeItemList(meta.furnitureItems),
-      equipmentItems: normalizeItemList(meta.equipmentItems),
-      securityDeposit: meta.securityDeposit ?? null,
-      availableFrom: meta.availableFrom ?? null,
-      shortTermRent: meta.shortTermRent ?? null,
-      serviceFee: meta.serviceFee ?? null,
-      houseCondition: meta.houseCondition ?? null,
-      isPublished: row.isPublished,
-    });
+    if (row) return rowToMatchListing(row);
+
+    // 內網沒掛此 591 編號：抓 591 頁再用標題／地址特徵對同一間
+    const { fetch591ListingInfo, findOwnListingByFeatures } = await import(
+      "@/lib/line-listing-identify"
+    );
+    const { loadRentalMatchListings } = await import("@/lib/line-rental-assistant");
+    const external = await fetch591ListingInfo(source591Id, url);
+    if (!external) return null;
+    const own = findOwnListingByFeatures(external, await loadRentalMatchListings());
+    if (!own) return null;
+    const full = await loadRentalMatchListingAny(own.id);
+    return full;
   } catch (error) {
     console.error("[line-listing-condition-reply] load by 591 failed", error);
     return null;
@@ -274,6 +338,9 @@ async function resolveFocusListingId(lineUserId: string): Promise<string | null>
   const uid = lineUserId.trim();
   if (!uid) return null;
 
+  const focus = await getGuestListingFocus(uid);
+  if (focus?.listingId) return focus.listingId;
+
   const cases = await readLineRentalCases();
   const latestCase = cases
     .filter((item) => item.lineUserId === uid && item.picked.length > 0)
@@ -285,6 +352,25 @@ async function resolveFocusListingId(lineUserId: string): Promise<string | null>
 
   const session = await getLatestGuestSessionWithPicked(uid);
   if (session?.picked[0]?.id) return session.picked[0].id;
+
+  // 掃最近對話：App 分享／短網址／完整連結
+  const conversation = await getLineConversation(uid);
+  const recentGuest = (conversation?.messages ?? [])
+    .filter((m) => m.from === "guest")
+    .slice(-25)
+    .reverse();
+  for (const msg of recentGuest) {
+    if (!find591UrlInText(msg.text) && !/591|來自【/.test(msg.text)) continue;
+    const listing = await loadListingByIdOr591Ref(msg.text);
+    if (listing) {
+      await rememberGuestListingFocus({
+        lineUserId: uid,
+        listingId: listing.id,
+        title: listing.title,
+      });
+      return listing.id;
+    }
+  }
 
   return null;
 }
@@ -387,8 +473,15 @@ export async function maybeScheduleListingConditionReply(input: {
   const focusId = fromMessage ? null : await resolveFocusListingId(input.lineUserId);
   const listing =
     fromMessage || (focusId ? await loadRentalMatchListingAny(focusId) : null);
+  // 對不到物件就不丟「請再傳卡片」後備句，避免客人以為是亂自動回
+  if (!listing) return false;
   const replyText = buildListingConditionReplyText({ listing, topics });
   if (!replyText) return false;
+  await rememberGuestListingFocus({
+    lineUserId: input.lineUserId,
+    listingId: listing.id,
+    title: listing.title,
+  });
 
   const delayMs = randomDelayMs();
   const item = await enqueueDelayedReply({

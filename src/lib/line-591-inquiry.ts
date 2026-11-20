@@ -1,5 +1,6 @@
 import { ListingType } from "@prisma/client";
 import { extract591ListingId, find591UrlInText } from "@/lib/listing-591-id";
+import { rememberGuestListingFocus } from "@/lib/line-guest-listing-focus";
 import { appendLineRentalCase, type LineRentalCase } from "@/lib/line-rental-cases";
 import {
   buildLiffRentAssistantUrl,
@@ -15,6 +16,48 @@ import {
 } from "@/lib/line-listing-identify";
 import type { RentalMatchListing } from "@/lib/line-rental-assistant";
 import { prisma } from "@/lib/prisma";
+
+async function maybeBackfillSource591Id(
+  listingId: string,
+  source591Id: string | null | undefined,
+  source591Url?: string | null,
+) {
+  const id = source591Id?.trim();
+  if (!id || !listingId || !process.env.DATABASE_URL) return;
+  try {
+    const row = await prisma.listing.findFirst({
+      where: { id: listingId },
+      select: { source591Id: true },
+    });
+    if (!row || row.source591Id) return;
+    await prisma.listing.update({
+      where: { id: listingId },
+      data: {
+        source591Id: id,
+        source591Url: source591Url?.trim() || `https://rent.591.com.tw/${id}`,
+      },
+    });
+  } catch (error) {
+    console.warn("[line-591-inquiry] backfill source591Id skipped", listingId, id, error);
+  }
+}
+
+async function rememberMatchedFocus(input: {
+  lineUserId: string | null;
+  listingId: string;
+  title: string;
+  source591Id?: string | null;
+  source591Url?: string | null;
+}) {
+  await maybeBackfillSource591Id(input.listingId, input.source591Id, input.source591Url);
+  await rememberGuestListingFocus({
+    lineUserId: input.lineUserId,
+    listingId: input.listingId,
+    title: input.title,
+    source591Id: input.source591Id,
+    source591Url: input.source591Url,
+  });
+}
 
 export type Matched591Listing = {
   id: string;
@@ -275,6 +318,13 @@ export async function handle591LinkInquiry(input: {
 
   if (listing && listing.isPublished && listing.listingType === ListingType.RENT) {
     const summary = `客人貼 591 詢問「${listing.title}」是否可看（591 #${source591Id}）${sameHouseNote}。`;
+    await rememberMatchedFocus({
+      lineUserId: input.lineUserId,
+      listingId: listing.id,
+      title: listing.title,
+      source591Id,
+      source591Url: url,
+    });
     const created = await appendLineRentalCase({
       kind: "591_link",
       status: "pending_confirm",
@@ -307,6 +357,13 @@ export async function handle591LinkInquiry(input: {
 
   if (listing && (!listing.isPublished || listing.listingType !== ListingType.RENT)) {
     const summary = `客人詢問 591 #${source591Id}「${listing.title}」，但物件目前未上架／非租賃。`;
+    await rememberMatchedFocus({
+      lineUserId: input.lineUserId,
+      listingId: listing.id,
+      title: listing.title,
+      source591Id,
+      source591Url: url,
+    });
     const created = await appendLineRentalCase({
       kind: "591_link",
       status: "awaiting_staff",
@@ -500,6 +557,11 @@ export async function handleImageInquiry(input: {
     } catch (error) {
       console.warn("[line-591-inquiry] save watch from image failed", error);
     }
+    await rememberMatchedFocus({
+      lineUserId: input.lineUserId,
+      listingId: listing.id,
+      title: listing.title,
+    });
     const created = await appendLineRentalCase({
       kind: "image_inquiry",
       status: "pending_confirm",

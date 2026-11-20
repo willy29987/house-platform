@@ -33,21 +33,44 @@ export function extract591ListingId(raw: string | null | undefined): string | nu
   return null;
 }
 
-/** 從一段訊息中找出第一個 591 網址（若有） */
+/** 從一段訊息中找出第一個 591 網址（若有；含 591.to 短網址、App 分享文案） */
 export function find591UrlInText(text: string): string | null {
-  const matches = text.match(/https?:\/\/[^\s<>"']+/gi) ?? [];
+  const matches = text.match(/https?:\/\/[^\s<>"'\t]+/gi) ?? [];
   for (const candidate of matches) {
     const cleaned = candidate.replace(/[),.;]+$/g, "");
+    if (/^https?:\/\/591\.to\//i.test(cleaned)) return cleaned;
     if (is591ListingUrl(cleaned)) return normalize591ListingUrl(cleaned);
   }
-  // 無 protocol 的 rent.591.com.tw/...
-  const bare = text.match(/(?:rent|sale|www)\.591\.com\.tw\/[^\s<>"']+/i);
+  // 無 protocol 的 rent.591.com.tw/... 或 591.to/...
+  const bare = text.match(/(?:(?:rent|sale|www)\.591\.com\.tw|591\.to)\/[^\s<>"'\t]+/i);
   if (bare?.[0]) {
     const withProto = bare[0].startsWith("http") ? bare[0] : `https://${bare[0]}`;
     const cleaned = withProto.replace(/[),.;]+$/g, "");
+    if (/^https?:\/\/591\.to\//i.test(cleaned)) return cleaned;
     if (is591ListingUrl(cleaned)) return normalize591ListingUrl(cleaned);
   }
   return null;
+}
+
+/** 任意物件字串化後抽 591 網址（給非純文字／分享卡片 webhook 用） */
+export function find591UrlInUnknown(raw: unknown): string | null {
+  if (raw == null) return null;
+  if (typeof raw === "string") return find591UrlInText(raw);
+  try {
+    return find591UrlInText(JSON.stringify(raw));
+  } catch {
+    return null;
+  }
+}
+
+/** 591 App／分享常見文案（有連結或僅有標題線索） */
+export function is591ShareText(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (find591UrlInText(t) || extract591ListingId(t)) return true;
+  if (/來自【?\s*591\s*(APP)?\s*】?/i.test(t)) return true;
+  if (/請參考所附連結/.test(t) && /591|出租|租屋|套房|公寓|大樓/.test(t)) return true;
+  return false;
 }
 
 export function resolve591IdFromUrlOrId(raw: string | null | undefined): {
