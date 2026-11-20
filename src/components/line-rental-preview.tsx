@@ -1707,7 +1707,6 @@ export function LineRentalPreview({
     setEditingTime(false);
   }
 
-  /** 客服點「改時間」：直接請客人另提方便時段 */
   async function cancelViewing(guest: StaffGuest) {
     const caseId = (guest.caseId || guest.id || "").trim();
     if (!caseId || caseId.startsWith("demo") || caseId.startsWith("U")) {
@@ -2581,7 +2580,7 @@ function GuestDecisionPanel({
       value={schedule}
       onChange={onScheduleChange}
       minDate={today}
-      submitLabel="送出時間"
+      submitLabel="確認約看時間"
       onSubmit={onSendNewTime}
       onCancel={onCancelEdit}
     />
@@ -2863,7 +2862,7 @@ function GuestDecisionPanel({
               </button>
               <button
                 type="button"
-                onClick={onAskOtherTime}
+                onClick={onStartEdit}
                 className="rounded-full border border-zinc-300 bg-white px-3 py-2 text-sm font-semibold text-zinc-800"
               >
                 改時間
@@ -2888,7 +2887,7 @@ function GuestDecisionPanel({
             <>
               <button
                 type="button"
-                onClick={onAskOtherTime}
+                onClick={onStartEdit}
                 className="w-full rounded-full border border-zinc-300 bg-white px-3 py-2 text-sm font-semibold text-zinc-800"
               >
                 改時間

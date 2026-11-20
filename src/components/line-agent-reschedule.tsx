@@ -71,12 +71,15 @@ export function LineAgentReschedule({ caseId }: { caseId: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ caseId, proposedWhen: when }),
       });
-      const data = (await response.json()) as { error?: string; case?: { proposedWhen?: string } };
+      const data = (await response.json()) as {
+        error?: string;
+        case?: { proposedWhen?: string; requestedWhen?: string };
+      };
       if (!response.ok) {
         setError(data.error || "送出失敗");
         return;
       }
-      setDoneWhen(data.case?.proposedWhen || when);
+      setDoneWhen(data.case?.requestedWhen || data.case?.proposedWhen || when);
     } catch {
       setError("送出失敗，請稍後再試");
     } finally {
@@ -105,9 +108,9 @@ export function LineAgentReschedule({ caseId }: { caseId: string }) {
   if (doneWhen) {
     return (
       <div className="mx-auto max-w-md space-y-3 p-6 text-center">
-        <h1 className="text-xl font-bold text-zinc-900">已送出新時間</h1>
+        <h1 className="text-xl font-bold text-zinc-900">已確認約看時間</h1>
         <p className="text-sm text-zinc-600">
-          已建議客人改為 <span className="font-semibold text-[#0b2545]">{doneWhen}</span>，等待客人確認。
+          已約好 <span className="font-semibold text-[#0b2545]">{doneWhen}</span>，客人會收到通知，請依此時間帶看。
         </p>
       </div>
     );
@@ -138,7 +141,7 @@ export function LineAgentReschedule({ caseId }: { caseId: string }) {
           value={schedule}
           onChange={setSchedule}
           minDate={today}
-          submitLabel={submitting ? "送出中…" : "送給客人確認"}
+          submitLabel={submitting ? "確認中…" : "確認約看時間"}
           onSubmit={() => {
             if (!submitting) void submit();
           }}

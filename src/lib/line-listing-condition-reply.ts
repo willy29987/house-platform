@@ -329,9 +329,8 @@ export function buildListingConditionReplyText(input: {
   if (allowed.length === topics.length) {
     return yesConditionReplyText();
   }
-  // 其餘＝尚未標明，不亂回可以／不行
-  const xxx = joinTopicLabels(unknown.length ? unknown : topics);
-  return `不好意思～這間「${xxx}」的資料我這邊還沒標清楚，先幫你跟業務確認後再回你～`;
+  // 其餘＝讀不到／未標：統一請業務確認
+  return "不好意思～這個部分先幫您跟業務確認後再回覆哦～";
 }
 
 async function resolveFocusListingId(lineUserId: string): Promise<string | null> {

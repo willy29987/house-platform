@@ -624,7 +624,7 @@ async function handleGuestAccept(input: {
   }
 }
 
-/** 業務選好新時間後：更新案件並推給客人確認 */
+/** 業務選好新時間後：直接確認約看（已約好，照此時間看屋），通知客人 */
 export async function submitAgentProposedWhen(input: {
   caseId: string;
   proposedWhen: string;
@@ -637,31 +637,44 @@ export async function submitAgentProposedWhen(input: {
 
   const caseRecord = await getLineRentalCase(input.caseId);
   if (!caseRecord) return { ok: false, error: "找不到約看案件" };
-  if (caseRecord.status === "confirmed" || caseRecord.status === "reschedule_sent") {
-    return { ok: false, error: "此約看已處理，無法再改時間" };
+  if (caseRecord.status === "confirmed") {
+    return { ok: false, error: "此約看已確認，無法再改時間" };
   }
-  if (caseRecord.status !== "awaiting_agent" && caseRecord.status !== "agent_proposing" && caseRecord.status !== "pending_confirm") {
+  if (
+    caseRecord.status !== "awaiting_agent" &&
+    caseRecord.status !== "agent_proposing" &&
+    caseRecord.status !== "pending_confirm" &&
+    caseRecord.status !== "reschedule_sent"
+  ) {
     return { ok: false, error: "此約看目前無法改時間" };
   }
 
-  const agentId = input.agentLineUserId?.trim() || caseRecord.handledByAgentLineUserId || getViewingAgentUserIds()[0] || null;
+  const agentId =
+    input.agentLineUserId?.trim() ||
+    caseRecord.handledByAgentLineUserId ||
+    getViewingAgentUserIds()[0] ||
+    null;
   const updated = await updateLineRentalCase(caseRecord.id, {
-    status: "reschedule_sent",
-    proposedWhen,
+    status: "confirmed",
+    requestedWhen: proposedWhen,
+    proposedWhen: "",
     handledByAgentLineUserId: agentId,
-    summaryText: `業務提案改約為「${proposedWhen}」（原希望：${caseRecord.requestedWhen}），待客人確認。`,
+    summaryText: `業務已改約並確認看屋時間（${proposedWhen}；原希望：${caseRecord.requestedWhen || "未填"}）。`,
   });
   if (!updated) return { ok: false, error: "更新失敗，請稍後再試" };
 
+  const listings = await confirmListingsForCase({ ...caseRecord, requestedWhen: proposedWhen });
   if (updated.lineUserId) {
-    await pushLineMessages(updated.lineUserId, [buildGuestRescheduleConfirmMessage(updated)], {
-      force: true,
-    });
+    await pushLineMessages(
+      updated.lineUserId,
+      [{ type: "text", text: buildViewingConfirmedGuestText(proposedWhen, listings) }],
+      { force: true },
+    );
   }
   if (agentId) {
     await pushLineMessages(
       agentId,
-      [{ type: "text", text: `已送出新時間「${proposedWhen}」給客人確認。` }],
+      [{ type: "text", text: `已確認「${proposedWhen}」。系統會通知客人。` }],
       { force: true },
     );
   }
@@ -689,8 +702,9 @@ export async function handleAgentProposeText(input: {
     await replyLineMessages(input.replyToken, [{ type: "text", text: result.error }]);
     return true;
   }
+  const when = result.case.requestedWhen || input.text;
   await replyLineMessages(input.replyToken, [
-    { type: "text", text: `已送出新時間「${result.case.proposedWhen}」給客人確認。` },
+    { type: "text", text: `已確認「${when}」。系統會通知客人。` },
   ]);
   return true;
 }
