@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentAdmin, requireAdminSession } from "@/lib/admin-auth";
+import { enqueueRentSyncAfterChange } from "@/lib/591-sync-jobs";
 import { normalizeItemList } from "@/lib/furniture-appliance-value";
 import { toListingDescription } from "@/lib/listing-internal-meta";
 import { prisma } from "@/lib/prisma";
@@ -146,6 +147,14 @@ export async function POST(request: Request) {
         await notifyMatchingGuestsOfRental(listing.id);
       } catch (error) {
         console.error("[api/admin/listings POST] watch notify failed", error);
+      }
+    }
+
+    if (data.listingType === "RENT") {
+      try {
+        await enqueueRentSyncAfterChange({ listingId: listing.id, kind: "save" });
+      } catch (error) {
+        console.error("[api/admin/listings POST] 591 sync enqueue failed", error);
       }
     }
 

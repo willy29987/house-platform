@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentAdmin, requireAdminSession } from "@/lib/admin-auth";
+import { enqueueRentSyncAfterChange } from "@/lib/591-sync-jobs";
 import { notifyMatchingGuestsOfRental } from "@/lib/line-guest-watch-notify";
 import { parseListingInternalMeta, toListingDescription } from "@/lib/listing-internal-meta";
 import { prisma } from "@/lib/prisma";
@@ -79,5 +80,19 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     }
   }
 
-  return NextResponse.json({ ok: true });
+  let sync591: { jobCount: number } | undefined;
+  if (listing.listingType === "RENT") {
+    try {
+      const { jobs } = await enqueueRentSyncAfterChange({
+        listingId: id,
+        kind: "publish_toggle",
+        isPublished: parsed.data.isPublished,
+      });
+      sync591 = { jobCount: jobs.length };
+    } catch (error) {
+      console.error("[api/admin/listings publish] 591 sync enqueue failed", error);
+    }
+  }
+
+  return NextResponse.json({ ok: true, sync591 });
 }

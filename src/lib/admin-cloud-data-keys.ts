@@ -22,6 +22,10 @@ export const ADMIN_CLOUD_DATA_KEYS = {
   adminWebPushSubscriptions: "admin_web_push_subscriptions",
   /** 591 抓取／客人彙整推播時段（後台可調） */
   opsSchedule: "ops_schedule",
+  /** 591 租賃連動任務佇列（本機 Agent 拉取） */
+  sync591Jobs: "sync_591_jobs",
+  /** 591 本機 Agent token／心跳 */
+  sync591AgentConfig: "sync_591_agent_config",
 } as const;
 
 export type AdminCloudDataKey = (typeof ADMIN_CLOUD_DATA_KEYS)[keyof typeof ADMIN_CLOUD_DATA_KEYS];

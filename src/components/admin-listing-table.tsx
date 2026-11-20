@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { AdminListing591Status } from "@/components/admin-listing-591-status";
 import { ListingDealCloseButton } from "@/components/listing-deal-close-button";
 import { ToggleGuestPushButton } from "@/components/toggle-guest-push-button";
 import { ToggleListingButton } from "@/components/toggle-listing-button";
@@ -100,6 +101,12 @@ type AdminListing = {
   unpublishNote?: string | null;
   expectedReleaseDate?: string | null;
   unpublishedAt?: string | null;
+  source591Id?: string | null;
+  source591Status?: string | null;
+  source591SyncError?: string | null;
+  source591CheckedAt?: string | null;
+  source591ExpiresAt?: string | null;
+  source591ExpireCheckedAt?: string | null;
   createdAt: Date;
 };
 
@@ -618,6 +625,17 @@ export function AdminListingTable({
                           {l.title.trim() || addressLine || "（未填標題）"}
                         </Link>
                         <p className="mt-1 text-sm font-medium leading-relaxed text-zinc-600 md:text-[15px]">{addressLine}</p>
+                        {l.listingType === "RENT" ? (
+                          <AdminListing591Status
+                            listingId={l.id}
+                            listingType={l.listingType}
+                            source591Id={l.source591Id}
+                            source591Status={l.source591Status}
+                            source591SyncError={l.source591SyncError}
+                            source591CheckedAt={l.source591CheckedAt}
+                            source591ExpiresAt={l.source591ExpiresAt}
+                          />
+                        ) : null}
                       </div>
                       <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 text-sm">
                         <span className="whitespace-nowrap text-zinc-600">

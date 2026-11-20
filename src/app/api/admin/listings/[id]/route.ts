@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentAdmin, requireAdminSession } from "@/lib/admin-auth";
+import { enqueueRentSyncAfterChange } from "@/lib/591-sync-jobs";
 import { normalizeItemList } from "@/lib/furniture-appliance-value";
 import { parseListingInternalMeta, toListingDescription } from "@/lib/listing-internal-meta";
 import { prisma } from "@/lib/prisma";
@@ -143,7 +144,20 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
       }
     }
 
-    return NextResponse.json({ ok: true });
+    let sync591: { jobCount: number } | undefined;
+    if (data.listingType === "RENT") {
+      try {
+        const { jobs } = await enqueueRentSyncAfterChange({
+          listingId: id,
+          kind: "save",
+        });
+        sync591 = { jobCount: jobs.length };
+      } catch (error) {
+        console.error("[api/admin/listings PATCH] 591 sync enqueue failed", error);
+      }
+    }
+
+    return NextResponse.json({ ok: true, sync591 });
   } catch (error) {
     console.error("[api/admin/listings PATCH]", error);
     const message = error instanceof Error ? error.message : "更新房源時發生未知錯誤";

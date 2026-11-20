@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { Admin591SyncPanel } from "@/components/admin-591-sync-panel";
 import { AdminOpsSchedulePanel } from "@/components/admin-ops-schedule-panel";
 import { AdminUsersManager } from "@/components/admin-users-manager";
 import { getCurrentAdmin } from "@/lib/admin-auth";
@@ -67,6 +68,10 @@ export default async function AdminSettingsPage() {
           <span className="ml-2 rounded-full bg-[#0b2545] px-2 py-0.5 text-white">最高管理員</span>
         </p>
       </div>
+
+      <section className="mb-6 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-zinc-200">
+        <Admin591SyncPanel />
+      </section>
 
       <section className="mb-6 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-zinc-200">
         <AdminOpsSchedulePanel />

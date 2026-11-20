@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getAdminListings, getAdminStats, getInquiries } from "@/lib/listings";
 import { AdminListingTable } from "@/components/admin-listing-table";
 import { AdminStaffDailyOps } from "@/components/admin-staff-daily-ops";
+import { Admin591ExpiryAlert } from "@/components/admin-591-expiry-alert";
 import { AdminUpcomingRelease } from "@/components/admin-upcoming-release";
 import { getCurrentAdmin } from "@/lib/admin-auth";
 import {
@@ -113,6 +114,12 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           </Link>
         </div>
 
+        <Admin591ExpiryAlert
+          listings={listings}
+          currentUsername={current?.username ?? ""}
+          isSuperAdmin={Boolean(isSuperAdmin)}
+        />
+
         <AdminUpcomingRelease
           listings={listings}
           currentUsername={current?.username ?? ""}
@@ -200,6 +207,12 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
             accent="bg-amber-50 text-amber-700"
           />
         </section>
+
+        <Admin591ExpiryAlert
+          listings={listings}
+          currentUsername={current?.username ?? ""}
+          isSuperAdmin={Boolean(isSuperAdmin)}
+        />
 
         <AdminUpcomingRelease
           listings={listings}

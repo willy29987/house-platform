@@ -26,6 +26,15 @@ export type ListingInternalMeta = {
   sourceFacebookUrl?: string | null;
   sourceLejuUrl?: string | null;
   sourceOtherPortalUrl?: string | null;
+  /** 本機 Agent 回寫的 591 廣告狀態 */
+  source591Status?: string | null;
+  source591CheckedAt?: string | null;
+  source591SyncedAt?: string | null;
+  source591SyncError?: string | null;
+  source591LastJobId?: string | null;
+  /** 591 廣告到期日（YYYY-MM-DD） */
+  source591ExpiresAt?: string | null;
+  source591ExpireCheckedAt?: string | null;
 };
 
 /** 距離預計釋出日期還有幾天，過期/沒設定回傳 null */

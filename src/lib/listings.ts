@@ -212,6 +212,12 @@ export type AdminListing = {
   unpublishNote: string | null;
   expectedReleaseDate: string | null;
   unpublishedAt: string | null;
+  source591Id?: string | null;
+  source591Status?: string | null;
+  source591SyncError?: string | null;
+  source591CheckedAt?: string | null;
+  source591ExpiresAt?: string | null;
+  source591ExpireCheckedAt?: string | null;
   createdAt: Date;
 };
 
@@ -756,6 +762,7 @@ async function getAdminListingsImpl(): Promise<AdminListing[]> {
       description: true,
       isPublished: true,
       guestPushEnabled: true,
+      source591Id: true,
       createdAt: true,
     },
     orderBy: { createdAt: "desc" },
@@ -783,6 +790,11 @@ async function getAdminListingsImpl(): Promise<AdminListing[]> {
         unpublishNote: meta.unpublishNote ?? null,
         expectedReleaseDate: meta.expectedReleaseDate ?? null,
         unpublishedAt: meta.unpublishedAt ?? null,
+        source591Status: meta.source591Status ?? null,
+        source591SyncError: meta.source591SyncError ?? null,
+        source591CheckedAt: meta.source591CheckedAt ?? null,
+        source591ExpiresAt: meta.source591ExpiresAt ?? null,
+        source591ExpireCheckedAt: meta.source591ExpireCheckedAt ?? null,
         ...collectLegacyImages(row.images, row.coverImage),
       };
     }),
