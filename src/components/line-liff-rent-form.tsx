@@ -19,6 +19,7 @@ import {
   emptyCriteria,
   formatDateYmd,
   formatViewingRange,
+  isViewingWhenUpcoming,
   matchRentals,
   rankSimilarToListing,
   similarRentals,
@@ -932,8 +933,14 @@ export function LineLiffRentForm({
       .then((data) => {
         if (cancelled) return;
         const viewing = data?.viewing;
-        if (!viewing?.id || !viewing.requestedWhen) {
+        // 看屋時間已過：不問同一時間，直接讓客人選新時間
+        if (
+          !viewing?.id ||
+          !viewing.requestedWhen ||
+          !isViewingWhenUpcoming(viewing.requestedWhen)
+        ) {
           setOpenViewing(null);
+          setBookSeparateTime(false);
           return;
         }
         const picked = Array.isArray(viewing.picked)
@@ -953,6 +960,7 @@ export function LineLiffRentForm({
             : picked.map((item) => item.title).filter(Boolean),
           picked,
         });
+        setBookSeparateTime(false);
       })
       .catch(() => {
         /* 沒有進行中約看就照常選時間 */

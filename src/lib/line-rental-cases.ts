@@ -2,6 +2,7 @@
 
 import { ADMIN_CLOUD_DATA_KEYS } from "@/lib/admin-cloud-data-keys";
 import { readAdminCloudPayload, writeAdminCloudPayload } from "@/lib/admin-cloud-data-server";
+import { isViewingWhenUpcoming } from "@/lib/line-rental-assistant";
 
 export type LineRentalCasePicked = {
   id: string;
@@ -151,7 +152,10 @@ export function isOpenViewingStatus(status: LineRentalCaseStatus) {
   return OPEN_VIEWING_STATUSES.has(status);
 }
 
-/** 這位客人最新一筆還沒結束的約看（客服收件匣也是看最新一筆） */
+/**
+ * 這位客人最新一筆還能「同一時間併約」的約看。
+ * 看屋時間已過就不回傳，避免再問要不要同一個時間。
+ */
 export async function findLatestOpenViewing(lineUserId: string): Promise<LineRentalCase | null> {
   const id = lineUserId.trim();
   if (!id) return null;
@@ -163,7 +167,8 @@ export async function findLatestOpenViewing(lineUserId: string): Promise<LineRen
           item.lineUserId === id &&
           item.kind === "viewing" &&
           isOpenViewingStatus(item.status) &&
-          Boolean(item.requestedWhen.trim()),
+          Boolean(item.requestedWhen.trim()) &&
+          isViewingWhenUpcoming(item.requestedWhen),
       )
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null
   );

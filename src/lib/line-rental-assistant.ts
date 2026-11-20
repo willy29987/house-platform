@@ -767,6 +767,51 @@ export function formatViewingRange(date: string, startHm: string) {
   return `${year}/${month}/${day} ${startHm}`;
 }
 
+/**
+ * 解析約看字串的開始時間（台北）。
+ * 支援：`2026/11/27 10:30`、`2026/11/03 下午 13:00–17:00`、`2026/10/30 上午 9:00–12:00`
+ */
+export function parseViewingWhenStartMs(raw: string): number | null {
+  const text = raw.trim();
+  const match = text.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})\s+(.+)$/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const rest = match[4] ?? "";
+  const timeMatch = rest.match(/(\d{1,2}):(\d{2})/);
+  if (!timeMatch) return null;
+  let hour = Number(timeMatch[1]);
+  const minute = Number(timeMatch[2]);
+  if (
+    ![year, month, day, hour, minute].every((n) => Number.isFinite(n)) ||
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > 31 ||
+    hour < 0 ||
+    hour > 23 ||
+    minute < 0 ||
+    minute > 59
+  ) {
+    return null;
+  }
+  const hasAfternoon = /下午|晚間|晚上/.test(rest);
+  const hasMorning = /上午|早上|早晨/.test(rest);
+  if (hasAfternoon && hour < 12) hour += 12;
+  if (hasMorning && hour === 12) hour = 0;
+  const iso = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00+08:00`;
+  const ms = Date.parse(iso);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+/** 約看開始時間是否仍在未來（已過或無法解析 → false，不給「同一時間」） */
+export function isViewingWhenUpcoming(raw: string, nowMs = Date.now()): boolean {
+  const start = parseViewingWhenStartMs(raw);
+  if (start == null) return false;
+  return start > nowMs;
+}
+
 /** date: YYYY-MM-DD → 2026/11/03 */
 export function formatDateYmd(date: string) {
   if (!date) return "";
